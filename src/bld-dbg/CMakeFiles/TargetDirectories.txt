@@ -1,7 +1,0 @@
-/home/dzw/work/cluster_mgr/src/bld-dbg/CMakeFiles/install/strip.dir
-/home/dzw/work/cluster_mgr/src/bld-dbg/CMakeFiles/install/local.dir
-/home/dzw/work/cluster_mgr/src/bld-dbg/CMakeFiles/install.dir
-/home/dzw/work/cluster_mgr/src/bld-dbg/CMakeFiles/list_install_components.dir
-/home/dzw/work/cluster_mgr/src/bld-dbg/CMakeFiles/rebuild_cache.dir
-/home/dzw/work/cluster_mgr/src/bld-dbg/CMakeFiles/edit_cache.dir
-/home/dzw/work/cluster_mgr/src/bld-dbg/CMakeFiles/cluster_mgr.dir

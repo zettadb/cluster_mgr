@@ -1,1 +1,0 @@
-/home/dzw/mysql_installs/cluster_mgr_rel/bin/cluster_mgr
