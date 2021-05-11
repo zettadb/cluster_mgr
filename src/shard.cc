@@ -1,5 +1,5 @@
 /*
-   Copyright (c) 2019 ZettaDB inc. All rights reserved.
+   Copyright (c) 2019-2021 ZettaDB inc. All rights reserved.
 
    This source code is licensed under Apache 2.0 License,
    combined with Common Clause Condition 1.0, as detailed in the NOTICE file.
@@ -95,7 +95,7 @@ int MYSQL_CONN::connect()
 }
 
 /*
-  Verify mysql version is supported by this software, i.e. it's kunlun-percona-mysql.
+  Verify mysql version is supported by this software, i.e. it's kunlun-storage.
 */
 int MYSQL_CONN::verify_version()
 {
@@ -108,11 +108,11 @@ int MYSQL_CONN::verify_version()
     while ((row = mysql_fetch_row(result)))
     {
 		const char *verstr = row[0];
-		if (strcasestr(verstr, "kunlun-percona-mysql"))
+		if (strcasestr(verstr, "kunlun-storage"))
 			ret = 0;
 		else
 		{
-			syslog(Logger::ERROR, "Unsupported mysql version %s, must use 8.0.x-kunlun-percona-mysql", verstr);
+			syslog(Logger::ERROR, "Unsupported mysql version %s, must use kunlun-storage-8.0.x", verstr);
 			ret = -2;
 		}
 		break;
@@ -825,7 +825,10 @@ int Shard::check_mgr_cluster()
 					max_stat = n.second;
 				}
 
-			Assert(max_sn != NULL && max_pos > 0 && max_stat != Shard_node::MEMBER_END);
+			Assert((max_sn != NULL && max_pos > 0 && max_stat != Shard_node::MEMBER_END) ||
+				   (max_sn == NULL && max_pos == 0 && max_stat == Shard_node::MEMBER_END));
+			if (!max_sn) goto out1; // it's likely that MGR isn't activated in the cluster.
+
 			max_sn->get_ip_port(top_ip, top_port);
 			// max_sn found, start it as master, start the rest as slaves.
 			syslog(Logger::INFO, "Found shard (%s.%s, %u) node(%u, %s:%d) has max gtid position: %llu and will be chosen as primary node.",
