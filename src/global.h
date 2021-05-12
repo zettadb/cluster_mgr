@@ -26,6 +26,11 @@ typedef uint32_t uint;
 
 #define KUNLUN_METADATA_DBNAME "Kunlun_Metadata_DB"
 
+#if __GLIBC__ == 2 && __GLIBC_MINOR__ < 30
+#include <sys/syscall.h>
+#define gettid() syscall(SYS_gettid)
+#endif
+
 inline bool likely(bool expr) { return __builtin_expect(expr, true); }
 inline bool unlikely(bool expr) { return __builtin_expect(expr, false); }
 
