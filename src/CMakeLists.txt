@@ -20,6 +20,8 @@ target_include_directories(cluster_mgr PUBLIC
 target_link_libraries(cluster_mgr mariadb pthread)
 
 install(TARGETS cluster_mgr DESTINATION bin)
+install(DIRECTORY ../lib/ DESTINATION lib)
+install(FILES ../README ../LICENSE ../NOTICE ../resources/cluster_mgr.cnf DESTINATION .)
 
 MACRO(REPORT_CXX_FLAGS)
   MESSAGE(STATUS "CMAKE_C_FLAGS: ${CMAKE_C_FLAGS}")
