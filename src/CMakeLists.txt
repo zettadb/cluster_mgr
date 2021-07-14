@@ -13,6 +13,7 @@ elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
 endif()
 
 if (NOT EXISTS ../include/mysql)
+	execute_process(COMMAND mkdir -p ../include)
 	execute_process(COMMAND tar -C ../include -xzf ../resources/mysql_client.tgz)
 endif()
 
