@@ -11,6 +11,11 @@ elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
 	set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -Werror -O2")
 	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Werror -O2")
 endif()
+
+if (NOT EXISTS ../include/mysql)
+	execute_process(COMMAND tar -C ../include -xzf ../resources/mysql_client.tgz)
+endif()
+
 link_directories(${CMAKE_SOURCE_DIR}/../lib)
 add_executable(cluster_mgr config.cc  log.cc  main.cc  os.cc  shard.cc  sys.cc  txn.cc thread_manager.cc)
 configure_file(sys_config.h.in sys_config.h)
