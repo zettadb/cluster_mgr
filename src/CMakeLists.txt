@@ -29,6 +29,7 @@ install(TARGETS cluster_mgr DESTINATION bin)
 install(DIRECTORY ../lib/ DESTINATION lib)
 install(DIRECTORY ../resources/ DESTINATION resources)
 install(FILES ../README.md ../LICENSE ../NOTICE DESTINATION .)
+install(FILES ./cluster_mgr_safe TYPE BIN)
 
 MACRO(REPORT_CXX_FLAGS)
   MESSAGE(STATUS "CMAKE_C_FLAGS: ${CMAKE_C_FLAGS}")

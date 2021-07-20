@@ -1,0 +1,93 @@
+#! /bin/bash
+
+dir=`dirname $0`
+KILLPROG=1
+CLUSTERMGR=$dir/cluster_mgr
+PIDFILE=
+STOP=0
+CONFIG="./cluster_mgr.cnf"
+TS=`date +%F-%H-%M-%S`
+DEBUG=0
+
+trap '' 1 2 3 15			# we shouldn't let anyone kill us
+trap '' 13                              # not even SIGPIPE
+
+while test "$#" -gt 0; do
+	arg="$1"
+	val=`echo "$arg" | sed -e 's;^--[^=]*=;;'`
+	case "$arg" in
+		--pidfile=*) PIDFILE="$val" ; shift ;;
+		--stop) STOP=1 ; shift ;;
+		--debug) DEBUG=1; shift ;;
+		* ) break ;;
+	esac
+done
+
+test "$1" = "" || CONFIG="$1"
+if test "$PIDFILE" = ""; then
+	PIDFILE="/tmp/clustermgr$$.pid"
+fi
+
+if test "$DEBUG" = "1"; then
+	echo "dir: $dir"
+	echo "CONFIG: $CONFIG"
+	echo "CLUSTERMGR: $CLUSTERMGR"
+	echo "PIDFILE: $PIDFILE"
+	echo "STOP: $STOP"
+	echo "DEBUG: $DEBUG"
+fi
+
+err_notexist(){
+        echo "$1 not exists!"
+        exit 1
+}
+
+check_cfg() {
+	test -f "$CONFIG" || err_notexist "$CONFIG"
+}
+
+check_pidf() {
+	test -f "$PIDFILE" || err_notexist "$PIDFILE"	
+}
+
+test "$STOP" = "0" && check_cfg
+test "$STOP" = "1" && check_pidf
+
+clear_files() {
+	rm -f $PIDFILE
+	rm -f $PIDFILE.exit
+}
+
+run_prog() {
+	if test -f "$PIDFILE"; then
+		pid="`cat $PIDFILE`"
+		test "$pid" = "" || kill -0 "$pid" && {
+			echo "There is already a run with the pidfile!"
+			exit 1
+		}
+	fi	
+	while true; do
+		$CLUSTERMGR $CONFIG &
+		pid="$!"
+		echo "$pid" > "$PIDFILE" 
+		wait $pid
+		sleep 2
+		test -f "$PIDFILE.exit" && break
+	done
+	clear_files
+}
+
+stop_prog() {
+	touch $PIDFILE.exit
+	pid=`cat $PIDFILE`
+	test "$pid" = "" && exit 0
+	kill -0 "$pid" || exit 0
+	kill -9 $pid
+}
+
+
+if test "$STOP" = "1"; then
+	stop_prog
+else
+	run_prog
+fi
