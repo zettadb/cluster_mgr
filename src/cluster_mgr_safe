@@ -68,7 +68,8 @@ run_prog() {
 			echo "There is already a run with the pidfile!"
 			exit 1
 		}
-	fi	
+	fi
+	clear_files
 	while true; do
 		$CLUSTERMGR $CONFIG &
 		pid="$!"
