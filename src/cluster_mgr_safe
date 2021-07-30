@@ -12,6 +12,10 @@ CONFIG="./cluster_mgr.cnf"
 TS=`date +%F-%H-%M-%S`
 DEBUG=0
 
+export LD_LIBRARY_PATH="$dir/../lib:$LD_LIBRARY_PATH"
+export LD_PRELOAD="$dir/../lib/libjemalloc.so.3.6.0:$LD_PRELOAD"
+ulimit -c unlimited
+
 trap '' 1 2 3 15			# we shouldn't let anyone kill us
 trap '' 13                              # not even SIGPIPE
 
@@ -38,6 +42,8 @@ if test "$DEBUG" = "1"; then
 	echo "PIDFILE: $PIDFILE"
 	echo "STOP: $STOP"
 	echo "DEBUG: $DEBUG"
+	echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
+	echo "LD_PRELOAD: $LD_PRELOAD"
 fi
 
 err_notexist(){

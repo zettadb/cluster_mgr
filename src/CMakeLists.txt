@@ -13,8 +13,10 @@ elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
 endif()
 
 if (NOT EXISTS ../include/mysql)
-	execute_process(COMMAND mkdir -p ../include)
-	execute_process(COMMAND tar -C ../include -xzf ../resources/mysql_client.tgz)
+	execute_process(COMMAND mkdir -p ../include
+		WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+	execute_process(COMMAND tar -C ../include -xzf ../resources/mysql_client.tgz
+		WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 endif()
 
 link_directories(${CMAKE_SOURCE_DIR}/../lib)
@@ -26,8 +28,9 @@ target_include_directories(cluster_mgr PUBLIC
 target_link_libraries(cluster_mgr mariadb pthread)
 
 install(TARGETS cluster_mgr DESTINATION bin)
-install(DIRECTORY ../lib/ DESTINATION lib)
-install(DIRECTORY ../resources/ DESTINATION resources)
+install(DIRECTORY ../lib/ TYPE LIB)
+install(DIRECTORY ../resources/ DESTINATION resources
+	PATTERN "mysql_client.tgz" EXCLUDE)
 install(FILES ../README.md ../LICENSE ../NOTICE DESTINATION .)
 install(FILES ./cluster_mgr_safe TYPE BIN)
 
