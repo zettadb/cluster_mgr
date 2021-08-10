@@ -32,7 +32,7 @@ install(DIRECTORY ../lib/ TYPE LIB)
 install(DIRECTORY ../resources/ DESTINATION resources
 	PATTERN "mysql_client.tgz" EXCLUDE)
 install(FILES ../README.md ../LICENSE ../NOTICE DESTINATION .)
-install(FILES ./cluster_mgr_safe TYPE BIN)
+install(FILES ./cluster_mgr_safe DESTINATION bin)
 
 MACRO(REPORT_CXX_FLAGS)
   MESSAGE(STATUS "CMAKE_C_FLAGS: ${CMAKE_C_FLAGS}")
