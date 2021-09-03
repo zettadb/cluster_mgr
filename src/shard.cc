@@ -433,8 +433,11 @@ bool PGSQL_CONN::handle_pgsql_result()
 
 void PGSQL_CONN::free_pgsql_result()
 {
-	PQclear(result);
-	result = NULL;
+    if (result)
+    {
+		PQclear(result);
+		result = NULL;
+    }
 }
 
 bool PGSQL_CONN::send_stmt(int pgres, const char *stmt)
@@ -1735,15 +1738,39 @@ int StorageShard::refresh_storages_to_computers(std::vector<Shard *> &storage_sh
 		if(shard->get_type() == METADATA)
 			continue;
 
-		std::map<std::string, std::pair<uint, uint>> map_table_page_row;
+		////////////////////////////////////////////////////////
+		//get innodb_page_size
 		int ret = shard->get_master()->send_stmt(SQLCOM_SELECT, CONST_STR_PTR_LEN(
-			"select TABLE_NAME,TABLE_ROWS,DATA_LENGTH from information_schema.tables where table_type='BASE TABLE' and TABLE_SCHEMA='postgres_$$_public'"), stmt_retries);
+			"show variables like 'innodb_page_size'"), stmt_retries);
 
 		if (ret)
 		   return ret;
 		MYSQL_RES *result = shard->get_master()->get_result();
 		MYSQL_ROW row;
 		char *endptr = NULL;
+		uint page_size = 0;
+
+		if ((row = mysql_fetch_row(result)))
+		{
+			uint page_size = strtol(row[1], &endptr, 10);
+			Assert(endptr == NULL || *endptr == '\0');
+		}
+	   
+		shard->get_master()->free_mysql_result();
+
+		if(page_size == 0)
+			continue; 
+
+		////////////////////////////////////////////////////////
+		//get tables' rows&size, pages = size/page_size
+		ret = shard->get_master()->send_stmt(SQLCOM_SELECT, CONST_STR_PTR_LEN(
+			"select TABLE_NAME,TABLE_ROWS,DATA_LENGTH from information_schema.tables where table_type='BASE TABLE' and TABLE_SCHEMA='postgres_$$_public'"), stmt_retries);
+
+		if (ret)
+		   return ret;
+		result = shard->get_master()->get_result();
+		endptr = NULL;
+		std::map<std::string, std::pair<uint, uint>> map_table_page_row;
 
 		while ((row = mysql_fetch_row(result)))
 		{
@@ -1751,21 +1778,22 @@ int StorageShard::refresh_storages_to_computers(std::vector<Shard *> &storage_sh
 			Assert(endptr == NULL || *endptr == '\0');
 			uint pages = strtol(row[2], &endptr, 10);
 			Assert(endptr == NULL || *endptr == '\0');
-			pages = rows/pages +1;
+			pages = pages/page_size;
 
 			map_table_page_row[row[0]] = std::make_pair(pages, rows);
 		}
 	   
 		shard->get_master()->free_mysql_result();
 
+		////////////////////////////////////////////////////////
 		// refresh tables' pages&rows to computer_nodes
+		char sql[256];
 		for(auto &comp:computer_nodes)
 		{
-			char sql[256];
 			for(auto &tb:map_table_page_row)
 			{
 				int n = snprintf(sql, sizeof(sql)-1, 
-						"update pg_class set relpages=%d,reltuples=%d where relname = '%s'", 
+						"update pg_class set relpages=%d,reltuples=%d where relname='%s'", 
 						tb.second.first, tb.second.second, tb.first.c_str());
 				if(n >= sizeof(sql)-1)
 				{
