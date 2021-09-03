@@ -329,6 +329,7 @@ extern "C" void *thread_func_storage_sync(void*thrdarg)
 	while (!Thread_manager::do_exit)
 	{
 		System::get_instance()->refresh_storages_info_to_computers();
+		System::get_instance()->refresh_storages_info_to_computers_metashard();
 		
 		Thread_manager::get_instance()->sleep_wait(thd, storage_sync_interval * 1000);
 	}

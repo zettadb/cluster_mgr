@@ -179,12 +179,21 @@ int System::refresh_computers_from_metadata_server()
 }
 
 /*
-  Connect to storage node, get tables's rows & pages, and update to computers node.
+  Connect to storage node, get tables's rows & pages, and update to computer nodes.
 */
 int System::refresh_storages_info_to_computers()
 {
 	Scopped_mutex sm(mtx);
 	return storage_shard.refresh_storages_to_computers(storage_shards, computer_nodes);
+}
+
+/*
+  Connect to storage node, get num_tablets & space_volumn, and update to computer nodes and meta shard.
+*/
+int System::refresh_storages_info_to_computers_metashard()
+{
+	Scopped_mutex sm(mtx);
+	return storage_shard.refresh_storages_to_computers_metashard(storage_shards, computer_nodes, meta_shard);
 }
 
 /*

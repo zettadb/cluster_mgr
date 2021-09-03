@@ -1724,10 +1724,9 @@ int MetadataShard::fetch_meta_shard_nodes(Shard_node *sn, bool is_master,
 	return 0;
 }
 
-	
 /*
   Connect to storage node, get tables' rows & pages, 
-  and update to computers.
+  and update to computer nodes.
 */
 int StorageShard::refresh_storages_to_computers(std::vector<Shard *> &storage_shards, std::vector<Computer_node *> &computer_nodes)
 {
@@ -1793,7 +1792,7 @@ int StorageShard::refresh_storages_to_computers(std::vector<Shard *> &storage_sh
 			for(auto &tb:map_table_page_row)
 			{
 				int n = snprintf(sql, sizeof(sql)-1, 
-						"update pg_class set relpages=%d,reltuples=%d where relname='%s'", 
+						"update pg_class set relpages=%u,reltuples=%u where relname='%s'", 
 						tb.second.first, tb.second.second, tb.first.c_str());
 				if(n >= sizeof(sql)-1)
 				{
@@ -1809,6 +1808,78 @@ int StorageShard::refresh_storages_to_computers(std::vector<Shard *> &storage_sh
 		}
 
 		map_table_page_row.clear();
+	}
+	
+	return 0;
+}
+
+/*
+  Connect to storage node, get num_tablets & space_volumn, 
+  and update to computer nodes and meta shard.
+*/
+int StorageShard::refresh_storages_to_computers_metashard(std::vector<Shard *> &storage_shards, std::vector<Computer_node *> &computer_nodes, MetadataShard &meta_shard)
+{
+	Scopped_mutex sm(mtx);
+
+	for(auto &shard:storage_shards)
+	{
+		if(shard->get_type() == METADATA)
+			continue;
+
+		////////////////////////////////////////////////////////
+		//get tables' size&number
+		int ret = shard->get_master()->send_stmt(SQLCOM_SELECT, CONST_STR_PTR_LEN(
+			"select TABLE_NAME,DATA_LENGTH from information_schema.tables where table_type='BASE TABLE' and TABLE_SCHEMA='postgres_$$_public'"), stmt_retries);
+
+		if (ret)
+		   return ret;
+		MYSQL_RES *result = shard->get_master()->get_result();
+		MYSQL_ROW row;
+		char *endptr = NULL;
+		uint num_tablets = 0;
+		uint64_t space_volumn = 0;
+
+		while ((row = mysql_fetch_row(result)))
+		{
+			space_volumn += strtol(row[1], &endptr, 10);
+			Assert(endptr == NULL || *endptr == '\0');
+			num_tablets++;
+		}
+	   
+		shard->get_master()->free_mysql_result();
+
+		////////////////////////////////////////////////////////
+		// refresh tables' size&number to MetadataShard
+		char sql[256];
+		int n = snprintf(sql, sizeof(sql)-1, 
+				"update shards set space_volumn=%lu,num_tablets=%u where name='%s'", 
+				space_volumn, num_tablets, shard->get_name().c_str());
+		if(n >= sizeof(sql)-1)
+		{
+			syslog(Logger::ERROR, "shard name %s is to long", shard->get_name().c_str());
+			return -1;
+		}
+
+		meta_shard.get_master()->send_stmt(SQLCOM_UPDATE, CONST_STR_PTR_LEN(sql), stmt_retries);
+
+		////////////////////////////////////////////////////////
+		// refresh tables' size&number to computer_nodes
+		for(auto &comp:computer_nodes)
+		{
+			int n = snprintf(sql, sizeof(sql)-1, 
+					"update pg_shard set space_volumn=%lu,num_tablets=%u where name='%s'", 
+					space_volumn, num_tablets, shard->get_name().c_str());
+			if(n >= sizeof(sql)-1)
+			{
+				syslog(Logger::ERROR, "shard name %s is to long", shard->get_name().c_str());
+				return -1;
+			}
+
+			bool ret = comp->send_stmt(PG_COPYRES_EVENTS, sql, stmt_retries);
+			comp->free_pgsql_result();
+			//if (!ret)
+			//	return;
+		}
 	}
 	
 	return 0;

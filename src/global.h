@@ -22,7 +22,10 @@ typedef uint32_t uint;
 #define Assert(expr)
 #endif
 
-#define CONST_STR_PTR_LEN(const_str) const_str,(sizeof(const_str) - 1)
+//some sql buf strlen(const_str) < sizeof(const_str)-1
+//#define CONST_STR_PTR_LEN(const_str) const_str,(sizeof(const_str) - 1)
+#define CONST_STR_PTR_LEN(const_str) const_str,strlen(const_str)
+
 
 #define KUNLUN_METADATA_DBNAME "Kunlun_Metadata_DB"
 

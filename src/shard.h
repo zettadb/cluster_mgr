@@ -637,6 +637,7 @@ public:
 	}
 
 	int refresh_storages_to_computers(std::vector<Shard *> &storage_shards, std::vector<Computer_node *> &computer_nodes);
+	int refresh_storages_to_computers_metashard(std::vector<Shard *> &storage_shards, std::vector<Computer_node *> &computer_nodes, MetadataShard &meta_shard);
 };
 
 #endif // !SHARD_H

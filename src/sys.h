@@ -54,6 +54,7 @@ public:
 	int refresh_shards_from_metadata_server();
 	int refresh_computers_from_metadata_server();
 	int refresh_storages_info_to_computers();
+	int refresh_storages_info_to_computers_metashard();
 	~System();
 	static int create_instance(const std::string&cfg_path);
 	static System* get_instance()
