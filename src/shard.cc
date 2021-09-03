@@ -394,11 +394,114 @@ bool MYSQL_CONN::mysql_get_next_result()
     return true;
 }
 
-
-
 bool MYSQL_CONN::send_stmt(enum_sql_command sqlcom_, const std::string &stmt)
 {
 	return send_stmt(sqlcom_, stmt.c_str(), stmt.length());
+}
+
+int PGSQL_CONN::connect()
+{
+	if (connected) return 0;
+
+	char conninfo[256];
+	sprintf(conninfo, "dbname = postgres host=%s port=%d user=%s password=%s",
+						ip.c_str(), port, user.c_str(), pwd.c_str());
+
+	conn = PQconnectdb(conninfo);
+
+	if (PQstatus(conn) != CONNECTION_OK)
+	{
+		syslog(Logger::ERROR, "Connected to pgsql %s fail...",conninfo);
+		return -1;
+	}
+
+	connected = true;
+		
+	return 0;
+}
+
+void PGSQL_CONN::close_conn()
+{
+	PQfinish(conn);
+	connected = false;
+}
+
+bool PGSQL_CONN::handle_pgsql_result()
+{
+	return true;
+}
+
+void PGSQL_CONN::free_pgsql_result()
+{
+	PQclear(result);
+	result = NULL;
+}
+
+bool PGSQL_CONN::send_stmt(int pgres, const char *stmt)
+{
+	if (!connected)
+	{
+		syslog(Logger::ERROR, "pgsql need to connect first");
+		return false;
+	}
+
+	bool ret = true;
+	result = PQexec(conn, stmt);
+
+	if(pgres == PG_COPYRES_TUPLES)
+	{
+		if (PQresultStatus(result) != PGRES_TUPLES_OK)
+			ret = false;
+	}
+	else
+	{
+		if (PQresultStatus(result) != PGRES_COMMAND_OK)
+			ret = false;
+	}
+
+	return ret;
+}
+
+bool PGSQL_CONN::send_stmt(int pgres, const std::string &stmt)
+{
+	return send_stmt(pgres, stmt.c_str());
+}
+
+/*
+  If send stmt fails because connection broken, reconnect and
+  retry sending the stmt. Retry pgsql_stmt_conn_retries times.
+  @retval true on error, false if successful.
+*/
+bool Computer_node::
+send_stmt(int pgres, const char *stmt, int nretries)
+{
+	bool ret = false;
+	for (int i = 0; i < nretries; i++)
+	{
+		if (!gpsql_conn.connected) connect();
+		if (gpsql_conn.send_stmt(pgres, stmt))
+		{
+			ret = true;
+			break;
+		}
+
+		if (Thread_manager::do_exit)
+			return ret;
+
+		usleep(stmt_retry_interval_ms * 1000);
+	}
+	return ret;
+}
+
+bool Computer_node::
+send_stmt(int pgres, const std::string &stmt, int nretries)
+{
+	return send_stmt(pgres, stmt.c_str(), nretries);
+}
+
+int Computer_node::connect()
+{
+	return gpsql_conn.connect();
 }
 
 /*
@@ -1368,6 +1471,11 @@ int MetadataShard::refresh_shards(std::vector<Shard *> &storage_shards)
 		uint cluster_id = strtol(row[8], &endptr, 10);
 		Assert(endptr == NULL || *endptr == '\0');
 
+		uint nodeid = strtol(row[2], &endptr, 10);
+		Assert(endptr == NULL || *endptr == '\0');
+		int port = strtol(row[4], &endptr, 10);
+		Assert(endptr == NULL || *endptr == '\0');
+
 		Shard *pshard = NULL;
 
 		for (auto &ssd:storage_shards)
@@ -1380,7 +1488,22 @@ int MetadataShard::refresh_shards(std::vector<Shard *> &storage_shards)
 		}
 		if (!pshard)
 		{
-			pshard = new Shard(shardid, row[1], STORAGE);
+			//find ip&port in MetadataShard, and set shard_type as METADATA
+			Shard_type shard_type = STORAGE;
+			for (auto &node:this->get_nodes())
+			{
+				std::string node_ip;
+				int node_port;
+				node->get_ip_port(node_ip, node_port);
+
+				if(node_ip.compare(row[3])==0 && node_port == port)
+				{
+					shard_type = METADATA;
+					break;
+				}
+			}
+		
+			pshard = new Shard(shardid, row[1], shard_type);
 			pshard->set_cluster_info(row[7], cluster_id);
 			storage_shards.push_back(pshard);
 			syslog(Logger::INFO, "Added shard(%s.%s, %u) into protection.",
@@ -1389,11 +1512,6 @@ int MetadataShard::refresh_shards(std::vector<Shard *> &storage_shards)
 		}
 		else if (pshard->get_cluster_name() != std::string(row[7]))
 			pshard->update_cluster_name(row[7], cluster_id);
-
-		uint nodeid = strtol(row[2], &endptr, 10);
-		Assert(endptr == NULL || *endptr == '\0');
-		int port = strtol(row[4], &endptr, 10);
-		Assert(endptr == NULL || *endptr == '\0');
 
 		/*
 		  Iterating a storage shard's rows and a metashard's result, so every
@@ -1423,6 +1541,83 @@ int MetadataShard::refresh_shards(std::vector<Shard *> &storage_shards)
 
 		pshard->remove_node(i.second->get_id());
 	}
+
+	return 0;
+}
+
+/*
+  Fetch computer nodes from metadata shard, and refresh computer_nodes. 
+  Newly added computer nodes will be added into computer_nodes and 
+  obsolete nodes that no longer registered in computer nodes will be destroyed. 
+  Call this repeatedly to refresh computer_nodes topology periodically.
+*/
+int MetadataShard::refresh_computers(std::vector<Computer_node *> &computer_nodes)
+{
+	Scopped_mutex sm(mtx);
+	int ret = cur_master->send_stmt(SQLCOM_SELECT, CONST_STR_PTR_LEN(
+				"select id,name,ip,port,db_cluster_id,user_name,passwd from comp_nodes"), stmt_retries);
+	if (ret)
+		return ret;
+	MYSQL_RES *result = cur_master->get_result();
+	MYSQL_ROW row;
+	char *endptr = NULL;
+
+	std::map<std::pair<uint, uint>, Computer_node*> sdns;
+	for (auto &i:computer_nodes)
+		sdns.insert(std::make_pair(	std::make_pair(i->cluster_id, i->id), i));
+	
+	while ((row = mysql_fetch_row(result)))
+	{
+		uint compid = strtol(row[0], &endptr, 10);
+		Assert(endptr == NULL || *endptr == '\0');
+		uint cluster_id = strtol(row[4], &endptr, 10);
+		Assert(endptr == NULL || *endptr == '\0');
+		int port = strtol(row[3], &endptr, 10);
+		Assert(endptr == NULL || *endptr == '\0');
+
+		Computer_node *pcomputer = NULL;
+
+		for (auto &computer:computer_nodes)
+		{
+			if (computer->cluster_id == cluster_id && computer->id == compid)
+			{
+				pcomputer = computer;
+				break;
+			}
+		}
+		if (!pcomputer)
+		{
+			pcomputer = new Computer_node(compid, cluster_id, port, row[1], row[2], row[5], row[6]);
+			computer_nodes.push_back(pcomputer);
+			syslog(Logger::INFO, "Added Computer(%u, %u, %s) into protection.",
+						pcomputer->cluster_id, pcomputer->id, pcomputer->name.c_str());
+		}
+		else
+			pcomputer->refresh_node_configs(port, row[1], row[2], row[5], row[6]);
+
+		// remove nodes that still exist.
+		sdns.erase(std::make_pair(cluster_id, compid));
+	}
+
+	cur_master->free_mysql_result();
+
+	// Remove computer nodes that are no longer in the computer_nodes, they are all left in sdns.
+	for (auto &i:sdns)
+	{
+		for(std::vector<Computer_node*>::iterator it=computer_nodes.begin(); it!=computer_nodes.end(); )
+		{
+			if ((*it)->cluster_id == i.first.first && (*it)->id == i.first.second)
+			{
+				//if()	//disconnect pgsql
+				delete *it;
+				it = computer_nodes.erase(it);
+				break;
+			}
+			else
+				it++;
+		}
+	}
+	sdns.clear();
 
 	return 0;
 }
@@ -1523,6 +1718,71 @@ int MetadataShard::fetch_meta_shard_nodes(Shard_node *sn, bool is_master,
 		remove_node(pn->get_id());
 	}
 
+	return 0;
+}
+
+	
+/*
+  Connect to storage node, get tables' rows & pages, 
+  and update to computers.
+*/
+int StorageShard::refresh_storages_to_computers(std::vector<Shard *> &storage_shards, std::vector<Computer_node *> &computer_nodes)
+{
+	Scopped_mutex sm(mtx);
+
+	for(auto &shard:storage_shards)
+	{
+		if(shard->get_type() == METADATA)
+			continue;
+
+		std::map<std::string, std::pair<uint, uint>> map_table_page_row;
+		int ret = shard->get_master()->send_stmt(SQLCOM_SELECT, CONST_STR_PTR_LEN(
+			"select TABLE_NAME,TABLE_ROWS,DATA_LENGTH from information_schema.tables where table_type='BASE TABLE' and TABLE_SCHEMA='postgres_$$_public'"), stmt_retries);
+
+		if (ret)
+		   return ret;
+		MYSQL_RES *result = shard->get_master()->get_result();
+		MYSQL_ROW row;
+		char *endptr = NULL;
+
+		while ((row = mysql_fetch_row(result)))
+		{
+			uint rows = strtol(row[1], &endptr, 10);
+			Assert(endptr == NULL || *endptr == '\0');
+			uint pages = strtol(row[2], &endptr, 10);
+			Assert(endptr == NULL || *endptr == '\0');
+			pages = rows/pages +1;
+
+			map_table_page_row[row[0]] = std::make_pair(pages, rows);
+		}
+	   
+		shard->get_master()->free_mysql_result();
+
+		// refresh tables' pages&rows to computer_nodes
+		for(auto &comp:computer_nodes)
+		{
+			char sql[256];
+			for(auto &tb:map_table_page_row)
+			{
+				int n = snprintf(sql, sizeof(sql)-1, 
+						"update pg_class set relpages=%d,reltuples=%d where relname = '%s'", 
+						tb.second.first, tb.second.second, tb.first.c_str());
+				if(n >= sizeof(sql)-1)
+				{
+					syslog(Logger::ERROR, "table name %s is to long", tb.first.c_str());
+					return -1;
+				}
+
+				bool ret = comp->send_stmt(PG_COPYRES_EVENTS, sql, stmt_retries);
+				comp->free_pgsql_result();
+				//if (!ret)
+				//	return;
+			}
+		}
+
+		map_table_page_row.clear();
+	}
+	
 	return 0;
 }
 

@@ -21,6 +21,7 @@
 #include "mysql/errmsg.h"
 #include "mysql/mysqld_error.h"
 #include "mysql/server/private/sql_cmd.h"
+#include "pgsql/libpq-fe.h"
 
 extern int64_t mysql_connect_timeout;
 extern int64_t mysql_read_timeout;
@@ -39,6 +40,7 @@ extern std::string meta_svr_pwd;
 class Thread;
 class Shard;
 class Shard_node;
+class Computer_node;
 
 class MYSQL_CONN
 {
@@ -79,6 +81,101 @@ public:
 	Shard_node *get_owner() { return owner; }
 
 	int connect();
+};
+
+class PGSQL_CONN
+{
+private:
+	bool connected;
+	int port;
+	std::string ip, user, pwd;
+	PGconn	   *conn;
+	PGresult   *result;
+	Computer_node *owner;
+	friend class Computer_node;
+	bool handle_pgsql_result();
+	void free_pgsql_result();
+public:
+	PGSQL_CONN(const char * ip_, int port_, const char * user_,		const char * pwd_, Computer_node *owner_):
+		connected(false), port(port_), ip(ip_), user(user_), pwd(pwd_), owner(owner_)
+	{
+
+	}
+
+	~PGSQL_CONN() { close_conn(); }
+
+	bool send_stmt(int pgres, const char *stmt);
+	bool send_stmt(int pgres, const std::string &stmt);
+
+	Computer_node *get_owner() { return owner; }
+
+	int connect();
+	void close_conn();
+};
+
+class Computer_node
+{
+public:
+	uint id;
+	uint cluster_id;
+	std::string name;
+	friend class PGSQL_CONN;
+	PGSQL_CONN gpsql_conn;
+
+	Computer_node(uint id_, uint cluster_id_, int port_,
+		const char * name_, const char * ip_, const char * user_, const char * pwd_):
+		id(id_), cluster_id(cluster_id_), name(name_),
+		gpsql_conn(ip_, port_, user_, pwd_, this)
+	{
+		Assert(name_ && ip_ && user_ && pwd_);
+		Assert(port_ > 0);
+	}
+
+	void refresh_node_configs(int port_,
+		const char * name_, const char * ip_, const char * user_, const char * pwd_)
+	{
+		bool is_change = false;
+
+		if(name != name_)
+		{
+			name = name_;
+		}
+
+		if(gpsql_conn.port != port_)
+		{
+			gpsql_conn.port = port_;
+			is_change = true;
+		}
+			
+		if(gpsql_conn.ip != ip_)
+		{
+			gpsql_conn.ip = ip_;
+			is_change = true;
+		}
+			
+		if(gpsql_conn.user != user_)
+		{
+			gpsql_conn.user = user_;
+			is_change = true;
+		}
+			
+		if(gpsql_conn.pwd != pwd_)
+		{
+			gpsql_conn.pwd = pwd_;
+			is_change = true;
+		}
+
+		// close connect, it will be reconnect while next send_stmt
+		if(is_change)
+			close_conn();
+	}
+
+	bool send_stmt(int pgres, const char *stmt, int nretries = 1);
+	bool send_stmt(int pgres, const std::string &stmt, int nretries = 1);
+	int connect();
+	void close_conn() { gpsql_conn.close_conn(); }
+	PGresult *get_result() { return gpsql_conn.result; }
+	void free_pgsql_result() { gpsql_conn.free_pgsql_result(); }
 };
 
 class Shard_node
@@ -524,6 +621,22 @@ public:
 		const char *master_ip = NULL, int master_port = 0);
 
 	int refresh_shards(std::vector<Shard *> &storage_shards);
+	int refresh_computers(std::vector<Computer_node *> &computer_nodes);
+};
+
+class StorageShard : public Shard
+{
+public:
+	const static uint32_t STORAGE_SHARD_ID = 0xFFFFFFFF;
+	
+	StorageShard() : Shard(STORAGE_SHARD_ID, "StorageShard", STORAGE)
+	{
+		// Need to assign the pair for consistent generic processing.
+		cluster_id = 0xffffffff;
+		cluster_name = "StorageShardVirtualCluster";
+	}
+
+	int refresh_storages_to_computers(std::vector<Shard *> &storage_shards, std::vector<Computer_node *> &computer_nodes);
 };
 
 #endif // !SHARD_H

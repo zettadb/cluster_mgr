@@ -19,13 +19,20 @@ if (NOT EXISTS ../include/mysql)
 		WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 endif()
 
+if (NOT EXISTS ../include/pgsql)
+	execute_process(COMMAND mkdir -p ../include
+		WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+	execute_process(COMMAND cp ../resources/pgsql/ ../include/ -rf
+		WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+endif()
+
 link_directories(${CMAKE_SOURCE_DIR}/../lib)
 add_executable(cluster_mgr config.cc  log.cc  main.cc  os.cc  shard.cc  sys.cc  txn.cc thread_manager.cc)
 configure_file(sys_config.h.in sys_config.h)
 target_include_directories(cluster_mgr PUBLIC
 		"${PROJECT_BINARY_DIR}"
 		"${PROJECT_SOURCE_DIR}/../include")
-target_link_libraries(cluster_mgr mariadb pthread)
+target_link_libraries(cluster_mgr mariadb pthread pq)
 
 install(TARGETS cluster_mgr DESTINATION bin)
 install(DIRECTORY ../lib/ TYPE LIB)

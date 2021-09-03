@@ -168,6 +168,26 @@ int System::refresh_shards_from_metadata_server()
 }
 
 /*
+  Connect to meta data master node, get all computer' configs, and update each node.
+  If a node isn't in the query result, remove it.
+  If a node doesn't exist, create it and add it to its computers.
+*/
+int System::refresh_computers_from_metadata_server()
+{
+	Scopped_mutex sm(mtx);
+	return meta_shard.refresh_computers(computer_nodes);
+}
+
+/*
+  Connect to storage node, get tables's rows & pages, and update to computers node.
+*/
+int System::refresh_storages_info_to_computers()
+{
+	Scopped_mutex sm(mtx);
+	return storage_shard.refresh_storages_to_computers(storage_shards, computer_nodes);
+}
+
+/*
   Read config file and initialize config settings;
   Connect to metadata shard and get the storage shards to work on, set up
   Shard objects and the connections to each shard node.
@@ -187,6 +207,8 @@ int System::create_instance(const std::string&cfg_path)
 	if ((ret = m_global_instance->setup_metadata_shard()) != 0)
 		goto end;
 	if ((ret = m_global_instance->refresh_shards_from_metadata_server()) != 0)
+		goto end;
+	if ((ret = m_global_instance->refresh_computers_from_metadata_server()) != 0)
 		goto end;
 	Thread_manager::get_instance();
 end:

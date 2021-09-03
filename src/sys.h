@@ -21,8 +21,10 @@ class Thread;
 class System
 {
 private:
+	std::vector<Computer_node *> computer_nodes;
 	std::vector<Shard *> storage_shards;
 	MetadataShard meta_shard;
+	StorageShard storage_shard;
 
 	std::string config_path;
 
@@ -50,6 +52,8 @@ public:
 	bool acquire_shard(Thread *thd, bool force);
 	int setup_metadata_shard();
 	int refresh_shards_from_metadata_server();
+	int refresh_computers_from_metadata_server();
+	int refresh_storages_info_to_computers();
 	~System();
 	static int create_instance(const std::string&cfg_path);
 	static System* get_instance()

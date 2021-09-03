@@ -14,20 +14,23 @@ mysql_max_packet_size = 1073741824
 # {ERROR, WARNING, INFO, LOG, DEBUG1, DEBUG2, DEBUG3}.
 log_verbosity = INFO
 
-# Abort prepared transactions found in MySQL primary node that has been started for so many seconds.
-prepared_transaction_ttl = 20
+#Number of worker threads to create and maintain.
+num_worker_threads=6
+
+# Interval in seconds a shard's two checks should be apart
+check_shard_interval = 3
+
+# Interval in seconds a thread waits after it finds no work to do.
+thread_work_interval = 1
+
+# Interval in seconds a thread waits next storage stats sync.
+storage_sync_interval = 60
 
 # 100MB, if log grows larger than this it's rotated
 max_log_file_size = 100
 
-#Number of worker threads to create and maintain.
-num_worker_threads=5
-# Interval in seconds a shard's two checks should be apart
-check_shard_interval = 1
-thread_work_interval = 1
-
 # meta data server listening port 
-meta_port = 3002
+meta_port = 6004
 
 # meta data server ip address
 meta_host = 127.0.0.1
@@ -45,4 +48,4 @@ log_file = ./cluster_mgr.log
 statement_retries = 3
 
 # Interval in milli-seconds a statement is resent for execution when it fails and we believe MySQL node will be ready in a while.
-statement_retry_interval_ms = 500
+statement_retry_interval_ms = 1000

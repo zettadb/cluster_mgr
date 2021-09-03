@@ -20,9 +20,12 @@
 
 extern "C" void *signal_hander(void *arg);
 extern "C" void *thread_func(void*thrdarg);
+extern "C" void *thread_func_storage_sync(void*thrdarg);
+
 int64_t num_worker_threads = 3;
 int Thread_manager::do_exit = 0;
 int64_t thread_work_interval = 3;
+int64_t storage_sync_interval = 60;
 Thread_manager* Thread_manager::m_inst = NULL;
 
 Thread_manager::Thread_manager()
@@ -145,6 +148,25 @@ void Thread_manager::start_worker_thread()
 		thd->set_pthread_hdl(hdl);
 		thrds.push_back(thd);
 	}
+
+	//start storage sync thread
+	{
+		pthread_t hdl;
+		Thread *thd = new Thread;
+		if ((error = pthread_create(&hdl,
+			 &Thread_manager::get_instance()->thr_attr, thread_func_storage_sync, thd)))
+		{
+			char errmsg_buf[256];
+			syslog(Logger::ERROR, "Can not create storage sync thread, error: %d, %s",
+			error, errno, strerror_r(errno, errmsg_buf, sizeof(errmsg_buf)));
+			delete thd;
+			do_exit = 1;
+			return;
+		}
+
+		thd->set_pthread_hdl(hdl);
+		thrds.push_back(thd);
+	}
 }
 
 
@@ -242,6 +264,7 @@ extern "C" void *signal_hander(void *arg) {
       case SIGQUIT:
 	    g_exit_signal = sig;
 	    Thread_manager::do_exit = 1;
+	  	Thread_manager::get_instance()->wakeup_all();
         pthread_exit(nullptr);
         return NULL;  // Avoid compiler warnings
         break;
@@ -295,4 +318,21 @@ extern "C" void *thread_func(void*thrdarg)
 	return NULL;
 }
 
+extern "C" void *thread_func_storage_sync(void*thrdarg)
+{
+	Thread*thd = (Thread*)thrdarg;
+	Assert(thd);
+	mask_signals();
+	
+	Thread_manager::get_instance()->sleep_wait(thd, 1000);
+
+	while (!Thread_manager::do_exit)
+	{
+		System::get_instance()->refresh_storages_info_to_computers();
+		
+		Thread_manager::get_instance()->sleep_wait(thd, storage_sync_interval * 1000);
+	}
+	
+	return NULL;
+}
 
