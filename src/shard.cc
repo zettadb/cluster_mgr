@@ -422,8 +422,11 @@ int PGSQL_CONN::connect()
 
 void PGSQL_CONN::close_conn()
 {
-	PQfinish(conn);
-	connected = false;
+	if(connected)
+	{
+		PQfinish(conn);
+		connected = false;
+	}
 }
 
 bool PGSQL_CONN::handle_pgsql_result()
