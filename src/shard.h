@@ -99,7 +99,7 @@ public:
 	PGSQL_CONN(const char * ip_, int port_, const char * user_,		const char * pwd_, Computer_node *owner_):
 		connected(false), port(port_), ip(ip_), user(user_), pwd(pwd_), owner(owner_)
 	{
-
+		result = NULL;
 	}
 
 	~PGSQL_CONN() { close_conn(); }
