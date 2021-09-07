@@ -1737,7 +1737,7 @@ int StorageShard::refresh_storages_to_computers(std::vector<Shard *> &storage_sh
 
 	for(auto &shard:storage_shards)
 	{
-		if(shard->get_type() == METADATA)
+		if(shard->get_type() == METADATA || shard->get_master() == NULL)
 			continue;
 
 		////////////////////////////////////////////////////////
@@ -1826,7 +1826,7 @@ int StorageShard::refresh_storages_to_computers_metashard(std::vector<Shard *> &
 
 	for(auto &shard:storage_shards)
 	{
-		if(shard->get_type() == METADATA)
+		if(shard->get_type() == METADATA || shard->get_master() == NULL)
 			continue;
 
 		////////////////////////////////////////////////////////
