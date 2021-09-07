@@ -1863,7 +1863,11 @@ int StorageShard::refresh_storages_to_computers_metashard(std::vector<Shard *> &
 			return -1;
 		}
 
-		meta_shard.get_master()->send_stmt(SQLCOM_UPDATE, CONST_STR_PTR_LEN(sql), stmt_retries);
+		if(meta_shard.get_master())
+		{
+			meta_shard.get_master()->send_stmt(SQLCOM_UPDATE, CONST_STR_PTR_LEN(sql), stmt_retries);
+			meta_shard.get_master()->free_mysql_result();
+		}
 
 		////////////////////////////////////////////////////////
 		// refresh tables' size&number to computer_nodes
