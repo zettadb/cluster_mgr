@@ -32,6 +32,7 @@ extern int64_t check_shard_interval;
 extern int64_t meta_svr_port;
 extern int64_t stmt_retries;
 extern int64_t stmt_retry_interval_ms;
+extern int64_t commit_log_retention_hours;
 
 extern std::string meta_svr_ip;
 extern std::string meta_svr_user;
@@ -622,6 +623,7 @@ public:
 
 	int refresh_shards(std::vector<Shard *> &storage_shards);
 	int refresh_computers(std::vector<Computer_node *> &computer_nodes);
+	int truncate_commit_log_from_metadata_server();
 };
 
 class StorageShard : public Shard

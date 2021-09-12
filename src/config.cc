@@ -17,6 +17,7 @@
 
 extern int64_t thread_work_interval;
 extern int64_t storage_sync_interval;
+extern int64_t commit_log_retention_hours;
 
 Configs *Configs::get_instance()
 {
@@ -175,6 +176,8 @@ void Configs::define_configs()
 		"Interval in seconds a thread waits after it finds no work to do.");
 	define_int_config("storage_sync_interval", storage_sync_interval, 1, 300, 60,
 		"Interval in seconds a thread waits next storage stats sync.");
+	define_int_config("commit_log_retention_hours", commit_log_retention_hours, 24, 24*30, 24,
+		"Interval in hours a thread waits next commit_log clear.");
 	define_int_config("statement_retries", stmt_retries, 1, 10000, 3,
 		"NO. of times a SQL statement is resent for execution when MySQL connection broken.");
 	define_int_config("statement_retry_interval_ms", stmt_retry_interval_ms, 1, 1000000, 100,

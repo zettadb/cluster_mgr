@@ -26,6 +26,8 @@ int64_t num_worker_threads = 3;
 int Thread_manager::do_exit = 0;
 int64_t thread_work_interval = 3;
 int64_t storage_sync_interval = 60;
+int64_t commit_log_retention_hours = 24;
+
 Thread_manager* Thread_manager::m_inst = NULL;
 
 Thread_manager::Thread_manager()
@@ -323,6 +325,9 @@ extern "C" void *thread_func_storage_sync(void*thrdarg)
 	Thread*thd = (Thread*)thrdarg;
 	Assert(thd);
 	mask_signals();
+
+	int commit_log_count = 0;
+	int commit_log_count_max = commit_log_retention_hours*60*60/storage_sync_interval;
 	
 	Thread_manager::get_instance()->sleep_wait(thd, 1000);
 
@@ -332,6 +337,12 @@ extern "C" void *thread_func_storage_sync(void*thrdarg)
 		System::get_instance()->refresh_storages_info_to_computers_metashard();
 		
 		Thread_manager::get_instance()->sleep_wait(thd, storage_sync_interval * 1000);
+
+		if(commit_log_count++ >= commit_log_count_max)
+		{
+			commit_log_count = 0;
+			System::get_instance()->truncate_commit_log_from_metadata_server();
+		}
 	}
 	
 	return NULL;

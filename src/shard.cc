@@ -15,6 +15,8 @@
 #include "thread_manager.h"
 #include <unistd.h>
 #include <utility>
+#include <time.h>
+#include <sys/time.h>
 
 // config variables
 int64_t mysql_connect_timeout = 20;
@@ -1728,6 +1730,132 @@ int MetadataShard::fetch_meta_shard_nodes(Shard_node *sn, bool is_master,
 }
 
 /*
+  Connect to meta data master node, truncate unused commit log partitions.
+*/
+int MetadataShard::truncate_commit_log_from_metadata_server()
+{
+	Scopped_mutex sm(mtx);
+	
+	////////////////////////////////////////////////////////
+	//get the time need to be truncate
+	time_t timesp;
+	time(&timesp);
+	timesp = timesp - 60*60*commit_log_retention_hours;
+
+	////////////////////////////////////////////////////////
+	// get partitions need to truncate from information_schema.partitions
+	char sql[256];
+	int n = snprintf(sql, sizeof(sql)-1, 
+			"select TABLE_NAME,SUBPARTITION_NAME from information_schema.partitions where \
+TABLE_SCHEMA='kunlun_metadata_db' and TABLE_NAME like 'commit_log_%%' and TABLE_ROWS>0 and \
+unix_timestamp(UPDATE_TIME)<%ld", 
+			timesp);
+
+	if(n >= sizeof(sql)-1)
+	{
+		syslog(Logger::ERROR, "timesp %s is to long", timesp);
+		return -1;
+	}
+
+	int ret = cur_master->send_stmt(SQLCOM_SELECT, CONST_STR_PTR_LEN(sql), stmt_retries);
+	if (ret)
+		return ret;
+	MYSQL_RES *result = cur_master->get_result();
+	MYSQL_ROW row;
+	std::vector<std::pair<std::string, std::string>> vec_partition_tb;
+	
+	while ((row = mysql_fetch_row(result)))
+	{
+		//syslog(Logger::ERROR, "vec_partition_tb row[0]=%s,row[1]=%s", row[0],row[1]);
+		vec_partition_tb.push_back(std::make_pair(std::string(row[0]),std::string(row[1])));
+	}
+	
+	cur_master->free_mysql_result();
+
+	////////////////////////////////////////////////////////
+	// get txnid from xa recover
+	std::vector<std::string> vec_recover;
+	ret = cur_master->send_stmt(SQLCOM_SELECT, CONST_STR_PTR_LEN("xa recover"), stmt_retries);
+	if (ret)
+	{
+		syslog(Logger::ERROR, "xa recover is no granted, please update install-mysql.py");
+		return ret;
+	}
+	result = cur_master->get_result();
+	
+	while ((row = mysql_fetch_row(result)))
+	{
+		vec_recover.push_back(std::string(row[3]));
+	}
+	
+	cur_master->free_mysql_result();
+
+	////////////////////////////////////////////////////////
+	// truncate the unused partition
+	for(auto &ptb:vec_partition_tb)
+	{
+		if(vec_recover.size() != 0)
+		{
+			////////////////////////////////////////////////////////
+			// get the whole partition txn_id form commit_log_%
+			n = snprintf(sql, sizeof(sql)-1, 
+					"select (txn_id & 0x00000000ffffffff) as txnid from %s partition(%s)",
+					ptb.first.c_str(), ptb.second.c_str());
+			syslog(Logger::ERROR, "sql2=%s", sql);
+
+			if(n >= sizeof(sql)-1)
+			{
+				syslog(Logger::ERROR, "commit_log name %s is to long", ptb.first.c_str());
+				return -1;
+			}
+
+			ret = cur_master->send_stmt(SQLCOM_SELECT, CONST_STR_PTR_LEN(sql), stmt_retries);
+			if (ret)
+				continue;
+			result = cur_master->get_result();
+			bool txnid_unused = true;
+
+			while (txnid_unused && (row = mysql_fetch_row(result)))
+			{
+				//compare txnid with recover
+				for(auto &recover:vec_recover)
+				{
+					if(recover == row[0])
+					{
+						txnid_unused = false;
+						syslog(Logger::ERROR, "xa recover date=%s as txnid is exist, it maybe error", row[0]);
+						break;
+					}
+				}
+			}
+			
+			cur_master->free_mysql_result();
+
+			if(!txnid_unused)
+				continue;
+		}
+
+		////////////////////////////////////////////////////////
+		// truncate unused partition
+		n = snprintf(sql, sizeof(sql)-1, 
+					"alter table %s truncate partition %s",
+					ptb.first.c_str(), ptb.second.c_str());
+
+		if(n >= sizeof(sql)-1)
+		{
+			syslog(Logger::ERROR, "commit_log name %s is to long", ptb.first.c_str());
+			return -1;
+		}
+
+		cur_master->send_stmt(SQLCOM_ALTER_TABLE, CONST_STR_PTR_LEN(sql), stmt_retries);
+	}
+
+	vec_partition_tb.clear();
+
+	return 0;
+}
+
+/*
   Connect to storage node, get tables' rows & pages, 
   and update to computer nodes.
 */
@@ -1737,17 +1865,18 @@ int StorageShard::refresh_storages_to_computers(std::vector<Shard *> &storage_sh
 
 	for(auto &shard:storage_shards)
 	{
-		if(shard->get_type() == METADATA || shard->get_master() == NULL)
+		Shard_node *master_sn = shard->get_master();
+		if(shard->get_type() == METADATA || master_sn == NULL)
 			continue;
 
 		////////////////////////////////////////////////////////
 		//get innodb_page_size
-		int ret = shard->get_master()->send_stmt(SQLCOM_SELECT, CONST_STR_PTR_LEN(
+		int ret = master_sn->send_stmt(SQLCOM_SELECT, CONST_STR_PTR_LEN(
 			"show variables like 'innodb_page_size'"), stmt_retries);
 
 		if (ret)
 		   return ret;
-		MYSQL_RES *result = shard->get_master()->get_result();
+		MYSQL_RES *result = master_sn->get_result();
 		MYSQL_ROW row;
 		char *endptr = NULL;
 		uint page_size = 0;
@@ -1758,19 +1887,19 @@ int StorageShard::refresh_storages_to_computers(std::vector<Shard *> &storage_sh
 			Assert(endptr == NULL || *endptr == '\0');
 		}
 	   
-		shard->get_master()->free_mysql_result();
+		master_sn->free_mysql_result();
 
 		if(page_size == 0)
 			continue; 
 
 		////////////////////////////////////////////////////////
 		//get tables' rows&size, pages = size/page_size
-		ret = shard->get_master()->send_stmt(SQLCOM_SELECT, CONST_STR_PTR_LEN(
+		ret = master_sn->send_stmt(SQLCOM_SELECT, CONST_STR_PTR_LEN(
 			"select TABLE_NAME,TABLE_ROWS,DATA_LENGTH from information_schema.tables where table_type='BASE TABLE' and TABLE_SCHEMA='postgres_$$_public'"), stmt_retries);
 
 		if (ret)
 		   return ret;
-		result = shard->get_master()->get_result();
+		result = master_sn->get_result();
 		endptr = NULL;
 		std::map<std::string, std::pair<uint, uint>> map_table_page_row;
 
@@ -1785,7 +1914,7 @@ int StorageShard::refresh_storages_to_computers(std::vector<Shard *> &storage_sh
 			map_table_page_row[row[0]] = std::make_pair(pages, rows);
 		}
 	   
-		shard->get_master()->free_mysql_result();
+		master_sn->free_mysql_result();
 
 		////////////////////////////////////////////////////////
 		// refresh tables' pages&rows to computer_nodes
@@ -1799,7 +1928,7 @@ int StorageShard::refresh_storages_to_computers(std::vector<Shard *> &storage_sh
 						tb.second.first, tb.second.second, tb.first.c_str());
 				if(n >= sizeof(sql)-1)
 				{
-					syslog(Logger::ERROR, "table name %s is to long", tb.first.c_str());
+					syslog(Logger::ERROR, "table name %s is too long", tb.first.c_str());
 					return -1;
 				}
 
@@ -1826,17 +1955,18 @@ int StorageShard::refresh_storages_to_computers_metashard(std::vector<Shard *> &
 
 	for(auto &shard:storage_shards)
 	{
-		if(shard->get_type() == METADATA || shard->get_master() == NULL)
+		Shard_node *master_sn = shard->get_master();
+		if(shard->get_type() == METADATA || master_sn == NULL)
 			continue;
 
 		////////////////////////////////////////////////////////
 		//get tables' size&number
-		int ret = shard->get_master()->send_stmt(SQLCOM_SELECT, CONST_STR_PTR_LEN(
+		int ret = master_sn->send_stmt(SQLCOM_SELECT, CONST_STR_PTR_LEN(
 			"select TABLE_NAME,DATA_LENGTH from information_schema.tables where table_type='BASE TABLE' and TABLE_SCHEMA='postgres_$$_public'"), stmt_retries);
 
 		if (ret)
 		   return ret;
-		MYSQL_RES *result = shard->get_master()->get_result();
+		MYSQL_RES *result = master_sn->get_result();
 		MYSQL_ROW row;
 		char *endptr = NULL;
 		uint num_tablets = 0;
@@ -1849,7 +1979,7 @@ int StorageShard::refresh_storages_to_computers_metashard(std::vector<Shard *> &
 			num_tablets++;
 		}
 	   
-		shard->get_master()->free_mysql_result();
+		master_sn->free_mysql_result();
 
 		////////////////////////////////////////////////////////
 		// refresh tables' size&number to MetadataShard
@@ -1859,14 +1989,15 @@ int StorageShard::refresh_storages_to_computers_metashard(std::vector<Shard *> &
 				space_volumn, num_tablets, shard->get_name().c_str());
 		if(n >= sizeof(sql)-1)
 		{
-			syslog(Logger::ERROR, "shard name %s is to long", shard->get_name().c_str());
+			syslog(Logger::ERROR, "shard name %s is too long", shard->get_name().c_str());
 			return -1;
 		}
 
-		if(meta_shard.get_master())
+		Shard_node *meta_master_sn = meta_shard.get_master();
+		if(meta_master_sn)
 		{
-			meta_shard.get_master()->send_stmt(SQLCOM_UPDATE, CONST_STR_PTR_LEN(sql), stmt_retries);
-			meta_shard.get_master()->free_mysql_result();
+			meta_master_sn->send_stmt(SQLCOM_UPDATE, CONST_STR_PTR_LEN(sql), stmt_retries);
+			meta_master_sn->free_mysql_result();
 		}
 
 		////////////////////////////////////////////////////////
@@ -1878,7 +2009,7 @@ int StorageShard::refresh_storages_to_computers_metashard(std::vector<Shard *> &
 					space_volumn, num_tablets, shard->get_name().c_str());
 			if(n >= sizeof(sql)-1)
 			{
-				syslog(Logger::ERROR, "shard name %s is to long", shard->get_name().c_str());
+				syslog(Logger::ERROR, "shard name %s is too long", shard->get_name().c_str());
 				return -1;
 			}
 

@@ -197,6 +197,15 @@ int System::refresh_storages_info_to_computers_metashard()
 }
 
 /*
+  Connect to meta data master node, truncate unused commit log partitions
+*/
+int System::truncate_commit_log_from_metadata_server()
+{
+	Scopped_mutex sm(mtx);
+	return meta_shard.truncate_commit_log_from_metadata_server();
+}
+
+/*
   Read config file and initialize config settings;
   Connect to metadata shard and get the storage shards to work on, set up
   Shard objects and the connections to each shard node.
