@@ -266,10 +266,12 @@ class Shard
 {
 public:
 	enum Shard_type {NONE, STORAGE, METADATA};
+	enum Ha_mode {Ha_no_rep, Ha_mgr, Ha_rbr};
 protected:
 	std::atomic<bool> thrd_hdlr_assigned;
 	Shard_node *cur_master;
 	Shard_type shard_type;
+	Ha_mode ha_mode;
 	uint id;
 	uint cluster_id; // cluster identifier
 	/*
@@ -362,8 +364,8 @@ protected:
 	Prep_recvrd_txns_t prep_recvrd_txns;
 
 public:
-	Shard(uint id_, const std::string &name_, Shard_type type) :
-		thrd_hdlr_assigned(false), cur_master(NULL), shard_type(type),
+	Shard(uint id_, const std::string &name_, Shard_type type, Ha_mode mode) :
+		thrd_hdlr_assigned(false), cur_master(NULL), shard_type(type), ha_mode(mode),
 		id(id_), cluster_id(0), pending_master_node_id(0), last_time_check(0),
 		name(name_), m_thrd_hdlr(NULL)
 	{
@@ -483,6 +485,12 @@ public:
 		return shard_type;
 	}
 
+	Ha_mode get_mode() const
+	{
+		Scopped_mutex sm(mtx);
+		return ha_mode;
+	}
+
 	uint get_id() const
 	{
 		Scopped_mutex sm(mtx);
@@ -505,6 +513,9 @@ public:
 		syslog(Logger::INFO, "Added shard(%s.%s, %u) node (%s:%d, %u) into protection.",
 			cluster_name.c_str(), name.c_str(),
 			id, ip.c_str(), port, node->get_id());
+
+		if(ha_mode == Ha_no_rep)
+			cur_master = node;
 	}
 
 	void remove_nodes_not_in(const std::set<uint>& ids)
@@ -609,7 +620,7 @@ public:
 	// Keep this same as in computing node impl(METADATA_SHARDID).
 	const static uint32_t METADATA_SHARD_ID = 0xFFFFFFFF;
 
-	MetadataShard() : Shard(METADATA_SHARD_ID, "MetadataShard", METADATA)
+	MetadataShard() : Shard(METADATA_SHARD_ID, "MetadataShard", METADATA, Ha_mgr)
 	{
 		// Need to assign the pair for consistent generic processing.
 		cluster_id = 0xffffffff;
@@ -631,7 +642,7 @@ class StorageShard : public Shard
 public:
 	const static uint32_t STORAGE_SHARD_ID = 0xFFFFFFFF;
 	
-	StorageShard() : Shard(STORAGE_SHARD_ID, "StorageShard", STORAGE)
+	StorageShard() : Shard(STORAGE_SHARD_ID, "StorageShard", STORAGE, Ha_mgr)
 	{
 		// Need to assign the pair for consistent generic processing.
 		cluster_id = 0xffffffff;

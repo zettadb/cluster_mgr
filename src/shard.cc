@@ -1460,7 +1460,7 @@ int MetadataShard::refresh_shards(std::vector<Shard *> &storage_shards)
 {
 	Scopped_mutex sm(mtx);
 	int ret = cur_master->send_stmt(SQLCOM_SELECT, CONST_STR_PTR_LEN(
-	"select t1.id as shard_id, t1.name, t2.id, ip, port, user_name, passwd, t3.name, t3.id as cluster_id from shards t1, shard_nodes t2, db_clusters t3 where t2.shard_id = t1.id and t3.id=t1.db_cluster_id order by t1.id"), stmt_retries);
+	"select t1.id as shard_id, t1.name, t2.id, ip, port, user_name, passwd, t3.name, t3.id as cluster_id, t3.ha_mode from shards t1, shard_nodes t2, db_clusters t3 where t2.shard_id = t1.id and t3.id=t1.db_cluster_id order by t1.id"), stmt_retries);
 	if (ret)
 		return ret;
 	MYSQL_RES *result = cur_master->get_result();
@@ -1510,8 +1510,17 @@ int MetadataShard::refresh_shards(std::vector<Shard *> &storage_shards)
 					break;
 				}
 			}
-		
-			pshard = new Shard(shardid, row[1], shard_type);
+
+			//set ha_mode for maintenance
+			Ha_mode ha_mode = Ha_mgr;
+			if(strcmp("no_rep", row[9]) == 0)
+				ha_mode = Ha_no_rep;
+			else if(strcmp("mgr", row[9]) == 0)
+				ha_mode = Ha_mgr;
+			else if(strcmp("rbr", row[9]) == 0)
+				ha_mode = Ha_rbr;
+			
+			pshard = new Shard(shardid, row[1], shard_type, ha_mode);
 			pshard->set_cluster_info(row[7], cluster_id);
 			storage_shards.push_back(pshard);
 			syslog(Logger::INFO, "Added shard(%s.%s, %u) into protection.",
@@ -2027,7 +2036,11 @@ void Shard::maintenance()
 {
 	int ret;
 
-	ret = check_mgr_cluster();
+	if(get_mode() == Ha_mode::Ha_no_rep)
+		ret = 0;
+	else
+		ret = check_mgr_cluster();
+	
 	// if ret not 0, master node isn't uniquely resolved or running.
 	if (ret == 0)
 	{
