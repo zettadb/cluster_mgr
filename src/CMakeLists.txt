@@ -35,7 +35,7 @@ target_include_directories(cluster_mgr PUBLIC
 target_link_libraries(cluster_mgr mariadb pthread pq)
 
 install(TARGETS cluster_mgr DESTINATION bin)
-install(DIRECTORY ../lib/ TYPE LIB)
+install(DIRECTORY ../lib/ DESTINATION lib)
 install(DIRECTORY ../resources/ DESTINATION resources
 	PATTERN "mysql_client.tgz" EXCLUDE)
 install(FILES ../README.md ../LICENSE ../NOTICE DESTINATION .)
