@@ -27,7 +27,7 @@ if (NOT EXISTS ../include/pgsql)
 endif()
 
 link_directories(${CMAKE_SOURCE_DIR}/../lib)
-add_executable(cluster_mgr config.cc  log.cc  main.cc  os.cc  shard.cc  sys.cc  txn.cc thread_manager.cc)
+add_executable(cluster_mgr config.cc log.cc main.cc os.cc shard.cc sys.cc txn.cc thread_manager.cc meta_sync.cc)
 configure_file(sys_config.h.in sys_config.h)
 target_include_directories(cluster_mgr PUBLIC
 		"${PROJECT_BINARY_DIR}"

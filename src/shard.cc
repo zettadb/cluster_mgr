@@ -401,117 +401,6 @@ bool MYSQL_CONN::send_stmt(enum_sql_command sqlcom_, const std::string &stmt)
 	return send_stmt(sqlcom_, stmt.c_str(), stmt.length());
 }
 
-int PGSQL_CONN::connect()
-{
-	if (connected) return 0;
-
-	char conninfo[256];
-	sprintf(conninfo, "dbname = postgres host=%s port=%d user=%s password=%s",
-						ip.c_str(), port, user.c_str(), pwd.c_str());
-
-	conn = PQconnectdb(conninfo);
-
-	if (PQstatus(conn) != CONNECTION_OK)
-	{
-		syslog(Logger::ERROR, "Connected to pgsql %s fail...",conninfo);
-		return -1;
-	}
-
-	connected = true;
-		
-	return 0;
-}
-
-void PGSQL_CONN::close_conn()
-{
-	if(connected)
-	{
-		PQfinish(conn);
-		connected = false;
-	}
-}
-
-bool PGSQL_CONN::handle_pgsql_result()
-{
-	return true;
-}
-
-void PGSQL_CONN::free_pgsql_result()
-{
-    if (result)
-    {
-		PQclear(result);
-		result = NULL;
-    }
-}
-
-bool PGSQL_CONN::send_stmt(int pgres, const char *stmt)
-{
-	if (!connected)
-	{
-		syslog(Logger::ERROR, "pgsql need to connect first");
-		return false;
-	}
-
-	bool ret = true;
-	result = PQexec(conn, stmt);
-
-	if(pgres == PG_COPYRES_TUPLES)
-	{
-		if (PQresultStatus(result) != PGRES_TUPLES_OK)
-			ret = false;
-	}
-	else
-	{
-		if (PQresultStatus(result) != PGRES_COMMAND_OK)
-			ret = false;
-	}
-
-	return ret;
-}
-
-bool PGSQL_CONN::send_stmt(int pgres, const std::string &stmt)
-{
-	return send_stmt(pgres, stmt.c_str());
-}
-
-/*
-  If send stmt fails because connection broken, reconnect and
-  retry sending the stmt. Retry pgsql_stmt_conn_retries times.
-  @retval true on error, false if successful.
-*/
-bool Computer_node::
-send_stmt(int pgres, const char *stmt, int nretries)
-{
-	bool ret = false;
-	for (int i = 0; i < nretries; i++)
-	{
-		if (!gpsql_conn.connected) connect();
-		if (gpsql_conn.send_stmt(pgres, stmt))
-		{
-			ret = true;
-			break;
-		}
-
-		if (Thread_manager::do_exit)
-			return ret;
-
-		usleep(stmt_retry_interval_ms * 1000);
-	}
-	return ret;
-}
-
-bool Computer_node::
-send_stmt(int pgres, const std::string &stmt, int nretries)
-{
-	return send_stmt(pgres, stmt.c_str(), nretries);
-}
-
-int Computer_node::connect()
-{
-	return gpsql_conn.connect();
-}
-
 /*
   If send stmt fails because connection broken, reconnect and
   retry sending the stmt. Retry mysql_stmt_conn_retries times.
@@ -1512,13 +1401,16 @@ int MetadataShard::refresh_shards(std::vector<Shard *> &storage_shards)
 			}
 
 			//set ha_mode for maintenance
-			Ha_mode ha_mode = Ha_mgr;
-			if(strcmp("no_rep", row[9]) == 0)
-				ha_mode = Ha_no_rep;
-			else if(strcmp("mgr", row[9]) == 0)
-				ha_mode = Ha_mgr;
-			else if(strcmp("rbr", row[9]) == 0)
-				ha_mode = Ha_rbr;
+			HAVL_mode ha_mode = HA_mgr;
+			if(row[9]!=NULL)
+			{
+				if(strcmp("no_rep", row[9]) == 0)
+					ha_mode = HA_no_rep;
+				else if(strcmp("mgr", row[9]) == 0)
+					ha_mode = HA_mgr;
+				else if(strcmp("rbr", row[9]) == 0)
+					ha_mode = HA_rbr;
+			}
 			
 			pshard = new Shard(shardid, row[1], shard_type, ha_mode);
 			pshard->set_cluster_info(row[7], cluster_id);
@@ -1537,6 +1429,12 @@ int MetadataShard::refresh_shards(std::vector<Shard *> &storage_shards)
 		bool changed = false;
 		pshard->refresh_node_configs(nodeid, row[3], port, row[5], row[6], changed);
 		if (changed) pshard->get_node_by_id(nodeid)->close_conn();
+
+		if(pshard->get_mode() == Shard::HA_no_rep)
+		{
+			if(pshard->get_nodes().size()>0)
+				pshard->set_master(pshard->get_nodes()[0]);
+		}
 
 		// remove nodes that still exist.
 		sdns.erase(std::make_pair(shardid, nodeid));
@@ -1738,305 +1636,11 @@ int MetadataShard::fetch_meta_shard_nodes(Shard_node *sn, bool is_master,
 	return 0;
 }
 
-/*
-  Connect to meta data master node, truncate unused commit log partitions.
-*/
-int MetadataShard::truncate_commit_log_from_metadata_server()
-{
-	Scopped_mutex sm(mtx);
-	
-	////////////////////////////////////////////////////////
-	//get the time need to be truncate
-	time_t timesp;
-	time(&timesp);
-	timesp = timesp - 60*60*commit_log_retention_hours;
-
-	////////////////////////////////////////////////////////
-	// get partitions need to truncate from information_schema.partitions
-	char sql[256];
-	int n = snprintf(sql, sizeof(sql)-1, 
-			"select TABLE_NAME,SUBPARTITION_NAME from information_schema.partitions where \
-TABLE_SCHEMA='kunlun_metadata_db' and TABLE_NAME like 'commit_log_%%' and TABLE_ROWS>0 and \
-unix_timestamp(UPDATE_TIME)<%ld", 
-			timesp);
-
-	if(n >= sizeof(sql)-1)
-	{
-		syslog(Logger::ERROR, "timesp %s is to long", timesp);
-		return -1;
-	}
-
-	int ret = cur_master->send_stmt(SQLCOM_SELECT, CONST_STR_PTR_LEN(sql), stmt_retries);
-	if (ret)
-		return ret;
-	MYSQL_RES *result = cur_master->get_result();
-	MYSQL_ROW row;
-	std::vector<std::pair<std::string, std::string>> vec_partition_tb;
-	
-	while ((row = mysql_fetch_row(result)))
-	{
-		//syslog(Logger::ERROR, "vec_partition_tb row[0]=%s,row[1]=%s", row[0],row[1]);
-		vec_partition_tb.push_back(std::make_pair(std::string(row[0]),std::string(row[1])));
-	}
-	
-	cur_master->free_mysql_result();
-
-	////////////////////////////////////////////////////////
-	// get txnid from xa recover
-	std::vector<std::string> vec_recover;
-	ret = cur_master->send_stmt(SQLCOM_SELECT, CONST_STR_PTR_LEN("xa recover"), stmt_retries);
-	if (ret)
-	{
-		syslog(Logger::ERROR, "xa recover is no granted, please update install-mysql.py");
-		return ret;
-	}
-	result = cur_master->get_result();
-	
-	while ((row = mysql_fetch_row(result)))
-	{
-		vec_recover.push_back(std::string(row[3]));
-	}
-	
-	cur_master->free_mysql_result();
-
-	////////////////////////////////////////////////////////
-	// truncate the unused partition
-	for(auto &ptb:vec_partition_tb)
-	{
-		if(vec_recover.size() != 0)
-		{
-			////////////////////////////////////////////////////////
-			// get the whole partition txn_id form commit_log_%
-			n = snprintf(sql, sizeof(sql)-1, 
-					"select (txn_id & 0x00000000ffffffff) as txnid from %s partition(%s)",
-					ptb.first.c_str(), ptb.second.c_str());
-			syslog(Logger::ERROR, "sql2=%s", sql);
-
-			if(n >= sizeof(sql)-1)
-			{
-				syslog(Logger::ERROR, "commit_log name %s is to long", ptb.first.c_str());
-				return -1;
-			}
-
-			ret = cur_master->send_stmt(SQLCOM_SELECT, CONST_STR_PTR_LEN(sql), stmt_retries);
-			if (ret)
-				continue;
-			result = cur_master->get_result();
-			bool txnid_unused = true;
-
-			while (txnid_unused && (row = mysql_fetch_row(result)))
-			{
-				//compare txnid with recover
-				for(auto &recover:vec_recover)
-				{
-					if(recover == row[0])
-					{
-						txnid_unused = false;
-						syslog(Logger::ERROR, "xa recover date=%s as txnid is exist, it maybe error", row[0]);
-						break;
-					}
-				}
-			}
-			
-			cur_master->free_mysql_result();
-
-			if(!txnid_unused)
-				continue;
-		}
-
-		////////////////////////////////////////////////////////
-		// truncate unused partition
-		n = snprintf(sql, sizeof(sql)-1, 
-					"alter table %s truncate partition %s",
-					ptb.first.c_str(), ptb.second.c_str());
-
-		if(n >= sizeof(sql)-1)
-		{
-			syslog(Logger::ERROR, "commit_log name %s is to long", ptb.first.c_str());
-			return -1;
-		}
-
-		cur_master->send_stmt(SQLCOM_ALTER_TABLE, CONST_STR_PTR_LEN(sql), stmt_retries);
-	}
-
-	vec_partition_tb.clear();
-
-	return 0;
-}
-
-/*
-  Connect to storage node, get tables' rows & pages, 
-  and update to computer nodes.
-*/
-int StorageShard::refresh_storages_to_computers(std::vector<Shard *> &storage_shards, std::vector<Computer_node *> &computer_nodes)
-{
-	Scopped_mutex sm(mtx);
-
-	for(auto &shard:storage_shards)
-	{
-		Shard_node *master_sn = shard->get_master();
-		if(shard->get_type() == METADATA || master_sn == NULL)
-			continue;
-
-		////////////////////////////////////////////////////////
-		//get innodb_page_size
-		int ret = master_sn->send_stmt(SQLCOM_SELECT, CONST_STR_PTR_LEN(
-			"show variables like 'innodb_page_size'"), stmt_retries);
-
-		if (ret)
-		   return ret;
-		MYSQL_RES *result = master_sn->get_result();
-		MYSQL_ROW row;
-		char *endptr = NULL;
-		uint page_size = 0;
-
-		if ((row = mysql_fetch_row(result)))
-		{
-			uint page_size = strtol(row[1], &endptr, 10);
-			Assert(endptr == NULL || *endptr == '\0');
-		}
-	   
-		master_sn->free_mysql_result();
-
-		if(page_size == 0)
-			continue; 
-
-		////////////////////////////////////////////////////////
-		//get tables' rows&size, pages = size/page_size
-		ret = master_sn->send_stmt(SQLCOM_SELECT, CONST_STR_PTR_LEN(
-			"select TABLE_NAME,TABLE_ROWS,DATA_LENGTH from information_schema.tables where table_type='BASE TABLE' and TABLE_SCHEMA='postgres_$$_public'"), stmt_retries);
-
-		if (ret)
-		   return ret;
-		result = master_sn->get_result();
-		endptr = NULL;
-		std::map<std::string, std::pair<uint, uint>> map_table_page_row;
-
-		while ((row = mysql_fetch_row(result)))
-		{
-			uint rows = strtol(row[1], &endptr, 10);
-			Assert(endptr == NULL || *endptr == '\0');
-			uint pages = strtol(row[2], &endptr, 10);
-			Assert(endptr == NULL || *endptr == '\0');
-			pages = pages/page_size;
-
-			map_table_page_row[row[0]] = std::make_pair(pages, rows);
-		}
-	   
-		master_sn->free_mysql_result();
-
-		////////////////////////////////////////////////////////
-		// refresh tables' pages&rows to computer_nodes
-		char sql[256];
-		for(auto &comp:computer_nodes)
-		{
-			for(auto &tb:map_table_page_row)
-			{
-				int n = snprintf(sql, sizeof(sql)-1, 
-						"update pg_class set relpages=%u,reltuples=%u where relname='%s'", 
-						tb.second.first, tb.second.second, tb.first.c_str());
-				if(n >= sizeof(sql)-1)
-				{
-					syslog(Logger::ERROR, "table name %s is too long", tb.first.c_str());
-					return -1;
-				}
-
-				bool ret = comp->send_stmt(PG_COPYRES_EVENTS, sql, stmt_retries);
-				comp->free_pgsql_result();
-				//if (!ret)
-				//	return;
-			}
-		}
-
-		map_table_page_row.clear();
-	}
-	
-	return 0;
-}
-
-/*
-  Connect to storage node, get num_tablets & space_volumn, 
-  and update to computer nodes and meta shard.
-*/
-int StorageShard::refresh_storages_to_computers_metashard(std::vector<Shard *> &storage_shards, std::vector<Computer_node *> &computer_nodes, MetadataShard &meta_shard)
-{
-	Scopped_mutex sm(mtx);
-
-	for(auto &shard:storage_shards)
-	{
-		Shard_node *master_sn = shard->get_master();
-		if(shard->get_type() == METADATA || master_sn == NULL)
-			continue;
-
-		////////////////////////////////////////////////////////
-		//get tables' size&number
-		int ret = master_sn->send_stmt(SQLCOM_SELECT, CONST_STR_PTR_LEN(
-			"select TABLE_NAME,DATA_LENGTH from information_schema.tables where table_type='BASE TABLE' and TABLE_SCHEMA='postgres_$$_public'"), stmt_retries);
-
-		if (ret)
-		   return ret;
-		MYSQL_RES *result = master_sn->get_result();
-		MYSQL_ROW row;
-		char *endptr = NULL;
-		uint num_tablets = 0;
-		uint64_t space_volumn = 0;
-
-		while ((row = mysql_fetch_row(result)))
-		{
-			space_volumn += strtol(row[1], &endptr, 10);
-			Assert(endptr == NULL || *endptr == '\0');
-			num_tablets++;
-		}
-	   
-		master_sn->free_mysql_result();
-
-		////////////////////////////////////////////////////////
-		// refresh tables' size&number to MetadataShard
-		char sql[256];
-		int n = snprintf(sql, sizeof(sql)-1, 
-				"update shards set space_volumn=%lu,num_tablets=%u where name='%s'", 
-				space_volumn, num_tablets, shard->get_name().c_str());
-		if(n >= sizeof(sql)-1)
-		{
-			syslog(Logger::ERROR, "shard name %s is too long", shard->get_name().c_str());
-			return -1;
-		}
-
-		Shard_node *meta_master_sn = meta_shard.get_master();
-		if(meta_master_sn)
-		{
-			meta_master_sn->send_stmt(SQLCOM_UPDATE, CONST_STR_PTR_LEN(sql), stmt_retries);
-			meta_master_sn->free_mysql_result();
-		}
-
-		////////////////////////////////////////////////////////
-		// refresh tables' size&number to computer_nodes
-		for(auto &comp:computer_nodes)
-		{
-			int n = snprintf(sql, sizeof(sql)-1, 
-					"update pg_shard set space_volumn=%lu,num_tablets=%u where name='%s'", 
-					space_volumn, num_tablets, shard->get_name().c_str());
-			if(n >= sizeof(sql)-1)
-			{
-				syslog(Logger::ERROR, "shard name %s is too long", shard->get_name().c_str());
-				return -1;
-			}
-
-			bool ret = comp->send_stmt(PG_COPYRES_EVENTS, sql, stmt_retries);
-			comp->free_pgsql_result();
-			//if (!ret)
-			//	return;
-		}
-	}
-	
-	return 0;
-}
-
 void Shard::maintenance()
 {
 	int ret;
 
-	if(get_mode() == Ha_mode::Ha_no_rep)
+	if(get_mode() == HAVL_mode::HA_no_rep)
 		ret = 0;
 	else
 		ret = check_mgr_cluster();

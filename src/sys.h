@@ -10,6 +10,7 @@
 #include "sys_config.h"
 #include "global.h"
 #include "shard.h"
+#include "meta_sync.h"
 #include <vector>
 #include <map>
 
@@ -24,7 +25,7 @@ private:
 	std::vector<Computer_node *> computer_nodes;
 	std::vector<Shard *> storage_shards;
 	MetadataShard meta_shard;
-	StorageShard storage_shard;
+	MetadataSync meta_sync;
 
 	std::string config_path;
 

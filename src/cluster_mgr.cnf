@@ -24,7 +24,7 @@ check_shard_interval = 3
 thread_work_interval = 1
 
 # Interval in seconds a thread waits next storage stats sync.
-storage_sync_interval = 6
+storage_sync_interval = 60
 
 # Interval in hours a thread waits next commit_log clear.
 commit_log_retention_hours = 24

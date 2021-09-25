@@ -184,7 +184,7 @@ int System::refresh_computers_from_metadata_server()
 int System::refresh_storages_info_to_computers()
 {
 	Scopped_mutex sm(mtx);
-	return storage_shard.refresh_storages_to_computers(storage_shards, computer_nodes);
+	return meta_sync.refresh_storages_to_computers(storage_shards, computer_nodes);
 }
 
 /*
@@ -193,7 +193,7 @@ int System::refresh_storages_info_to_computers()
 int System::refresh_storages_info_to_computers_metashard()
 {
 	Scopped_mutex sm(mtx);
-	return storage_shard.refresh_storages_to_computers_metashard(storage_shards, computer_nodes, meta_shard);
+	return meta_sync.refresh_storages_to_computers_metashard(storage_shards, computer_nodes, meta_shard);
 }
 
 /*
@@ -202,7 +202,7 @@ int System::refresh_storages_info_to_computers_metashard()
 int System::truncate_commit_log_from_metadata_server()
 {
 	Scopped_mutex sm(mtx);
-	return meta_shard.truncate_commit_log_from_metadata_server();
+	return meta_sync.truncate_commit_log_from_metadata_server(storage_shards, meta_shard);
 }
 
 /*
