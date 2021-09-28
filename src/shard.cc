@@ -12,6 +12,7 @@
 #include "sys.h"
 #include "shard.h"
 #include "os.h"
+#include "kl_cluster.h"
 #include "thread_manager.h"
 #include <unistd.h>
 #include <utility>
@@ -1005,8 +1006,11 @@ int System::process_recovered_prepared()
 		meta_tki(meta_shard.get_cluster_id(),meta_shard.get_cluster_name());
 
 	cluster_txns.insert(std::make_pair(meta_shard.get_cluster_id(), meta_tki));
-	auto all_shards(storage_shards);
+	std::vector<Shard *> all_shards;
 	all_shards.push_back(&meta_shard);
+	for (auto &cluster:kl_clusters)
+		for (auto &shard:cluster->storage_shards)
+			all_shards.push_back(shard);
 
 	for (auto &sd:all_shards)
 	{
@@ -1345,7 +1349,7 @@ Shard_node *Shard::get_node_by_id(uint id)
   mysql connection will be closed and connected again using new info.
   Call this repeatedly to refresh storage shard topology periodically.
 */
-int MetadataShard::refresh_shards(std::vector<Shard *> &storage_shards)
+int MetadataShard::refresh_shards(std::vector<KunlunCluster *> &kl_clusters)
 {
 	Scopped_mutex sm(mtx);
 	int ret = cur_master->send_stmt(SQLCOM_SELECT, CONST_STR_PTR_LEN(
@@ -1355,11 +1359,12 @@ int MetadataShard::refresh_shards(std::vector<Shard *> &storage_shards)
 	MYSQL_RES *result = cur_master->get_result();
 	MYSQL_ROW row;
 	char *endptr = NULL;
-	std::map<std::pair<uint, uint>, Shard_node*> sdns;
-	for (auto &i:storage_shards)
-		for (auto &j:i->get_nodes())
-			sdns.insert(std::make_pair(
-				std::make_pair(i->get_id(), j->get_id()), j));
+	std::map<std::tuple<uint, uint, uint>, Shard_node*> sdns;
+	
+	for (auto &i:kl_clusters)
+		for (auto &j:i->storage_shards)
+			for (auto &k:j->get_nodes())
+				sdns[std::make_tuple(i->get_id(), j->get_id(),k->get_id())] = k;
 
 	while ((row = mysql_fetch_row(result)))
 	{
@@ -1371,11 +1376,27 @@ int MetadataShard::refresh_shards(std::vector<Shard *> &storage_shards)
 		uint nodeid = strtol(row[2], &endptr, 10);
 		Assert(endptr == NULL || *endptr == '\0');
 		int port = strtol(row[4], &endptr, 10);
-		Assert(endptr == NULL || *endptr == '\0');
+		Assert(endptr == NULL || *endptr == '\0');\
+
+		KunlunCluster *pcluster = NULL;
+		for (auto &cluster:kl_clusters)
+		{
+			if (cluster->get_id() == cluster_id)
+			{
+				pcluster = cluster;
+				break;
+			}
+		}
+		if (!pcluster)
+		{
+			pcluster = new KunlunCluster(cluster_id, row[7]);
+			kl_clusters.push_back(pcluster);
+			syslog(Logger::INFO, "Added KunlunCluster(%s.%u) into protection.", row[7], cluster_id);
+		}
 
 		Shard *pshard = NULL;
 
-		for (auto &ssd:storage_shards)
+		for (auto &ssd:pcluster->storage_shards)
 		{
 			if (ssd->get_id() == shardid)
 			{
@@ -1385,21 +1406,6 @@ int MetadataShard::refresh_shards(std::vector<Shard *> &storage_shards)
 		}
 		if (!pshard)
 		{
-			//find ip&port in MetadataShard, and set shard_type as METADATA
-			Shard_type shard_type = STORAGE;
-			for (auto &node:this->get_nodes())
-			{
-				std::string node_ip;
-				int node_port;
-				node->get_ip_port(node_ip, node_port);
-
-				if(node_ip.compare(row[3])==0 && node_port == port)
-				{
-					shard_type = METADATA;
-					break;
-				}
-			}
-
 			//set ha_mode for maintenance
 			HAVL_mode ha_mode = HA_mgr;
 			if(row[9]!=NULL)
@@ -1412,9 +1418,9 @@ int MetadataShard::refresh_shards(std::vector<Shard *> &storage_shards)
 					ha_mode = HA_rbr;
 			}
 			
-			pshard = new Shard(shardid, row[1], shard_type, ha_mode);
+			pshard = new Shard(shardid, row[1], STORAGE, ha_mode);
 			pshard->set_cluster_info(row[7], cluster_id);
-			storage_shards.push_back(pshard);
+			pcluster->storage_shards.push_back(pshard);
 			syslog(Logger::INFO, "Added shard(%s.%s, %u) into protection.",
 				pshard->get_cluster_name().c_str(), pshard->get_name().c_str(),
 				pshard->get_id());
@@ -1437,7 +1443,7 @@ int MetadataShard::refresh_shards(std::vector<Shard *> &storage_shards)
 		}
 
 		// remove nodes that still exist.
-		sdns.erase(std::make_pair(shardid, nodeid));
+		sdns.erase(std::make_tuple(cluster_id, shardid, nodeid));
 	}
 
 	cur_master->free_mysql_result();
@@ -1466,73 +1472,81 @@ int MetadataShard::refresh_shards(std::vector<Shard *> &storage_shards)
   obsolete nodes that no longer registered in computer nodes will be destroyed. 
   Call this repeatedly to refresh computer_nodes topology periodically.
 */
-int MetadataShard::refresh_computers(std::vector<Computer_node *> &computer_nodes)
+int MetadataShard::refresh_computers(std::vector<KunlunCluster *> &kl_clusters)
 {
 	Scopped_mutex sm(mtx);
-	int ret = cur_master->send_stmt(SQLCOM_SELECT, CONST_STR_PTR_LEN(
-				"select id,name,ip,port,db_cluster_id,user_name,passwd from comp_nodes"), stmt_retries);
-	if (ret)
-		return ret;
-	MYSQL_RES *result = cur_master->get_result();
+
+	int ret;
+	MYSQL_RES *result;
 	MYSQL_ROW row;
 	char *endptr = NULL;
-
-	std::map<std::pair<uint, uint>, Computer_node*> sdns;
-	for (auto &i:computer_nodes)
-		sdns.insert(std::make_pair(	std::make_pair(i->cluster_id, i->id), i));
 	
-	while ((row = mysql_fetch_row(result)))
+	std::string str_sql;
+
+	for (auto &cluster:kl_clusters)
 	{
-		uint compid = strtol(row[0], &endptr, 10);
-		Assert(endptr == NULL || *endptr == '\0');
-		uint cluster_id = strtol(row[4], &endptr, 10);
-		Assert(endptr == NULL || *endptr == '\0');
-		int port = strtol(row[3], &endptr, 10);
-		Assert(endptr == NULL || *endptr == '\0');
+		str_sql = "select id,name,ip,port,user_name,passwd from comp_nodes where db_cluster_id=" 
+					+ std::to_string(cluster->get_id());
 
-		Computer_node *pcomputer = NULL;
+		//syslog(Logger::INFO, "refresh_computers str_sql = %s", str_sql.c_str());
+		ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+		if (ret)
+			return ret;
+		result = cur_master->get_result();
 
-		for (auto &computer:computer_nodes)
+		std::map<uint, Computer_node*> sdns;
+		for (auto &i:cluster->computer_nodes)
+			sdns[i->id] = i;
+		
+		while ((row = mysql_fetch_row(result)))
 		{
-			if (computer->cluster_id == cluster_id && computer->id == compid)
+			uint compid = strtol(row[0], &endptr, 10);
+			Assert(endptr == NULL || *endptr == '\0');
+			int port = strtol(row[3], &endptr, 10);
+			Assert(endptr == NULL || *endptr == '\0');
+
+			Computer_node *pcomputer = NULL;
+
+			for (auto &computer:cluster->computer_nodes)
 			{
-				pcomputer = computer;
-				break;
+				if (computer->id == compid)
+				{
+					pcomputer = computer;
+					break;
+				}
 			}
-		}
-		if (!pcomputer)
-		{
-			pcomputer = new Computer_node(compid, cluster_id, port, row[1], row[2], row[5], row[6]);
-			computer_nodes.push_back(pcomputer);
-			syslog(Logger::INFO, "Added Computer(%u, %u, %s) into protection.",
-						pcomputer->cluster_id, pcomputer->id, pcomputer->name.c_str());
-		}
-		else
-			pcomputer->refresh_node_configs(port, row[1], row[2], row[5], row[6]);
-
-		// remove nodes that still exist.
-		sdns.erase(std::make_pair(cluster_id, compid));
-	}
-
-	cur_master->free_mysql_result();
-
-	// Remove computer nodes that are no longer in the computer_nodes, they are all left in sdns.
-	for (auto &i:sdns)
-	{
-		for(std::vector<Computer_node*>::iterator it=computer_nodes.begin(); it!=computer_nodes.end(); )
-		{
-			if ((*it)->cluster_id == i.first.first && (*it)->id == i.first.second)
+			if (!pcomputer)
 			{
-				//if()	//disconnect pgsql
-				delete *it;
-				it = computer_nodes.erase(it);
-				break;
+				pcomputer = new Computer_node(compid, cluster->get_id(), port, row[1], row[2], row[4], row[5]);
+				cluster->computer_nodes.push_back(pcomputer);
+				syslog(Logger::INFO, "Added Computer(%s, %u, %s) into protection.",
+							cluster->get_name().c_str(), pcomputer->id, pcomputer->name.c_str());
 			}
 			else
-				it++;
+				pcomputer->refresh_node_configs(port, row[1], row[2], row[4], row[5]);
+
+			// remove nodes that still exist.
+			sdns.erase(compid);
+		}
+
+		cur_master->free_mysql_result();
+
+		// Remove computer nodes that are no longer in the computer_nodes, they are all left in sdns.
+		for (auto &i:sdns)
+		{
+			for(std::vector<Computer_node*>::iterator it=cluster->computer_nodes.begin(); it!=cluster->computer_nodes.end(); )
+			{
+				if ((*it)->id == i.first)
+				{
+					delete *it;
+					it = cluster->computer_nodes.erase(it);
+					break;
+				}
+				else
+					it++;
+			}
 		}
 	}
-	sdns.clear();
 
 	return 0;
 }

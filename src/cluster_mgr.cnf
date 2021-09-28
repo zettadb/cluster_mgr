@@ -33,7 +33,7 @@ commit_log_retention_hours = 24
 max_log_file_size = 100
 
 # meta data server listening port 
-meta_port = 6004
+meta_port = 6001
 
 # meta data server ip address
 meta_host = 127.0.0.1

@@ -41,6 +41,7 @@ class Thread;
 class Shard;
 class Shard_node;
 class Computer_node;
+class KunlunCluster;
 
 class MYSQL_CONN
 {
@@ -533,8 +534,8 @@ public:
 	int fetch_meta_shard_nodes(Shard_node *sn, bool is_master,
 		const char *master_ip = NULL, int master_port = 0);
 
-	int refresh_shards(std::vector<Shard *> &storage_shards);
-	int refresh_computers(std::vector<Computer_node *> &computer_nodes);
+	int refresh_shards(std::vector<KunlunCluster *> &kl_clusters);
+	int refresh_computers(std::vector<KunlunCluster *> &kl_clusters);
 };
 
 #endif // !SHARD_H

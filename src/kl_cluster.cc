@@ -11,7 +11,7 @@
 #include "log.h"
 #include "sys.h"
 #include "shard.h"
-#include "meta_sync.h"
+#include "kl_cluster.h"
 #include "os.h"
 #include "thread_manager.h"
 #include <unistd.h>
@@ -113,25 +113,42 @@ send_stmt(int pgres, const char *database, const char *stmt, int nretries)
 	return ret;
 }
 
+
+KunlunCluster::KunlunCluster(uint id_, const std::string &name_):
+	id(id_),name(name_)
+{
+	pthread_mutex_init(&mtx, NULL);
+}
+
+KunlunCluster::~KunlunCluster()
+{
+	for (auto &i:storage_shards)
+		delete i;
+	for (auto &i:computer_nodes)
+		delete i;
+}
+
 /*
   Connect to storage node, get tables' rows & pages, 
   and update to computer nodes.
 */
-int MetadataSync::refresh_storages_to_computers(std::vector<Shard *> &storage_shards, std::vector<Computer_node *> &computer_nodes)
+int KunlunCluster::refresh_storages_to_computers()
 {
 	int ret;
 	PGresult *presult;
 	MYSQL_RES *result;
 	MYSQL_ROW row;
 	char *endptr = NULL;
-	
 	std::string str_sql;
+	
 	std::vector<std::string> vec_database;
 	std::vector<std::tuple<std::string, std::string, uint>> vec_database_namespace_oid;
 	std::map<std::tuple<std::string, std::string, uint>, std::map<std::string, std::pair<uint, uint>>> map_dbnsid_table_page_row;
 	
 	////////////////////////////////////////////////////////
 	//get TABLE_SCHEMA from one comp
+	if(computer_nodes.size() == 0)
+		return 0;
 	Computer_node* computer = computer_nodes[0];
 	
 	//get database
@@ -289,7 +306,7 @@ int MetadataSync::refresh_storages_to_computers(std::vector<Shard *> &storage_sh
   Connect to storage node, get num_tablets & space_volumn, 
   and update to computer nodes and meta shard.
 */
-int MetadataSync::refresh_storages_to_computers_metashard(std::vector<Shard *> &storage_shards, std::vector<Computer_node *> &computer_nodes, MetadataShard &meta_shard)
+int KunlunCluster::refresh_storages_to_computers_metashard(MetadataShard &meta_shard)
 {
 	int ret;
 	PGresult *presult;
@@ -304,6 +321,8 @@ int MetadataSync::refresh_storages_to_computers_metashard(std::vector<Shard *> &
 	
 	////////////////////////////////////////////////////////
 	//get TABLE_SCHEMA from one comp
+	if(computer_nodes.size() == 0)
+		return 0;
 	Computer_node* computer = computer_nodes[0];
 	
 	//get database
@@ -406,7 +425,8 @@ int MetadataSync::refresh_storages_to_computers_metashard(std::vector<Shard *> &
 		{
 			str_sql = "update shards set space_volumn=" + std::to_string(sd_tb_sp.second.second) +
 				",num_tablets=" + std::to_string(sd_tb_sp.second.first) +
-				" where id=" + std::to_string(sd_tb_sp.first);
+				" where id=" + std::to_string(sd_tb_sp.first) +
+				" and db_cluster_id=" + std::to_string(get_id());
 			
 			//syslog(Logger::INFO, "str_sql88888 = %s", str_sql.c_str());
 			meta_master_sn->send_stmt(SQLCOM_UPDATE, str_sql.c_str(), str_sql.length(), stmt_retries);
@@ -436,7 +456,7 @@ int MetadataSync::refresh_storages_to_computers_metashard(std::vector<Shard *> &
 /*
   Connect to meta data master node, truncate unused commit log partitions.
 */
-int MetadataSync::truncate_commit_log_from_metadata_server(std::vector<Shard *> &storage_shards, MetadataShard &meta_shard)
+int KunlunCluster::truncate_commit_log_from_metadata_server(std::vector<KunlunCluster *> &kl_clusters, MetadataShard &meta_shard)
 {
 	Shard_node *meta_master_sn = meta_shard.get_master();
 	if(meta_master_sn == NULL)
@@ -480,7 +500,13 @@ unix_timestamp(UPDATE_TIME)<" + std::to_string(timesp);
 	// get txnid by xa recover from every storage_shards
 	std::set<std::string> set_recover;
 
-	for(auto &shard:storage_shards)
+	std::vector<Shard *> all_shards;
+	all_shards.push_back(&meta_shard);
+	for (auto &cluster:kl_clusters)
+		for (auto &shard:cluster->storage_shards)
+			all_shards.push_back(shard);
+
+	for(auto &shard:all_shards)
 	{
 		Shard_node *master_sn = shard->get_master();
 		if(shard->get_type() == Shard::METADATA || master_sn == NULL)

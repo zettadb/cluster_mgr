@@ -106,14 +106,37 @@ public:
 	void free_pgsql_result() { gpsql_conn.free_pgsql_result(); }
 };
 
-class MetadataSync
+class KunlunCluster
 {
+private:
+	mutable pthread_mutex_t mtx;
+	uint id;
+	std::string name;
+	
 public:
-	MetadataSync(){};
 
-	int refresh_storages_to_computers(std::vector<Shard *> &storage_shards, std::vector<Computer_node *> &computer_nodes);
-	int refresh_storages_to_computers_metashard(std::vector<Shard *> &storage_shards, std::vector<Computer_node *> &computer_nodes, MetadataShard &meta_shard);
-	int truncate_commit_log_from_metadata_server(std::vector<Shard *> &storage_shards, MetadataShard &meta_shard);
+	std::vector<Computer_node *> computer_nodes;
+	std::vector<Shard *> storage_shards;
+
+public:
+	KunlunCluster(uint id_, const std::string &name_);
+	~KunlunCluster();
+
+	uint get_id() const
+	{
+		Scopped_mutex sm(mtx);
+		return id;
+	}
+
+	const std::string &get_name() const
+	{
+		Scopped_mutex sm(mtx);
+		return name;
+	}
+
+	int refresh_storages_to_computers();
+	int refresh_storages_to_computers_metashard(MetadataShard &meta_shard);
+	int truncate_commit_log_from_metadata_server(std::vector<KunlunCluster *> &kl_clusters, MetadataShard &meta_shard);
 };
 
 #endif // !KL_CLUSTER_H

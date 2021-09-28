@@ -10,7 +10,7 @@
 #include "sys_config.h"
 #include "global.h"
 #include "shard.h"
-#include "meta_sync.h"
+#include "kl_cluster.h"
 #include <vector>
 #include <map>
 
@@ -22,10 +22,8 @@ class Thread;
 class System
 {
 private:
-	std::vector<Computer_node *> computer_nodes;
-	std::vector<Shard *> storage_shards;
 	MetadataShard meta_shard;
-	MetadataSync meta_sync;
+	std::vector<KunlunCluster *> kl_clusters;
 
 	std::string config_path;
 
