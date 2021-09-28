@@ -126,9 +126,9 @@ int MetadataSync::refresh_storages_to_computers(std::vector<Shard *> &storage_sh
 	char *endptr = NULL;
 	
 	std::string str_sql;
-	std::vector<std::string> vec_databases;
-	std::vector<std::string> vec_namespace;
-	std::map<std::string, std::map<std::string, std::pair<uint, uint>>> map_db_table_page_row;
+	std::vector<std::string> vec_database;
+	std::vector<std::tuple<std::string, std::string, uint>> vec_database_namespace_oid;
+	std::map<std::tuple<std::string, std::string, uint>, std::map<std::string, std::pair<uint, uint>>> map_dbnsid_table_page_row;
 	
 	////////////////////////////////////////////////////////
 	//get TABLE_SCHEMA from one comp
@@ -149,34 +149,39 @@ int MetadataSync::refresh_storages_to_computers(std::vector<Shard *> &storage_sh
 		else if(db == "template0")
 			continue;
 
-		vec_databases.push_back(db);
+		vec_database.push_back(db);
 	}
 	computer->free_pgsql_result();
 
-	//get namespace
-	ret = computer->send_stmt(PG_COPYRES_TUPLES, "postgres", "select nspname from pg_namespace", stmt_retries);
-	if(ret)
-		return ret;
-
-	presult = computer->get_result();
-	for(int i=0;i<PQntuples(presult);i++)
+	////////////////////////////////////////////////////////
+	//get namespace from every database
+	for(auto &db:vec_database)
 	{
-		//syslog(Logger::ERROR, "presult %d = %s", i, PQgetvalue(presult,i,0));
-		std::string ns = PQgetvalue(presult,i,0);
-		if(ns == "pg_toast")
-			continue;
-		else if(ns == "pg_temp_1")
-			continue;
-		else if(ns == "pg_toast_temp_1")
-			continue;
-		else if(ns == "pg_catalog")
-			continue;
-		else if(ns == "information_schema")
-			continue;
+		ret = computer->send_stmt(PG_COPYRES_TUPLES, db.c_str(), "select oid,nspname from pg_namespace", stmt_retries);
+		if(ret)
+			return ret;
 
-		vec_namespace.push_back(ns);
+		presult = computer->get_result();
+		for(int i=0;i<PQntuples(presult);i++)
+		{
+			//syslog(Logger::ERROR, "presult %d = %s", i, PQgetvalue(presult,i,0));
+			std::string ns = PQgetvalue(presult,i,1);
+			if(ns == "pg_toast")
+				continue;
+			else if(ns == "pg_temp_1")
+				continue;
+			else if(ns == "pg_toast_temp_1")
+				continue;
+			else if(ns == "pg_catalog")
+				continue;
+			else if(ns == "information_schema")
+				continue;
+
+			uint oid = strtol(PQgetvalue(presult,i,0), &endptr, 10);
+			vec_database_namespace_oid.push_back(std::make_tuple(db, ns, oid));
+		}
+		computer->free_pgsql_result();
 	}
-	computer->free_pgsql_result();
 
 	////////////////////////////////////////////////////////
 	//get TABLE_NAME,TABLE_ROWS by TABLE_SCHEMA from storage_shards
@@ -210,68 +215,68 @@ int MetadataSync::refresh_storages_to_computers(std::vector<Shard *> &storage_sh
 
 		////////////////////////////////////////////////////////
 		//get tables' rows&size, pages = size/page_size from every databases _$$_ namespace
-		for(auto &db:vec_databases)
-			for(auto &ns:vec_namespace)
+		for(auto &db_ns_id:vec_database_namespace_oid)
+		{
+			str_sql = "select TABLE_NAME,TABLE_ROWS,DATA_LENGTH from information_schema.tables where table_type='BASE TABLE' and TABLE_SCHEMA='" + 
+						std::get<0>(db_ns_id) + "_$$_" + std::get<1>(db_ns_id) + "'";
+			
+			//syslog(Logger::INFO, "str_sql11111111 = %s", str_sql.c_str());
+			ret = master_sn->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+
+			if (ret)
+			   continue;
+			result = master_sn->get_result();
+			endptr = NULL;
+
+			while ((row = mysql_fetch_row(result)))
 			{
-				str_sql = "select TABLE_NAME,TABLE_ROWS,DATA_LENGTH from information_schema.tables where table_type='BASE TABLE' and TABLE_SCHEMA='" + 
-							db + "_$$_" + ns + "'";
-				//syslog(Logger::INFO, "str_sql11111111 = %s", str_sql.c_str());
-				ret = master_sn->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+				uint rows = strtol(row[1], &endptr, 10);
+				Assert(endptr == NULL || *endptr == '\0');
+				uint pages = strtol(row[2], &endptr, 10);
+				Assert(endptr == NULL || *endptr == '\0');
+				pages = pages/page_size;
 
-				if (ret)
-				   continue;
-				result = master_sn->get_result();
-				endptr = NULL;
-
-				while ((row = mysql_fetch_row(result)))
+				auto it0 = map_dbnsid_table_page_row.find(db_ns_id);
+				if(it0 == map_dbnsid_table_page_row.end())
 				{
-					uint rows = strtol(row[1], &endptr, 10);
-					Assert(endptr == NULL || *endptr == '\0');
-					uint pages = strtol(row[2], &endptr, 10);
-					Assert(endptr == NULL || *endptr == '\0');
-					pages = pages/page_size;
-
-					auto it0 = map_db_table_page_row.find(db);
-					if(it0 == map_db_table_page_row.end())
+					std::map<std::string, std::pair<uint, uint>> map_table_page_row;
+					map_table_page_row[row[0]] = std::make_pair(pages, rows);
+					map_dbnsid_table_page_row[db_ns_id] = map_table_page_row;
+				}
+				else
+				{
+					auto it1 = it0->second.find(row[0]);
+					if(it1 == it0->second.end())
 					{
-						std::map<std::string, std::pair<uint, uint>> map_table_page_row;
-						map_table_page_row[row[0]] = std::make_pair(pages, rows);
-						map_db_table_page_row[db] = map_table_page_row;
+						it0->second[row[0]] = std::make_pair(pages, rows);
 					}
-					else
+					else	//may be a table in two shards
 					{
-						auto it1 = it0->second.find(row[0]);
-						if(it1 == it0->second.end())
-						{
-							it0->second[row[0]] = std::make_pair(pages, rows);
-						}
-						else
-						{
-							it1->second.first += pages;
-							it1->second.second += rows;
-						}
+						it1->second.first += pages;
+						it1->second.second += rows;
 					}
 				}
-				
-				master_sn->free_mysql_result();
 			}
-	   
+			
+			master_sn->free_mysql_result();
+		}
 	}
 
 	////////////////////////////////////////////////////////
-	// refresh tables' pages&rows to computer_nodes
+	// refresh tables' pages&rows to computer_nodes by db,ns,ns_oid
 	for(auto &comp:computer_nodes)
 	{
-		for(auto &db:map_db_table_page_row)
+		for(auto &dbnsid:map_dbnsid_table_page_row)
 		{
-			for(auto &tb_p_r:db.second)
+			for(auto &tb_p_r:dbnsid.second)
 			{
 				str_sql = "update pg_class set relpages=" + std::to_string(tb_p_r.second.first) +
 							",reltuples=" + std::to_string(tb_p_r.second.second) +
-							" where relname='" + tb_p_r.first + "'";
+							" where relname='" + tb_p_r.first + 
+							"' and relnamespace=" + std::to_string(std::get<2>(dbnsid.first));
 
 				//syslog(Logger::INFO, "str_sql222222 = %s", str_sql.c_str());
-				bool ret = comp->send_stmt(PG_COPYRES_EVENTS, db.first.c_str(), str_sql.c_str(), stmt_retries);
+				bool ret = comp->send_stmt(PG_COPYRES_EVENTS, std::get<0>(dbnsid.first).c_str(), str_sql.c_str(), stmt_retries);
 				comp->free_pgsql_result();
 			}
 		}
@@ -293,9 +298,9 @@ int MetadataSync::refresh_storages_to_computers_metashard(std::vector<Shard *> &
 	char *endptr = NULL;
 	
 	std::string str_sql;
-	std::vector<std::string> vec_databases;
-	std::vector<std::string> vec_namespace;
-	std::map<std::string, std::map<uint, std::pair<uint, uint>>> map_db_shard_space_tables;
+	std::vector<std::string> vec_database;
+	std::vector<std::pair<std::string, std::string>> vec_database_namespace;
+	std::map<uint, std::pair<uint, uint>> map_shard_tables_space;
 	
 	////////////////////////////////////////////////////////
 	//get TABLE_SCHEMA from one comp
@@ -316,34 +321,38 @@ int MetadataSync::refresh_storages_to_computers_metashard(std::vector<Shard *> &
 		else if(db == "template0")
 			continue;
 
-		vec_databases.push_back(db);
+		vec_database.push_back(db);
 	}
 	computer->free_pgsql_result();
 
-	//get namespace
-	ret = computer->send_stmt(PG_COPYRES_TUPLES, "postgres", "select nspname from pg_namespace", stmt_retries);
-	if(ret)
-		return ret;
-
-	presult = computer->get_result();
-	for(int i=0;i<PQntuples(presult);i++)
+	////////////////////////////////////////////////////////
+	//get namespace from every database
+	for(auto &db:vec_database)
 	{
-		//syslog(Logger::ERROR, "presult %d = %s", i, PQgetvalue(presult,i,0));
-		std::string ns = PQgetvalue(presult,i,0);
-		if(ns == "pg_toast")
-			continue;
-		else if(ns == "pg_temp_1")
-			continue;
-		else if(ns == "pg_toast_temp_1")
-			continue;
-		else if(ns == "pg_catalog")
-			continue;
-		else if(ns == "information_schema")
-			continue;
+		ret = computer->send_stmt(PG_COPYRES_TUPLES, db.c_str(), "select nspname from pg_namespace", stmt_retries);
+		if(ret)
+			return ret;
 
-		vec_namespace.push_back(ns);
+		presult = computer->get_result();
+		for(int i=0;i<PQntuples(presult);i++)
+		{
+			//syslog(Logger::ERROR, "presult %d = %s", i, PQgetvalue(presult,i,0));
+			std::string ns = PQgetvalue(presult,i,0);
+			if(ns == "pg_toast")
+				continue;
+			else if(ns == "pg_temp_1")
+				continue;
+			else if(ns == "pg_toast_temp_1")
+				continue;
+			else if(ns == "pg_catalog")
+				continue;
+			else if(ns == "information_schema")
+				continue;
+
+			vec_database_namespace.push_back(std::make_pair(db, ns));
+		}
+		computer->free_pgsql_result();
 	}
-	computer->free_pgsql_result();
 
 	////////////////////////////////////////////////////////
 	//get tables' size&number from every shard
@@ -358,87 +367,66 @@ int MetadataSync::refresh_storages_to_computers_metashard(std::vector<Shard *> &
 		uint num_tablets = 0;
 		uint64_t space_volumn = 0;
 		
-		for(auto &db:vec_databases)
-			for(auto &ns:vec_namespace)
-			{
-				str_sql = "select TABLE_NAME,DATA_LENGTH from information_schema.tables where table_type='BASE TABLE' and TABLE_SCHEMA='" + 
-							db + "_$$_" + ns + "'";
-				//syslog(Logger::INFO, "str_sql777777 = %s", str_sql.c_str());
-				ret = master_sn->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
-				
-				if (ret)
-				   return ret;
-				result = master_sn->get_result();
-				endptr = NULL;
-				int space = 0;
-				int tables = 0;
-				
-				while ((row = mysql_fetch_row(result)))
-				{
-					space += strtol(row[1], &endptr, 10);
-					Assert(endptr == NULL || *endptr == '\0');
-					tables++;
-				}
-
-				//Statistics for comp
-				auto it0 = map_db_shard_space_tables.find(db);
-				if(it0 == map_db_shard_space_tables.end())
-				{
-					std::map<uint, std::pair<uint, uint>> map_shard_space_tables;
-					map_shard_space_tables[shard->get_id()] = std::make_pair(space, tables);
-					map_db_shard_space_tables[db] = map_shard_space_tables;
-				}
-				else
-				{
-					auto it1 = it0->second.find(shard->get_id());
-					if(it1 == it0->second.end())
-					{
-						it0->second[shard->get_id()] = std::make_pair(space, tables);
-					}
-					else
-					{
-						it1->second.first += space;
-						it1->second.second += tables;
-					}
-				}
-
-				//Statistics for mata
-				space_volumn += space;
-				num_tablets += tables;
-				master_sn->free_mysql_result();
-			}
-
-		////////////////////////////////////////////////////////
-		// refresh tables' size&number to MetadataShard
-		str_sql = "update shards set space_volumn=" + std::to_string(space_volumn) +
-					",num_tablets=" + std::to_string(num_tablets) +
-					" where id=" + std::to_string(shard->get_id());
-			
-		//syslog(Logger::INFO, "str_sql88888 = %s", str_sql.c_str());
-		Shard_node *meta_master_sn = meta_shard.get_master();
-		if(meta_master_sn)
+		for(auto &db_ns:vec_database_namespace)
 		{
+			str_sql = "select count(*),sum(DATA_LENGTH) from information_schema.tables where table_type='BASE TABLE' and TABLE_SCHEMA='" + 
+						db_ns.first + "_$$_" + db_ns.second + "'";
+			
+			//syslog(Logger::INFO, "str_sql777777 = %s", str_sql.c_str());
+			ret = master_sn->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+			
+			if (ret)
+			   return ret;
+			result = master_sn->get_result();
+			endptr = NULL;
+
+			if ((row = mysql_fetch_row(result)))
+			{
+				if(row[0] != NULL && row[1] != NULL)
+				{
+					num_tablets += strtol(row[0], &endptr, 10);
+					Assert(endptr == NULL || *endptr == '\0');
+					space_volumn += strtol(row[1], &endptr, 10);
+					Assert(endptr == NULL || *endptr == '\0');
+				}
+			}
+			
+			master_sn->free_mysql_result();
+		}
+
+		map_shard_tables_space[shard->get_id()] = std::make_pair(num_tablets, space_volumn);
+	}
+
+	////////////////////////////////////////////////////////
+	// refresh tables' size&number to MetadataShard by master meta
+	Shard_node *meta_master_sn = meta_shard.get_master();
+	if(meta_master_sn)
+	{
+		for(auto &sd_tb_sp:map_shard_tables_space)
+		{
+			str_sql = "update shards set space_volumn=" + std::to_string(sd_tb_sp.second.second) +
+				",num_tablets=" + std::to_string(sd_tb_sp.second.first) +
+				" where id=" + std::to_string(sd_tb_sp.first);
+			
+			//syslog(Logger::INFO, "str_sql88888 = %s", str_sql.c_str());
 			meta_master_sn->send_stmt(SQLCOM_UPDATE, str_sql.c_str(), str_sql.length(), stmt_retries);
 			meta_master_sn->free_mysql_result();
 		}
 	}
-
+	
 	////////////////////////////////////////////////////////
-	// refresh tables' size&number to computer_nodes
+	// refresh tables' size&number to computer_nodes by any database
 	for(auto &comp:computer_nodes)
 	{
-		for(auto &db:map_db_shard_space_tables)
+		for(auto &sd_tb_sp:map_shard_tables_space)
 		{
-			for(auto &sd_s_t:db.second)
-			{
-				str_sql = "update pg_shard set space_volumn=" + std::to_string(sd_s_t.second.first) +
-							",num_tablets=" + std::to_string(sd_s_t.second.second) +
-							" where id=" + std::to_string(sd_s_t.first);
-				
-				//syslog(Logger::INFO, "str_sql99999 = %s", str_sql.c_str());
-				bool ret = comp->send_stmt(PG_COPYRES_EVENTS, db.first.c_str(), str_sql.c_str(), stmt_retries);
-				comp->free_pgsql_result();
-			}
+			str_sql = "update pg_shard set space_volumn=" + std::to_string(sd_tb_sp.second.second) +
+						",num_tablets=" + std::to_string(sd_tb_sp.second.first) +
+						" where id=" + std::to_string(sd_tb_sp.first);
+			
+			//syslog(Logger::INFO, "str_sql99999 = %s", str_sql.c_str());
+			bool ret = comp->send_stmt(PG_COPYRES_EVENTS, "postgres", str_sql.c_str(), stmt_retries);
+			comp->free_pgsql_result();
 		}
 	}
 
@@ -471,7 +459,7 @@ int MetadataSync::truncate_commit_log_from_metadata_server(std::vector<Shard *> 
 	////////////////////////////////////////////////////////
 	// get partitions need to truncate from information_schema.partitions
 	str_sql = "select TABLE_NAME,SUBPARTITION_NAME from information_schema.partitions where \
-TABLE_SCHEMA='kunlun_metadata_db' and TABLE_NAME like 'commit_log_%%' and TABLE_ROWS>0 and \
+TABLE_SCHEMA='kunlun_metadata_db' and TABLE_NAME like 'commit_log_%' and TABLE_ROWS>0 and \
 unix_timestamp(UPDATE_TIME)<" + std::to_string(timesp);
 
 	ret = meta_master_sn->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
@@ -490,7 +478,7 @@ unix_timestamp(UPDATE_TIME)<" + std::to_string(timesp);
 
 	////////////////////////////////////////////////////////
 	// get txnid by xa recover from every storage_shards
-	std::vector<std::string> vec_recover;
+	std::set<std::string> set_recover;
 
 	for(auto &shard:storage_shards)
 	{
@@ -508,7 +496,7 @@ unix_timestamp(UPDATE_TIME)<" + std::to_string(timesp);
 		
 		while ((row = mysql_fetch_row(result)))
 		{
-			vec_recover.push_back(std::string(row[3]));
+			set_recover.insert(std::string(row[3]));
 		}
 		
 		master_sn->free_mysql_result();
@@ -518,9 +506,9 @@ unix_timestamp(UPDATE_TIME)<" + std::to_string(timesp);
 	// truncate the unused partition
 	for(auto &ptb:vec_partition_tb)
 	{
-		bool txnid_unused = true;
-		if(vec_recover.size() != 0)
+		if(set_recover.size() != 0)
 		{
+			bool txnid_unused = true;
 			////////////////////////////////////////////////////////
 			// get the whole partition txn_id form commit_log_%
 			str_sql = "select comp_node_id,(txn_id>>32) as timestamp,(txn_id&0xffffffff) as txnid from " + ptb.first +
@@ -535,8 +523,9 @@ unix_timestamp(UPDATE_TIME)<" + std::to_string(timesp);
 			{
 				std::string str_data(row[0]);
 				str_data = str_data + "-" + row[1] + "-" + row[2];
+				//syslog(Logger::ERROR, "commit log str_data=%s", str_data.c_str());
 				//compare txnid with recover
-				for(auto &recover:vec_recover)
+				for(auto &recover:set_recover)
 				{
 					if(recover == str_data)
 					{
@@ -548,10 +537,10 @@ unix_timestamp(UPDATE_TIME)<" + std::to_string(timesp);
 			}
 			
 			meta_master_sn->free_mysql_result();
+
+			if(!txnid_unused)
+				continue;
 		}
-		
-		if(!txnid_unused)
-			continue;
 
 		////////////////////////////////////////////////////////
 		// truncate unused partition
@@ -559,6 +548,7 @@ unix_timestamp(UPDATE_TIME)<" + std::to_string(timesp);
 					" truncate partition " + ptb.second;
 		
 		meta_master_sn->send_stmt(SQLCOM_ALTER_TABLE, str_sql.c_str(), str_sql.length(), stmt_retries);
+		meta_master_sn->free_mysql_result();
 	}
 
 	return 0;
