@@ -19,8 +19,9 @@ extern std::string log_file_path;
 
 System::~System()
 {
-	for (auto &i:storage_shards)
+	for (auto &i:kl_clusters)
 		delete i;
+
 	delete Configs::get_instance();
 	delete Logger::get_instance();
 
@@ -164,7 +165,7 @@ int System::setup_metadata_shard()
 int System::refresh_shards_from_metadata_server()
 {
 	Scopped_mutex sm(mtx);
-	return meta_shard.refresh_shards(storage_shards);
+	return meta_shard.refresh_shards(kl_clusters);
 }
 
 /*
@@ -175,7 +176,7 @@ int System::refresh_shards_from_metadata_server()
 int System::refresh_computers_from_metadata_server()
 {
 	Scopped_mutex sm(mtx);
-	return meta_shard.refresh_computers(computer_nodes);
+	return meta_shard.refresh_computers(kl_clusters);
 }
 
 /*
@@ -184,7 +185,9 @@ int System::refresh_computers_from_metadata_server()
 int System::refresh_storages_info_to_computers()
 {
 	Scopped_mutex sm(mtx);
-	return meta_sync.refresh_storages_to_computers(storage_shards, computer_nodes);
+	for (auto &cluster:kl_clusters)
+		cluster->refresh_storages_to_computers();
+	return 0;
 }
 
 /*
@@ -193,7 +196,9 @@ int System::refresh_storages_info_to_computers()
 int System::refresh_storages_info_to_computers_metashard()
 {
 	Scopped_mutex sm(mtx);
-	return meta_sync.refresh_storages_to_computers_metashard(storage_shards, computer_nodes, meta_shard);
+	for (auto &cluster:kl_clusters)
+		cluster->refresh_storages_to_computers_metashard(meta_shard);
+	return 0;
 }
 
 /*
@@ -202,7 +207,8 @@ int System::refresh_storages_info_to_computers_metashard()
 int System::truncate_commit_log_from_metadata_server()
 {
 	Scopped_mutex sm(mtx);
-	return meta_sync.truncate_commit_log_from_metadata_server(storage_shards, meta_shard);
+	kl_clusters[0]->truncate_commit_log_from_metadata_server(kl_clusters, meta_shard);
+	return 0;
 }
 
 /*
@@ -242,11 +248,12 @@ end:
 */
 bool System::acquire_shard(Thread *thd, bool force)
 {
-	for (auto &sd:storage_shards)
-	{
-		if (sd->set_thread_handler(thd, force))
-			return true;
-	}
+	for (auto &cluster:kl_clusters)
+		for (auto &sd:cluster->storage_shards)
+		{
+			if (sd->set_thread_handler(thd, force))
+				return true;
+		}
 
 	return false;
 }
