@@ -1341,6 +1341,34 @@ Shard_node *Shard::get_node_by_id(uint id)
 	return NULL;
 }
 
+uint Shard::get_innodb_page_size()
+{
+	if(innodb_page_size == 0)
+	{
+		Scopped_mutex sm(mtx);
+		int ret = cur_master->send_stmt(SQLCOM_SELECT, CONST_STR_PTR_LEN(
+						"show variables like 'innodb_page_size'"), stmt_retries);
+		
+		if (ret)
+		   return 0;
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+		char *endptr = NULL;
+		
+		if ((row = mysql_fetch_row(result)))
+		{
+			innodb_page_size = strtol(row[1], &endptr, 10);
+			Assert(endptr == NULL || *endptr == '\0');
+		}
+		
+		cur_master->free_mysql_result();
+
+	}
+	
+	return innodb_page_size;
+}
+
+
 /*
   Fetch storage shard nodes from metadata shard, and refresh Shard/Shard_info
   objects in storage_shards. Newly added shard nodes will be added into
@@ -1534,7 +1562,7 @@ int MetadataShard::refresh_computers(std::vector<KunlunCluster *> &kl_clusters)
 		// Remove computer nodes that are no longer in the computer_nodes, they are all left in sdns.
 		for (auto &i:sdns)
 		{
-			for(std::vector<Computer_node*>::iterator it=cluster->computer_nodes.begin(); it!=cluster->computer_nodes.end(); )
+			for(auto it=cluster->computer_nodes.begin(); it!=cluster->computer_nodes.end(); )
 			{
 				if ((*it)->id == i.first)
 				{

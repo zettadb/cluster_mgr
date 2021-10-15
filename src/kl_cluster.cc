@@ -210,25 +210,9 @@ int KunlunCluster::refresh_storages_to_computers()
 
 		////////////////////////////////////////////////////////
 		//get innodb_page_size
-		ret = master_sn->send_stmt(SQLCOM_SELECT, CONST_STR_PTR_LEN(
-			"show variables like 'innodb_page_size'"), stmt_retries);
-
-		if (ret)
-		   return ret;
-		result = master_sn->get_result();
-		endptr = NULL;
-		uint page_size = 0;
-
-		if ((row = mysql_fetch_row(result)))
-		{
-			page_size = strtol(row[1], &endptr, 10);
-			Assert(endptr == NULL || *endptr == '\0');
-		}
-	   
-		master_sn->free_mysql_result();
-
+		uint page_size = shard->get_innodb_page_size();
 		if(page_size == 0)
-			continue; 
+			continue;
 
 		////////////////////////////////////////////////////////
 		//get tables' rows&size, pages = size/page_size from every databases _$$_ namespace
@@ -236,8 +220,9 @@ int KunlunCluster::refresh_storages_to_computers()
 		{
 			str_sql = "select TABLE_NAME,TABLE_ROWS,DATA_LENGTH from information_schema.tables where table_type='BASE TABLE' and TABLE_SCHEMA='" + 
 						std::get<0>(db_ns_id) + "_$$_" + std::get<1>(db_ns_id) + "'";
-			
 			//syslog(Logger::INFO, "str_sql11111111 = %s", str_sql.c_str());
+
+			Scopped_mutex sm(shard->mtx);
 			ret = master_sn->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
 
 			if (ret)
@@ -390,8 +375,9 @@ int KunlunCluster::refresh_storages_to_computers_metashard(MetadataShard &meta_s
 		{
 			str_sql = "select count(*),sum(DATA_LENGTH) from information_schema.tables where table_type='BASE TABLE' and TABLE_SCHEMA='" + 
 						db_ns.first + "_$$_" + db_ns.second + "'";
-			
 			//syslog(Logger::INFO, "str_sql777777 = %s", str_sql.c_str());
+
+			Scopped_mutex sm(shard->mtx);
 			ret = master_sn->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
 			
 			if (ret)
@@ -427,8 +413,9 @@ int KunlunCluster::refresh_storages_to_computers_metashard(MetadataShard &meta_s
 				",num_tablets=" + std::to_string(sd_tb_sp.second.first) +
 				" where id=" + std::to_string(sd_tb_sp.first) +
 				" and db_cluster_id=" + std::to_string(get_id());
-			
 			//syslog(Logger::INFO, "str_sql88888 = %s", str_sql.c_str());
+
+			Scopped_mutex sm(meta_shard.mtx);
 			meta_master_sn->send_stmt(SQLCOM_UPDATE, str_sql.c_str(), str_sql.length(), stmt_retries);
 			meta_master_sn->free_mysql_result();
 		}
@@ -469,6 +456,7 @@ int KunlunCluster::truncate_commit_log_from_metadata_server(std::vector<KunlunCl
 	char *endptr = NULL;
 	
 	std::string str_sql;
+	std::vector<std::pair<std::string, std::string>> vec_partition_tb;
 
 	////////////////////////////////////////////////////////
 	//get the time need to be truncate
@@ -482,19 +470,21 @@ int KunlunCluster::truncate_commit_log_from_metadata_server(std::vector<KunlunCl
 TABLE_SCHEMA='kunlun_metadata_db' and TABLE_NAME like 'commit_log_%' and TABLE_ROWS>0 and \
 unix_timestamp(UPDATE_TIME)<" + std::to_string(timesp);
 
-	ret = meta_master_sn->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
-	if (ret)
-		return ret;
-	result = meta_master_sn->get_result();
-	std::vector<std::pair<std::string, std::string>> vec_partition_tb;
-	
-	while ((row = mysql_fetch_row(result)))
 	{
-		//syslog(Logger::ERROR, "vec_partition_tb row[0]=%s,row[1]=%s", row[0],row[1]);
-		vec_partition_tb.push_back(std::make_pair(std::string(row[0]),std::string(row[1])));
+		Scopped_mutex sm(meta_shard.mtx);
+		ret = meta_master_sn->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+		if (ret)
+			return ret;
+		result = meta_master_sn->get_result();
+		
+		while ((row = mysql_fetch_row(result)))
+		{
+			//syslog(Logger::ERROR, "vec_partition_tb row[0]=%s,row[1]=%s", row[0],row[1]);
+			vec_partition_tb.push_back(std::make_pair(std::string(row[0]),std::string(row[1])));
+		}
+		
+		meta_master_sn->free_mysql_result();
 	}
-	
-	meta_master_sn->free_mysql_result();
 
 	////////////////////////////////////////////////////////
 	// get txnid by xa recover from every storage_shards
@@ -511,7 +501,8 @@ unix_timestamp(UPDATE_TIME)<" + std::to_string(timesp);
 		Shard_node *master_sn = shard->get_master();
 		if(shard->get_type() == Shard::METADATA || master_sn == NULL)
 			continue;
-		
+
+		Scopped_mutex sm(shard->mtx);
 		ret = master_sn->send_stmt(SQLCOM_SELECT, CONST_STR_PTR_LEN("xa recover"), stmt_retries);
 		if (ret)
 		{
@@ -540,6 +531,7 @@ unix_timestamp(UPDATE_TIME)<" + std::to_string(timesp);
 			str_sql = "select comp_node_id,(txn_id>>32) as timestamp,(txn_id&0xffffffff) as txnid from " + ptb.first +
 						" partition(" + ptb.second + ")";
 
+			Scopped_mutex sm(meta_shard.mtx);
 			ret = meta_master_sn->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
 			if (ret)
 				continue;
@@ -572,9 +564,12 @@ unix_timestamp(UPDATE_TIME)<" + std::to_string(timesp);
 		// truncate unused partition
 		str_sql = "alter table " + ptb.first +
 					" truncate partition " + ptb.second;
-		
-		meta_master_sn->send_stmt(SQLCOM_ALTER_TABLE, str_sql.c_str(), str_sql.length(), stmt_retries);
-		meta_master_sn->free_mysql_result();
+
+		{
+			Scopped_mutex sm(meta_shard.mtx);
+			meta_master_sn->send_stmt(SQLCOM_ALTER_TABLE, str_sql.c_str(), str_sql.length(), stmt_retries);
+			meta_master_sn->free_mysql_result();
+		}
 	}
 
 	return 0;

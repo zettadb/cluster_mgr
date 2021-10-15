@@ -189,6 +189,7 @@ protected:
 	std::string name;
 	std::string cluster_name;
 	std::vector<Shard_node*>nodes;
+	uint innodb_page_size;
 public:
 	/*
 	  @retval true if master changed; false otherwise.
@@ -212,6 +213,7 @@ protected:
 	/*
 	  A shard's all nodes are always handled in the same thread.
 	*/
+	friend class KunlunCluster;
 	mutable pthread_mutex_t mtx;
 	mutable pthread_mutex_t mtx_txninfo;
 	mutable pthread_mutexattr_t mtx_attr;
@@ -272,7 +274,7 @@ public:
 	Shard(uint id_, const std::string &name_, Shard_type type, HAVL_mode mode) :
 		thrd_hdlr_assigned(false), cur_master(NULL), shard_type(type), ha_mode(mode),
 		id(id_), cluster_id(0), pending_master_node_id(0), last_time_check(0),
-		name(name_), m_thrd_hdlr(NULL)
+		name(name_), m_thrd_hdlr(NULL), innodb_page_size(0)
 	{
 		pthread_mutexattr_init(&mtx_attr);
 		pthread_mutexattr_settype(&mtx_attr, PTHREAD_MUTEX_RECURSIVE);
@@ -494,6 +496,7 @@ public:
 	int check_mgr_cluster();
 	int end_recovered_prepared_txns();
 	int get_xa_prepared();
+	uint get_innodb_page_size();
 };
 
 
