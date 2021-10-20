@@ -1513,7 +1513,7 @@ int MetadataShard::refresh_computers(std::vector<KunlunCluster *> &kl_clusters)
 
 	for (auto &cluster:kl_clusters)
 	{
-		str_sql = "select id,name,ip,port,user_name,passwd from comp_nodes where db_cluster_id=" 
+		str_sql = "select id,name,hostaddr,port,user_name,passwd from comp_nodes where db_cluster_id=" 
 					+ std::to_string(cluster->get_id());
 
 		//syslog(Logger::INFO, "refresh_computers str_sql = %s", str_sql.c_str());
