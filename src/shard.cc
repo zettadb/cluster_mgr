@@ -1594,7 +1594,7 @@ int MetadataShard::fetch_meta_shard_nodes(Shard_node *sn, bool is_master,
 	Assert(nodes.size() > 0); // sn should have been added already.
 
 	int ret = sn->send_stmt(SQLCOM_SELECT, CONST_STR_PTR_LEN(
-		"select id, ip, port, user_name, passwd from meta_db_nodes"), stmt_retries);
+		"select id, hostaddr, port, user_name, passwd from meta_db_nodes"), stmt_retries);
 	if (ret)
 		return ret;
 
