@@ -1381,7 +1381,7 @@ int MetadataShard::refresh_shards(std::vector<KunlunCluster *> &kl_clusters)
 {
 	Scopped_mutex sm(mtx);
 	int ret = cur_master->send_stmt(SQLCOM_SELECT, CONST_STR_PTR_LEN(
-	"select t1.id as shard_id, t1.name, t2.id, ip, port, user_name, passwd, t3.name, t3.id as cluster_id, t3.ha_mode from shards t1, shard_nodes t2, db_clusters t3 where t2.shard_id = t1.id and t3.id=t1.db_cluster_id order by t1.id"), stmt_retries);
+	"select t1.id as shard_id, t1.name, t2.id, hostaddr, port, user_name, passwd, t3.name, t3.id as cluster_id, t3.ha_mode from shards t1, shard_nodes t2, db_clusters t3 where t2.shard_id = t1.id and t3.id=t1.db_cluster_id order by t1.id"), stmt_retries);
 	if (ret)
 		return ret;
 	MYSQL_RES *result = cur_master->get_result();
