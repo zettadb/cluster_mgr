@@ -335,14 +335,14 @@ extern "C" void *thread_func_storage_sync(void*thrdarg)
 	{
 		System::get_instance()->refresh_storages_info_to_computers();
 		System::get_instance()->refresh_storages_info_to_computers_metashard();
-		
-		Thread_manager::get_instance()->sleep_wait(thd, storage_sync_interval * 1000);
 
 		if(commit_log_count++ >= commit_log_count_max)
 		{
 			commit_log_count = 0;
 			System::get_instance()->truncate_commit_log_from_metadata_server();
 		}
+
+		Thread_manager::get_instance()->sleep_wait(thd, storage_sync_interval * 1000);
 	}
 	
 	return NULL;

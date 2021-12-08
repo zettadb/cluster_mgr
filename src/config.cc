@@ -15,9 +15,22 @@
 #include <unistd.h>
 #include <limits.h>
 
+extern int64_t num_worker_threads;
 extern int64_t thread_work_interval;
 extern int64_t storage_sync_interval;
 extern int64_t commit_log_retention_hours;
+
+extern int64_t num_job_threads;
+extern int64_t num_http_threads;
+extern int64_t cluster_mgr_http_port;
+extern std::string http_web_path;
+extern std::string http_upload_path;
+
+extern int64_t node_mgr_http_port;
+std::string hdfs_server_ip;
+int64_t hdfs_server_port;
+int64_t hdfs_replication;
+
 
 Configs *Configs::get_instance()
 {
@@ -137,7 +150,6 @@ void Configs::define_enum_config(const char *name, int &holder,
 	enum_cfgs.insert(std::make_pair(cei->name, cei));
 }
 
-extern int64_t num_worker_threads;
 /*
   Define the set of config parameters and their default values.
 */
@@ -183,6 +195,13 @@ void Configs::define_configs()
 	define_int_config("statement_retry_interval_ms", stmt_retry_interval_ms, 1, 1000000, 100,
 		"Interval in milli-seconds a statement is resent for execution when it fails and we believe MySQL node will be ready in a while.");
 
+	define_int_config("num_job_threads", num_job_threads, 1, 10, 3,
+		"Number of job work threads to create.");
+	define_int_config("num_http_threads", num_http_threads, 1, 10, 3,
+		"Number of http server threads to create.");
+	define_int_config("cluster_mgr_http_port", cluster_mgr_http_port, 1000, 65535, 7878,
+		"http server listen port.");
+
 	char def_log_path[64];
 	int slen = snprintf(def_log_path, sizeof(def_log_path),
 						"./cluster_mgr-%d.log", getpid());
@@ -190,6 +209,23 @@ void Configs::define_configs()
 
 	define_str_config("log_file", log_file_path, def_log_path,
 		"log file path");
+
+	define_str_config("http_web_path", http_web_path, "../web",
+		"http_web_path");
+	define_str_config("http_upload_path", http_upload_path, "../upload",
+		"http_upload_path");
+
+	define_int_config("node_mgr_http_port", node_mgr_http_port, 0, 65535, 7879,
+		"node_mgr_http_port");
+
+	define_int_config("hdfs_server_port", hdfs_server_port, 0, 65535, 0,
+		"hdfs_server_port");
+	define_str_config("hdfs_server_ip", hdfs_server_ip, "localhost",
+		"hdfs_server_ip");
+	define_int_config("hdfs_replication", hdfs_replication, 0, 65535, 2,
+		"hdfs_replication");
+
+
 	/*
 	  There is no practical way we can prevent multiple cluster_mgr processes
 	  from working on the same (set of) clusters, at least the pid file approach

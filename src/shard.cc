@@ -12,6 +12,7 @@
 #include "sys.h"
 #include "shard.h"
 #include "os.h"
+#include "job.h"
 #include "kl_cluster.h"
 #include "thread_manager.h"
 #include <unistd.h>
@@ -20,11 +21,11 @@
 #include <sys/time.h>
 
 // config variables
-int64_t mysql_connect_timeout = 20;
-int64_t mysql_read_timeout = 20;
-int64_t mysql_write_timeout = 20;
+int64_t mysql_connect_timeout = 3;
+int64_t mysql_read_timeout = 3;
+int64_t mysql_write_timeout = 3;
 int64_t mysql_max_packet_size = 1024*1024*1024;
-int64_t prepared_transaction_ttl = 20;
+int64_t prepared_transaction_ttl = 3;
 int64_t meta_svr_port = 0;
 int64_t check_shard_interval = 3;
 int64_t stmt_retries = 3;
@@ -1574,6 +1575,72 @@ int MetadataShard::refresh_computers(std::vector<KunlunCluster *> &kl_clusters)
 					it++;
 			}
 		}
+	}
+
+	return 0;
+}
+
+/*
+  check port if used in meta tables
+  @retval 0 unused;
+  		  1 used;
+*/
+int MetadataShard::check_port_used(std::string &ip, int port)
+{
+	Scopped_mutex sm(mtx);
+	
+	std::string str_sql  = "select hostaddr,port from meta_db_nodes where hostaddr=\"" + ip + "\" and port=" + std::to_string(port);
+	int ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+
+		if ((row = mysql_fetch_row(result)))
+			ret = 1;
+		else
+			ret = 0;
+		
+		cur_master->free_mysql_result();
+
+		if(ret)
+			return ret;
+	}
+
+	str_sql  = "select hostaddr,port from shard_nodes where hostaddr=\"" + ip + "\" and port=" + std::to_string(port);
+	ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+
+		if ((row = mysql_fetch_row(result)))
+			ret = 1;
+		else
+			ret = 0;
+		
+		cur_master->free_mysql_result();
+
+		if(ret)
+			return ret;
+	}
+
+	str_sql  = "select hostaddr,port from comp_nodes where hostaddr=\"" + ip + "\" and port=" + std::to_string(port);
+	ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+
+		if ((row = mysql_fetch_row(result)))
+			ret = 1;
+		else
+			ret = 0;
+		
+		cur_master->free_mysql_result();
+
+		if(ret)
+			return ret;
 	}
 
 	return 0;

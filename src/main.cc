@@ -41,6 +41,7 @@ int main(int argc, char **argv)
 	handle_signal(SIGTTOU, SIG_DFL);
 	handle_signal(SIGCONT, SIG_DFL);
 	handle_signal(SIGWINCH, SIG_DFL);
+	
 	if (System::create_instance(argv[1]))
 		return 1;
 	syslog(Logger::INFO,

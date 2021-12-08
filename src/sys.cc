@@ -9,9 +9,14 @@
 #include "global.h"
 #include "sys.h"
 #include "log.h"
+#include "job.h"
 #include "config.h"
 #include "shard.h"
+#include "node_info.h"
 #include "thread_manager.h"
+#include "http_server.h"
+#include "http_client.h"
+#include "hdfs_client.h"
 #include <utility>
 
 System *System::m_global_instance = NULL;
@@ -19,6 +24,18 @@ extern std::string log_file_path;
 
 System::~System()
 {
+	Http_server::get_instance()->do_exit = 1;
+	Http_server::get_instance()->join_all();
+	delete Http_server::get_instance();
+
+	Job::get_instance()->do_exit = 1;
+	Job::get_instance()->join_all();
+	delete Job::get_instance();
+
+	//delete Hdfs_client::get_instance();
+	delete Http_client::get_instance();
+	delete Node_info::get_instance();
+
 	for (auto &i:kl_clusters)
 		delete i;
 
@@ -234,7 +251,19 @@ int System::create_instance(const std::string&cfg_path)
 		goto end;
 	if ((ret = m_global_instance->refresh_computers_from_metadata_server()) != 0)
 		goto end;
-	Thread_manager::get_instance();
+	if ((ret = (Thread_manager::get_instance()==NULL)) != 0)
+		goto end;
+	if ((ret = (Node_info::get_instance()==NULL)) != 0)
+		goto end;
+	//if ((ret = (Hdfs_client::get_instance()==NULL)) != 0)
+	//	goto end;
+	if ((ret = (Http_client::get_instance()==NULL)) != 0)
+		goto end;
+	if ((ret = Job::get_instance()->start_job_thread()) != 0)
+		goto end;
+	if ((ret = Http_server::get_instance()->start_http_thread()) != 0)
+		goto end;
+
 end:
 	return ret;
 }

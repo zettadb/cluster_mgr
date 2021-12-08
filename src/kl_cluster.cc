@@ -143,6 +143,7 @@ int KunlunCluster::refresh_storages_to_computers()
 	
 	std::vector<std::string> vec_database;
 	std::vector<std::tuple<std::string, std::string, uint>> vec_database_namespace_oid;
+	//map 				database	namespace	oid					table				page	row
 	std::map<std::tuple<std::string, std::string, uint>, std::map<std::string, std::pair<uint, uint>>> map_dbnsid_table_page_row;
 	
 	////////////////////////////////////////////////////////

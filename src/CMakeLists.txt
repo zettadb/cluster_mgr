@@ -26,9 +26,18 @@ if (NOT EXISTS ../include/pgsql)
 		WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 endif()
 
+if (NOT EXISTS ../include/hdfs)
+	execute_process(COMMAND mkdir -p ../include
+		WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+	execute_process(COMMAND cp ../resources/hdfs/ ../include/ -rf
+		WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+endif()
+
 link_directories(${CMAKE_SOURCE_DIR}/../lib)
 link_directories(${CMAKE_SOURCE_DIR}/../lib/deps)
-add_executable(cluster_mgr config.cc log.cc main.cc os.cc shard.cc sys.cc txn.cc thread_manager.cc kl_cluster.cc)
+add_executable(cluster_mgr
+config.cc log.cc main.cc os.cc shard.cc sys.cc txn.cc thread_manager.cc kl_cluster.cc node_info.cc
+http_server.cc http_client.cc job.cc cjson.cc)
 configure_file(sys_config.h.in sys_config.h)
 target_include_directories(cluster_mgr PUBLIC
 		"${PROJECT_BINARY_DIR}"

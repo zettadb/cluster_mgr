@@ -22,6 +22,7 @@ class Thread;
 class System
 {
 private:
+	friend class Job;
 	MetadataShard meta_shard;
 	std::vector<KunlunCluster *> kl_clusters;
 

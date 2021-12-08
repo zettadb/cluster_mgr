@@ -61,7 +61,18 @@ public:
 		Assert(port_ > 0);
 	}
 
-	void refresh_node_configs(int port_,
+	void get_ip_port(std::string&ip, int&port) const
+	{
+		ip = gpsql_conn.ip;
+		port = gpsql_conn.port;
+	}
+	void get_user_pwd(std::string&user, std::string&pwd) const
+	{
+		user = gpsql_conn.user;
+		pwd = gpsql_conn.pwd;
+	}
+
+	bool refresh_node_configs(int port_,
 		const char * name_, const char * ip_, const char * user_, const char * pwd_)
 	{
 		bool is_change = false;
@@ -98,6 +109,8 @@ public:
 		// close connect, it will be reconnect while next send_stmt
 		if(is_change)
 			close_conn();
+
+		return is_change;
 	}
 
 	int send_stmt(int pgres, const char *database, const char *stmt, int nretries = 1);

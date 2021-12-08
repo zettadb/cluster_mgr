@@ -114,6 +114,11 @@ public:
 		ip = mysql_conn.ip;
 		port = mysql_conn.port;
 	}
+	void get_user_pwd(std::string&user, std::string&pwd) const
+	{
+		user = mysql_conn.user;
+		pwd = mysql_conn.pwd;
+	}
 
 	void set_master(bool b) { _is_master = b; }
 	bool is_master() const { return _is_master;}
@@ -539,6 +544,7 @@ public:
 
 	int refresh_shards(std::vector<KunlunCluster *> &kl_clusters);
 	int refresh_computers(std::vector<KunlunCluster *> &kl_clusters);
+	int check_port_used(std::string &ip, int port);
 };
 
 #endif // !SHARD_H
