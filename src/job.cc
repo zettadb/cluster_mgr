@@ -576,10 +576,13 @@ bool Job::get_uuid(std::string &uuid)
 
 	char buf[60];
 	memset(buf, 0, 60);
-	fread(buf, 1, 36, fp);
+	size_t n = fread(buf, 1, 36, fp);
 	fclose(fp);
-	uuid = buf;
 	
+	if(n != 36)
+		return false;
+	
+	uuid = buf;
 	return true;
 }
 

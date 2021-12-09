@@ -103,7 +103,7 @@ void Http_server::join_all()
 	if(wakeupfd>0)
 	{
 		uint64_t one = 1;
-		write(wakeupfd, &one, sizeof one);	
+		size_t n = write(wakeupfd, &one, sizeof(one));	
 		close(wakeupfd);
 	}
 	
