@@ -47,6 +47,10 @@ public:
 	{
 		meta_shard.maintenance();
 	}
+	MetadataShard* get_MetadataShard()
+	{
+		return &meta_shard;
+	}
 
 	int process_recovered_prepared();
 	bool acquire_shard(Thread *thd, bool force);

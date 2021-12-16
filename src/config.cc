@@ -25,12 +25,19 @@ extern int64_t num_http_threads;
 extern int64_t cluster_mgr_http_port;
 extern std::string http_web_path;
 extern std::string http_upload_path;
+extern std::string http_cmd_version;
 
 extern int64_t node_mgr_http_port;
-std::string hdfs_server_ip;
-int64_t hdfs_server_port;
-int64_t hdfs_replication;
+extern std::string hdfs_server_ip;
+extern int64_t hdfs_server_port;
 
+extern std::string cluster_json_path;
+extern std::string program_binaries_path;
+extern std::string instance_binaries_path;
+extern std::string storage_prog_package_name;
+extern std::string computer_prog_package_name;
+extern int64_t storage_instance_port_start;
+extern int64_t computer_instance_port_start;
 
 Configs *Configs::get_instance()
 {
@@ -199,7 +206,7 @@ void Configs::define_configs()
 		"Number of job work threads to create.");
 	define_int_config("num_http_threads", num_http_threads, 1, 10, 3,
 		"Number of http server threads to create.");
-	define_int_config("cluster_mgr_http_port", cluster_mgr_http_port, 1000, 65535, 7878,
+	define_int_config("cluster_mgr_http_port", cluster_mgr_http_port, 1000, 65535, 5000,
 		"http server listen port.");
 
 	char def_log_path[64];
@@ -210,20 +217,37 @@ void Configs::define_configs()
 	define_str_config("log_file", log_file_path, def_log_path,
 		"log file path");
 
-	define_str_config("http_web_path", http_web_path, "../web",
+	define_str_config("http_web_path", http_web_path, "./web",
 		"http_web_path");
-	define_str_config("http_upload_path", http_upload_path, "../upload",
+	define_str_config("http_upload_path", http_upload_path, "./upload",
 		"http_upload_path");
 
-	define_int_config("node_mgr_http_port", node_mgr_http_port, 0, 65535, 7879,
+	define_int_config("node_mgr_http_port", node_mgr_http_port, 0, 65535, 5001,
 		"node_mgr_http_port");
+
+	define_str_config("http_cmd_version", http_cmd_version, "0.1",
+		"http_cmd_version");
 
 	define_int_config("hdfs_server_port", hdfs_server_port, 0, 65535, 0,
 		"hdfs_server_port");
 	define_str_config("hdfs_server_ip", hdfs_server_ip, "localhost",
 		"hdfs_server_ip");
-	define_int_config("hdfs_replication", hdfs_replication, 0, 65535, 2,
-		"hdfs_replication");
+
+	define_str_config("cluster_json_path", cluster_json_path, "./cluster_json",
+		"cluster_json_path");
+	define_str_config("program_binaries_path", program_binaries_path, "../../../program_binaries",
+		"program_binaries_path");
+	define_str_config("instance_binaries_path", instance_binaries_path, "../../../instance_binaries",
+		"instance_binaries_path");
+	define_str_config("storage_prog_package_name", storage_prog_package_name, "percona-8.0.18-bin-rel",
+		"storage_prog_package_name");
+	define_str_config("computer_prog_package_name", computer_prog_package_name, "postgresql-11.5-rel",
+		"computer_prog_package_name");
+
+	define_int_config("storage_instance_port_start", storage_instance_port_start, 0, 65535, 5330,
+		"storage_instance_port_start");
+	define_int_config("computer_instance_port_start", computer_instance_port_start, 0, 65535, 5030,
+		"computer_instance_port_start");
 
 
 	/*

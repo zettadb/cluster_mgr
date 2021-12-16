@@ -30,7 +30,7 @@ static const char *lpHttpHtmlOk = "HTTP/1.0 200 OK\r\nContent-Type: text/html\r\
 static const char *lpHttpBinOk = "HTTP/1.0 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ";
 static const char *lpHttpJspOk = "HTTP/1.0 200 OK\r\napplication/javascript\r\nContent-Length: ";
 static const char *lpHttpError = "HTTP/1.0 400 Bad Request\r\n";
-static const char *lpReturnOk = "{\"result\":\"succeed\"}\r\n";
+static const char *lpReturnOk = "{\"result\":\"accept\"}";
 
 static const char *lpHttpRangeOk = "HTTP/1.0 206 Partial Content\r\n\
 Content-Type: text/plain\r\n\

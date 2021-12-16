@@ -56,7 +56,6 @@ statement_retry_interval_ms = 1000
 # Number of job threads to create.
 num_job_threads=6
 
-# for http server configure
 # Number of http threads to create.
 num_http_threads=6
 
@@ -67,17 +66,38 @@ http_web_path = ./web
 http_upload_path = ./upload
 
 # cluster_mgr http server port
-cluster_mgr_http_port = 5000
+cluster_mgr_http_port = 57000
 
 # node_mgr http server port
-node_mgr_http_port = 5001
+node_mgr_http_port = 57001
+
+# http cmd version
+http_cmd_version = 0.9
+
+# cluster create json path
+cluster_json_path = ./cluster_json
 
 # hdfs server port 
-hdfs_server_port = 5002
+hdfs_server_port = 57002
 
 # hdfs server ip address
-hdfs_server_ip = 192.168.0.127
+hdfs_server_ip = 192.168.0.128
 
-# hdfs save replication
-hdfs_replication = 2
+# program_binaries_path
+program_binaries_path = ../../../program_binaries
+
+# instance_binaries_path
+instance_binaries_path = ../../../instance_binaries
+
+# storage_prog_package_name
+storage_prog_package_name = percona-8.0.18-bin-rel
+
+# computer_prog_package_name
+computer_prog_package_name = postgresql-11.5-rel
+
+# storage instance port start
+storage_instance_port_start = 57330
+
+# computer instance port start
+computer_instance_port_start = 57030
 

@@ -21,22 +21,32 @@
 
 typedef std::tuple<std::string, int, std::string, std::string> Tpye_Ip_Port_User_Pwd;
 typedef std::tuple<std::string, int, std::vector<std::string>> Tpye_Ip_Port_Paths;
+typedef std::pair<std::string, int> Tpye_Ip_Port;
 typedef std::pair<std::string, int> Tpye_Path_Space;
+typedef std::tuple<std::string, int, int> Tpye_Path_Used_Free;
+
+typedef std::pair<std::string, std::vector<std::string>> Tpye_Ip_Paths;
+typedef std::tuple<std::string, std::string, int> Tpye_Shard_Ip_Port;
 
 class Node
 {
 public:
 	std::string ip;
 	std::string paths;
+	std::vector<Tpye_Path_Space> vec_path_space;
+	
+	//datadir_paths, logdir_paths, wal_log_dir_paths, comp_datadir_paths
+	std::vector<std::string> vec_paths; 
+	std::vector<std::vector<Tpye_Path_Used_Free>> vec_vec_path_used_free;
 	bool available; 
 	int instances;
 	int instance_computer;
 	int instance_storage;
 	int port_computer;
 	int port_storage;
-	std::vector<Tpye_Path_Space> vec_path_space;
 	
 	Node(std::string &ip_, std::string &paths_);
+	Node(std::string &ip_, std::vector<std::string> &vec_paths_);
 	~Node();
 };
 
@@ -59,8 +69,10 @@ public:
 		return m_inst;
 	}
 
-	bool get_node_space_port(Node* node);
+	bool get_node_path_space(Node* node);
 	bool update_nodes();
+	bool update_nodes_info();
+	bool get_first_path(std::string &paths, std::string &path);
 	bool get_storage_nodes(int nodes, std::vector<Tpye_Ip_Port_Paths> &vec_ip_port_paths);
 	bool get_computer_nodes(int nodes, std::vector<Tpye_Ip_Port_Paths> &vec_ip_port_paths);
 };

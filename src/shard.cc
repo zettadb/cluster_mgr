@@ -13,6 +13,7 @@
 #include "shard.h"
 #include "os.h"
 #include "job.h"
+#include "cjson.h"
 #include "kl_cluster.h"
 #include "thread_manager.h"
 #include <unistd.h>
@@ -1262,10 +1263,14 @@ int Shard::get_xa_prepared()
 	Prep_recvrd_txns_t txns;
 	std::string mip;
 	int mport;
-	cur_master->get_ip_port(mip, mport);
 
 	{
 	Scopped_mutex sm(mtx);
+
+	if(cur_master == NULL)
+		return 0;
+	cur_master->get_ip_port(mip, mport);
+
 	// we can only operate on recovered XA txns. if the connection still holds
 	// the prepared txn, we can't operate on it in another connection.
 	int ret = cur_master->send_stmt(SQLCOM_SELECT, CONST_STR_PTR_LEN(
@@ -1347,6 +1352,10 @@ uint Shard::get_innodb_page_size()
 	if(innodb_page_size == 0)
 	{
 		Scopped_mutex sm(mtx);
+
+		if(cur_master == NULL)
+			return 0;
+
 		int ret = cur_master->send_stmt(SQLCOM_SELECT, CONST_STR_PTR_LEN(
 						"show variables like 'innodb_page_size'"), stmt_retries);
 		
@@ -1363,7 +1372,6 @@ uint Shard::get_innodb_page_size()
 		}
 		
 		cur_master->free_mysql_result();
-
 	}
 	
 	return innodb_page_size;
@@ -1394,6 +1402,8 @@ int MetadataShard::refresh_shards(std::vector<KunlunCluster *> &kl_clusters)
 		for (auto &j:i->storage_shards)
 			for (auto &k:j->get_nodes())
 				sdns[std::make_tuple(i->get_id(), j->get_id(),k->get_id())] = k;
+
+	std::set<std::string> alterant_node_ip; //for notify node_mgr
 
 	while ((row = mysql_fetch_row(result)))
 	{
@@ -1462,9 +1472,13 @@ int MetadataShard::refresh_shards(std::vector<KunlunCluster *> &kl_clusters)
 		  node's conn can be closed if params changed.
 		*/
 		bool changed = false;
+		Shard_node *n = pshard->get_node_by_id(nodeid);
 		pshard->refresh_node_configs(nodeid, row[3], port, row[5], row[6], changed);
 		if (changed) pshard->get_node_by_id(nodeid)->close_conn();
 
+		if(n == NULL || changed)
+			alterant_node_ip.insert(row[3]);
+		
 		if(pshard->get_mode() == Shard::HA_no_rep)
 		{
 			if(pshard->get_nodes().size()>0)
@@ -1485,12 +1499,17 @@ int MetadataShard::refresh_shards(std::vector<KunlunCluster *> &kl_clusters)
 		int rport;
 		i.second->get_ip_port(rip, rport);
 
+		alterant_node_ip.insert(rip);
+
 		syslog(Logger::INFO, "Removed shard(%s.%s, %u) node (%s:%d, %u) from protection since it's not in cluster registration anymore.",
 			pshard->get_cluster_name().c_str(), pshard->get_name().c_str(),
 			pshard->get_id(), rip.c_str(), rport, i.second->get_id());
 
 		pshard->remove_node(i.second->get_id());
 	}
+
+	if(alterant_node_ip.size() != 0)
+		Job::get_instance()->notify_node_update(alterant_node_ip, 1);
 
 	return 0;
 }
@@ -1504,6 +1523,8 @@ int MetadataShard::refresh_shards(std::vector<KunlunCluster *> &kl_clusters)
 int MetadataShard::refresh_computers(std::vector<KunlunCluster *> &kl_clusters)
 {
 	Scopped_mutex sm(mtx);
+
+	std::set<std::string> alterant_node_ip;	//for notify node_mgr
 
 	int ret;
 	MYSQL_RES *result;
@@ -1550,9 +1571,14 @@ int MetadataShard::refresh_computers(std::vector<KunlunCluster *> &kl_clusters)
 				cluster->computer_nodes.push_back(pcomputer);
 				syslog(Logger::INFO, "Added Computer(%s, %u, %s) into protection.",
 							cluster->get_name().c_str(), pcomputer->id, pcomputer->name.c_str());
+
+				alterant_node_ip.insert(row[2]);
 			}
 			else
-				pcomputer->refresh_node_configs(port, row[1], row[2], row[4], row[5]);
+			{
+				if(pcomputer->refresh_node_configs(port, row[1], row[2], row[4], row[5]))
+					alterant_node_ip.insert(row[2]);
+			}
 
 			// remove nodes that still exist.
 			sdns.erase(compid);
@@ -1563,6 +1589,12 @@ int MetadataShard::refresh_computers(std::vector<KunlunCluster *> &kl_clusters)
 		// Remove computer nodes that are no longer in the computer_nodes, they are all left in sdns.
 		for (auto &i:sdns)
 		{
+			std::string ip;
+			int port;
+
+			i.second->get_ip_port(ip, port);
+			alterant_node_ip.insert(ip);
+			
 			for(auto it=cluster->computer_nodes.begin(); it!=cluster->computer_nodes.end(); )
 			{
 				if ((*it)->id == i.first)
@@ -1577,11 +1609,14 @@ int MetadataShard::refresh_computers(std::vector<KunlunCluster *> &kl_clusters)
 		}
 	}
 
+	if(alterant_node_ip.size() != 0)
+		Job::get_instance()->notify_node_update(alterant_node_ip, 2);
+
 	return 0;
 }
 
 /*
-  check port if used in meta tables
+  check port if used from metadata tables
   @retval 0 unused;
   		  1 used;
 */
@@ -1589,8 +1624,14 @@ int MetadataShard::check_port_used(std::string &ip, int port)
 {
 	Scopped_mutex sm(mtx);
 	
+	if(cur_master == NULL)
+		return 1;
+
+	int ret = 1;
+
 	std::string str_sql  = "select hostaddr,port from meta_db_nodes where hostaddr=\"" + ip + "\" and port=" + std::to_string(port);
-	int ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+
 	if (ret==0)
 	{
 		MYSQL_RES *result = cur_master->get_result();
@@ -1609,6 +1650,7 @@ int MetadataShard::check_port_used(std::string &ip, int port)
 
 	str_sql  = "select hostaddr,port from shard_nodes where hostaddr=\"" + ip + "\" and port=" + std::to_string(port);
 	ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+		
 	if (ret==0)
 	{
 		MYSQL_RES *result = cur_master->get_result();
@@ -1627,6 +1669,7 @@ int MetadataShard::check_port_used(std::string &ip, int port)
 
 	str_sql  = "select hostaddr,port from comp_nodes where hostaddr=\"" + ip + "\" and port=" + std::to_string(port);
 	ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+		
 	if (ret==0)
 	{
 		MYSQL_RES *result = cur_master->get_result();
@@ -1644,6 +1687,243 @@ int MetadataShard::check_port_used(std::string &ip, int port)
 	}
 
 	return 0;
+}
+
+/*
+  get max index of comps from metadata tables
+  @retval 0 succeed;
+  		  1 fail;
+*/
+int MetadataShard::get_comp_nodes_id_seq(int &comps_id)
+{
+	Scopped_mutex sm(mtx);
+
+	if(cur_master == NULL)
+		return 1;
+
+	int ret = cur_master->send_stmt(SQLCOM_SELECT, CONST_STR_PTR_LEN("select max(id) from comp_nodes_id_seq"), stmt_retries);	
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+		if ((row = mysql_fetch_row(result)))
+		{
+			if(row[0] != NULL)
+				comps_id = atoi(row[0]);
+		}
+		cur_master->free_mysql_result();
+	}
+
+	return ret;
+}
+
+/*
+  execute metadate opertation
+  @retval 0 succeed;
+  		  1 fail;
+*/
+int MetadataShard::execute_metadate_opertation(enum_sql_command command, const std::string & str_sql)
+{
+	Scopped_mutex sm(mtx);
+
+	if(cur_master == NULL)
+		return 1;
+
+	int ret = cur_master->send_stmt(command, str_sql.c_str(), str_sql.length(), stmt_retries);
+
+	return ret;
+}
+
+/*
+  delete cluster from metadata
+  @retval 0 succeed;
+  		  1 fail;
+*/
+int MetadataShard::delete_cluster_from_metadata(const std::string & cluster_name)
+{
+	Scopped_mutex sm(mtx);
+
+	if(cur_master == NULL)
+		return 1;
+
+	int ret = 1;
+	int cluster_id = 0;
+	std::vector<int> vec_comp_id;
+
+	//get cluster_id
+	std::string str_sql  = "select id from db_clusters where name='" + cluster_name + "'";
+	ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+		if ((row = mysql_fetch_row(result)))
+		{
+			if(row[0] != NULL)
+				cluster_id = atoi(row[0]);
+		}
+		cur_master->free_mysql_result();
+	}
+
+	//get comp_id
+	str_sql  = "select id from comp_nodes where db_cluster_id=" + std::to_string(cluster_id);
+	ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+		while ((row = mysql_fetch_row(result)))
+		{
+			if(row[0] != NULL)
+				vec_comp_id.push_back(atoi(row[0]));
+		}
+		cur_master->free_mysql_result();
+	}
+
+	//remove comp_nodes
+	str_sql  = "delete from comp_nodes where db_cluster_id=" + std::to_string(cluster_id);
+	ret = cur_master->send_stmt(SQLCOM_DELETE, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret!=0)
+		return ret;
+
+	//remove comp_nodes_id_seq
+	for(auto &comp_id: vec_comp_id)
+	{
+		str_sql  = "delete from comp_nodes_id_seq where id=" + std::to_string(comp_id);
+		ret = cur_master->send_stmt(SQLCOM_DELETE, str_sql.c_str(), str_sql.length(), stmt_retries);
+		if (ret!=0)
+			return ret;
+	}
+
+	//remove shards
+	str_sql  = "delete from shards where db_cluster_id=" + std::to_string(cluster_id);
+	ret = cur_master->send_stmt(SQLCOM_DELETE, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret!=0)
+		return ret;
+
+	//remove shard_nodes
+	str_sql  = "delete from shard_nodes where db_cluster_id=" + std::to_string(cluster_id);
+	ret = cur_master->send_stmt(SQLCOM_DELETE, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret!=0)
+		return ret;
+
+	//remove db_clusters
+	str_sql  = "delete from db_clusters where id=" + std::to_string(cluster_id);
+	ret = cur_master->send_stmt(SQLCOM_DELETE, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret!=0)
+		return ret;
+
+	//drop table commit_log_cluster_name
+	str_sql  = "drop table commit_log_" + cluster_name;
+	ret = cur_master->send_stmt(SQLCOM_DROP_TABLE, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret!=0)
+		return ret;
+
+	//drop table ddl_ops_log_cluster_name
+	str_sql  = "drop table ddl_ops_log_" + cluster_name;
+	ret = cur_master->send_stmt(SQLCOM_DROP_TABLE, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret!=0)
+		return ret;
+
+	return ret;
+}
+
+/*
+  get server_nodes from metadata table
+  @retval 0 succeed;
+  		  1 fail;
+*/
+int MetadataShard::get_server_nodes_from_metadata(std::vector<Tpye_Ip_Paths> &vec_ip_paths)
+{
+	Scopped_mutex sm(mtx);
+
+	if(cur_master == NULL)
+		return 1;
+
+	std::string str_sql  = "select hostaddr,datadir,logdir,wal_log_dir,comp_datadir from server_nodes";
+	int ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+		while ((row = mysql_fetch_row(result)))
+		{
+			std::vector<std::string> vec_paths;
+			vec_paths.push_back(row[1]);
+			vec_paths.push_back(row[2]);
+			vec_paths.push_back(row[3]);
+			vec_paths.push_back(row[4]);
+			vec_ip_paths.push_back(std::make_pair(row[0], vec_paths));
+		}
+		cur_master->free_mysql_result();
+	}
+
+	return ret;
+}
+
+/*
+  get cluster_backups from metadata table 
+  @retval 0 succeed;
+  		  1 fail;
+*/
+int MetadataShard::get_backup_info_from_metadata(std::string &backup_id, std::string &cluster_name, 
+										std::string &timestamp, std::vector<std::string> &vec_shard)
+{
+	Scopped_mutex sm(mtx);
+
+	if(cur_master == NULL)
+		return 1;
+
+	std::string str_sql  = "select cluster_name,shards_name,when_created from cluster_backups where id=" + backup_id;
+	int ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret)
+		return 1;
+
+	MYSQL_RES *result = cur_master->get_result();
+	MYSQL_ROW row;
+
+	cJSON *root;
+	cJSON *item;
+	cJSON *item_sub;
+
+	if ((row = mysql_fetch_row(result)))
+	{
+		cluster_name = row[0];
+		timestamp = row[2];
+
+		root = cJSON_Parse(row[1]);
+		if(root != NULL)
+		{
+			int shards = cJSON_GetArraySize(root);
+			for(int i=0; i<shards; i++)
+			{
+				item_sub = cJSON_GetArrayItem(root, i);
+				if(item_sub == NULL)
+				{
+					syslog(Logger::ERROR, "get sub node error");
+					ret = 1;
+					break;
+				}
+
+				item = cJSON_GetObjectItem(item_sub, "name");
+				if(item == NULL)
+				{
+					syslog(Logger::ERROR, "get sub name error");
+					ret = 1;
+					break;
+				}
+				vec_shard.push_back(std::string(item->valuestring));
+			}
+		}
+		else
+		{
+			syslog(Logger::ERROR, "cJSON_Parse error");	
+			ret = 1;
+		}
+	}
+	cur_master->free_mysql_result();
+
+	return ret;
 }
 
 /*
@@ -1664,6 +1944,8 @@ int MetadataShard::fetch_meta_shard_nodes(Shard_node *sn, bool is_master,
 		"select id, hostaddr, port, user_name, passwd from meta_db_nodes"), stmt_retries);
 	if (ret)
 		return ret;
+	
+	std::set<std::string> alterant_node_ip;	//for notify node_mgr
 
 	std::string master_usr, master_pwd;
 	MYSQL_RES *result = sn->get_result();
@@ -1697,6 +1979,7 @@ int MetadataShard::fetch_meta_shard_nodes(Shard_node *sn, bool is_master,
 		snodes.erase(nodeid);
 
 		bool changed = false;
+		Shard_node *n = get_node_by_id(nodeid);
 		Shard_node *node =
 			refresh_node_configs(nodeid, row[1], port, row[3], row[4], changed);
 		// need to close sn's conn, but not now for sn since we are iterating them.
@@ -1704,6 +1987,9 @@ int MetadataShard::fetch_meta_shard_nodes(Shard_node *sn, bool is_master,
 			close_snconn = true;
 		else if (changed)
 			node->close_conn();
+
+		if(n == NULL || changed)
+			alterant_node_ip.insert(row[1]);
 
 		if (!is_master && master_ip && strcmp(master_ip, row[1]) == 0 &&
 			master_port == port && set_master(node))
@@ -1734,6 +2020,8 @@ int MetadataShard::fetch_meta_shard_nodes(Shard_node *sn, bool is_master,
 		int snport;
 		pn->get_ip_port(snip, snport);
 
+		alterant_node_ip.insert(snip);
+
 		syslog(Logger::INFO,
 			   "Removed shard(%s.%s, %u) node(%s:%d, %u) which no longer belong to the meta shard.",
 			   ps->get_cluster_name().c_str(), ps->get_name().c_str(),
@@ -1741,6 +2029,9 @@ int MetadataShard::fetch_meta_shard_nodes(Shard_node *sn, bool is_master,
 
 		remove_node(pn->get_id());
 	}
+
+	if(alterant_node_ip.size() != 0)
+		Job::get_instance()->notify_node_update(alterant_node_ip, 0);
 
 	return 0;
 }

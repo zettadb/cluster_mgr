@@ -54,7 +54,7 @@ Content-Type: application/octet-stream\r\n\r\n"
 
 #define HTTP_POST_FILE_STR3 "\r\n------WebKitFormBoundaryZjrentBBjYWJ7gXp--\r\n"
 
-static const char *lpReturnOk = "{\"result\":\"succeed\"}\r\n";
+static const char *lpReturnOk = "{\"result\":\"accept\"}";
 
 
 int Http_client::do_exit = 0;

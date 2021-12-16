@@ -11,6 +11,7 @@
 #include "global.h"
 #include "shard.h"
 #include "log.h"
+#include "node_info.h"
 
 #include <atomic>
 #include <set>
@@ -193,6 +194,7 @@ protected:
 	time_t last_time_check;
 	std::string name;
 	std::string cluster_name;
+	friend class System;
 	std::vector<Shard_node*>nodes;
 	uint innodb_page_size;
 public:
@@ -545,6 +547,12 @@ public:
 	int refresh_shards(std::vector<KunlunCluster *> &kl_clusters);
 	int refresh_computers(std::vector<KunlunCluster *> &kl_clusters);
 	int check_port_used(std::string &ip, int port);
+	int get_comp_nodes_id_seq(int &comps_id);
+	int execute_metadate_opertation(enum_sql_command command, const std::string & str_sql);
+	int delete_cluster_from_metadata(const std::string & cluster_name);
+	int get_server_nodes_from_metadata(std::vector<Tpye_Ip_Paths> &vec_ip_paths);
+	int get_backup_info_from_metadata(std::string &backup_id, std::string &cluster_name, 
+										std::string &timestamp, std::vector<std::string> &vec_shard);
 };
 
 #endif // !SHARD_H
