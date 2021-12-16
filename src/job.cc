@@ -1071,7 +1071,7 @@ bool Job::update_jobid_status(std::string &jobid, std::string &result, std::stri
 		if(std::get<0>(*it) == jobid)
 		{
 			std::get<1>(*it) = result;
-			std::get<0>(*it) = info;
+			std::get<2>(*it) = info;
 			is_exist = true;
 			break;
 		}
