@@ -11,6 +11,8 @@
 #include "global.h"
 #include "shard.h"
 #include "kl_cluster.h"
+#include "machine_info.h"
+#include "cjson.h"
 #include <vector>
 #include <map>
 
@@ -22,9 +24,11 @@ class Thread;
 class System
 {
 private:
-	friend class Job;
 	MetadataShard meta_shard;
 	std::vector<KunlunCluster *> kl_clusters;
+	
+	//stop working for backup/restore cluster
+	bool cluster_mgr_working;
 
 	std::string config_path;
 
@@ -32,6 +36,7 @@ private:
 	mutable pthread_mutexattr_t mtx_attr;
 
 	System(const std::string&cfg_path) :
+		cluster_mgr_working(true),
 		config_path(cfg_path)
 	{
 		pthread_mutexattr_init(&mtx_attr);
@@ -50,6 +55,14 @@ public:
 	MetadataShard* get_MetadataShard()
 	{
 		return &meta_shard;
+	}
+	void set_cluster_mgr_working(bool stop)
+	{
+		cluster_mgr_working = stop;
+	}
+	bool get_cluster_mgr_working()
+	{
+		return cluster_mgr_working;
 	}
 
 	int process_recovered_prepared();
@@ -73,5 +86,18 @@ public:
 		Scopped_mutex sm(mtx);
 		return config_path;
 	}
+
+	int execute_metadate_opertation(enum_sql_command command, const std::string & str_sql);
+	int get_comp_nodes_id_seq(int &comps_id);
+	int get_server_nodes_from_metadata(std::vector<Tpye_Ip_Paths> &vec_ip_paths);
+	int get_backup_info_from_metadata(std::string &backup_id, std::string &cluster_name, std::string &timestamp, int &shards);
+	bool check_cluster_name(std::string &cluster_name);
+	bool get_meta_info(std::vector<Tpye_Ip_Port_User_Pwd> &meta);
+	bool get_machine_instance_port(Machine* machine);
+	bool get_node_instance(cJSON *root, std::string &str_ret);
+	bool stop_cluster(std::vector <std::vector<Tpye_Ip_Port>> &vec_shard, std::vector<Tpye_Ip_Port> &comps, std::string &cluster_name);
+	bool get_shard_ip_port_backup(std::string &cluster_name, std::vector<Tpye_Ip_Port> &vec_ip_port);
+	bool get_shard_ip_port_restore(std::string &cluster_name, std::vector<std::vector<Tpye_Ip_Port>> &vec_vec_ip_port);
+	
 };
 #endif // !SYS_H

@@ -47,17 +47,20 @@ int main(int argc, char **argv)
 	syslog(Logger::INFO,
 		   "Cluster manager started using meta-data shard node (%s:%d).",
 		   meta_svr_ip.c_str(), meta_svr_port);
-	int ret;
+
 	Thread main_thd;
 
 	while (!Thread_manager::do_exit)
 	{
-		if ((ret = System::get_instance()->setup_metadata_shard()) != 0)
-			continue;
-		System::get_instance()->refresh_shards_from_metadata_server();
-		System::get_instance()->refresh_computers_from_metadata_server();
-		System::get_instance()->meta_shard_maintenance();
-		System::get_instance()->process_recovered_prepared();
+		if (System::get_instance()->get_cluster_mgr_working() && 
+			System::get_instance()->setup_metadata_shard() == 0)
+		{
+			System::get_instance()->refresh_shards_from_metadata_server();
+			System::get_instance()->refresh_computers_from_metadata_server();
+			System::get_instance()->meta_shard_maintenance();
+			System::get_instance()->process_recovered_prepared();
+		}
+
 		Thread_manager::get_instance()->sleep_wait(&main_thd, thread_work_interval * 1000);
 	}
 

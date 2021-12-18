@@ -11,7 +11,7 @@
 #include <errno.h>
 #include "global.h"
 #include "cjson.h"
-#include "node_info.h"
+#include "machine_info.h"
 
 #include <pthread.h>
 #include <mutex>
@@ -74,23 +74,15 @@ public:
 	int start_job_thread();
 	void join_all();
 
-	void get_local_ip();
-	bool check_local_ip(std::string &ip);
-
-	bool http_para_cmd(const std::string &para, std::string &str_ret);
-	bool check_cluster_name(std::string &cluster_name);
-	bool get_meta_info(std::vector<Tpye_Ip_Port_User_Pwd> &meta);
-	bool get_node_instance_port(Node* node_machine);
-	bool get_node_instance(cJSON *root, std::string &str_ret);
 	void notify_node_update(std::set<std::string> &alterant_node_ip, int type);
-	bool get_job_status(cJSON *root, std::string &str_ret);
-	bool check_port_used(cJSON *root, std::string &str_ret);
 	bool get_disk_size(cJSON *root, std::string &str_ret);
 
 	bool job_create_machine(cJSON *root, std::string &str_ret);
 	bool job_update_machine(cJSON *root, std::string &str_ret);
 	bool job_delete_machine(cJSON *root, std::string &str_ret);
 
+	bool check_local_ip(std::string &ip);
+	void get_local_ip();
 	bool get_uuid(std::string &uuid);
 	bool get_timestamp(std::string &timestamp);
 	bool get_job_type(char *str, Job_type &job_type);
@@ -106,22 +98,21 @@ public:
 	bool job_save_json(std::string &path, char* cjson);
 
 	bool job_create_program_path();
-	bool job_create_shard(std::vector<Tpye_Ip_Port_Paths> &storages, std::string &cluster_name, int shards_id);
+	bool job_create_shard(std::vector<Tpye_Ip_Port_Paths> &storages, std::string &cluster_name, std::string &ha_mode, int shards_id);
 	bool job_create_comps(std::vector<Tpye_Ip_Port_Paths> &comps, std::string &cluster_name, int comps_id);
-	bool job_start_cluster(std::vector <std::vector<Tpye_Ip_Port_Paths>> &vec_shard, std::string &cluster_name);
+	bool job_start_cluster(std::vector <std::vector<Tpye_Ip_Port_Paths>> &vec_shard, std::string &cluster_name, std::string &ha_mode);
 	void job_create_cluster(cJSON *root);
 	bool job_delete_shard(std::vector<Tpye_Ip_Port> &storages, std::string &cluster_name);
 	bool job_delete_comps(std::vector<Tpye_Ip_Port> &comps, std::string &cluster_name);
-	bool job_stop_cluster(std::vector <std::vector<Tpye_Ip_Port>> &vec_shard, std::vector<Tpye_Ip_Port> &comps, std::string &cluster_name);
 	void job_delete_cluster(cJSON *root);
 
-	bool job_get_shard_ip_port(std::string &cluster_name, std::vector<Tpye_Shard_Ip_Port> &vec_shard_ip_port);
-	bool job_get_shards_name(std::string &shards_name, std::vector<Tpye_Shard_Ip_Port> &vec_shard_ip_port);
-	bool job_backup_shard(std::string &cluster_name, Tpye_Shard_Ip_Port &shard_ip_port);
+	bool job_backup_shard(std::string &cluster_name, Tpye_Ip_Port &ip_port, int shard_id);
 	void job_backup_cluster(cJSON *root);
-	bool job_restore_shard(std::string &cluster_name, std::string &shard_name, std::string &timestamp, Tpye_Shard_Ip_Port &shard_ip_port);
+	bool job_restore_shard(std::string &cluster_name, std::string &shard_name, std::string &timestamp, Tpye_Ip_Port &ip_port);
 	void job_restore_cluster(cJSON *root);
 
+	bool job_get_status(cJSON *root, std::string &str_ret);
+	bool job_handle_ahead(const std::string &para, std::string &str_ret);
 	void job_handle(std::string &job);
 	void add_job(std::string &str);
 	void job_work();

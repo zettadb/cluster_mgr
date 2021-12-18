@@ -1866,62 +1866,28 @@ int MetadataShard::get_server_nodes_from_metadata(std::vector<Tpye_Ip_Paths> &ve
   @retval 0 succeed;
   		  1 fail;
 */
-int MetadataShard::get_backup_info_from_metadata(std::string &backup_id, std::string &cluster_name, 
-										std::string &timestamp, std::vector<std::string> &vec_shard)
+int MetadataShard::get_backup_info_from_metadata(std::string &backup_id, std::string &cluster_name, std::string &timestamp, int &shards)
 {
 	Scopped_mutex sm(mtx);
 
 	if(cur_master == NULL)
 		return 1;
 
-	std::string str_sql  = "select cluster_name,shards_name,when_created from cluster_backups where id=" + backup_id;
+	std::string str_sql  = "select cluster_name,shards,when_created from cluster_backups where id=" + backup_id;
 	int ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
-	if (ret)
-		return 1;
-
-	MYSQL_RES *result = cur_master->get_result();
-	MYSQL_ROW row;
-
-	cJSON *root;
-	cJSON *item;
-	cJSON *item_sub;
-
-	if ((row = mysql_fetch_row(result)))
+	if (ret==0)
 	{
-		cluster_name = row[0];
-		timestamp = row[2];
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
 
-		root = cJSON_Parse(row[1]);
-		if(root != NULL)
+		if ((row = mysql_fetch_row(result)))
 		{
-			int shards = cJSON_GetArraySize(root);
-			for(int i=0; i<shards; i++)
-			{
-				item_sub = cJSON_GetArrayItem(root, i);
-				if(item_sub == NULL)
-				{
-					syslog(Logger::ERROR, "get sub node error");
-					ret = 1;
-					break;
-				}
-
-				item = cJSON_GetObjectItem(item_sub, "name");
-				if(item == NULL)
-				{
-					syslog(Logger::ERROR, "get sub name error");
-					ret = 1;
-					break;
-				}
-				vec_shard.push_back(std::string(item->valuestring));
-			}
+			cluster_name = row[0];
+			shards = atoi(row[1]);
+			timestamp = row[2];
 		}
-		else
-		{
-			syslog(Logger::ERROR, "cJSON_Parse error");	
-			ret = 1;
-		}
+		cur_master->free_mysql_result();
 	}
-	cur_master->free_mysql_result();
 
 	return ret;
 }

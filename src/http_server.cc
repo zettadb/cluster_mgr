@@ -510,7 +510,7 @@ void Http_server::Http_server_handle_post_para(int &socket, char* buf, int len)
 
 	//get para type
 	std::string str_ret;
-	bool ret = Job::get_instance()->http_para_cmd(para, str_ret);
+	bool ret = Job::get_instance()->job_handle_ahead(para, str_ret);
 	
 	if(ret)
 	{

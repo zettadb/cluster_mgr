@@ -11,7 +11,7 @@
 #include "global.h"
 #include "shard.h"
 #include "log.h"
-#include "node_info.h"
+#include "machine_info.h"
 
 #include <atomic>
 #include <set>
@@ -551,8 +551,7 @@ public:
 	int execute_metadate_opertation(enum_sql_command command, const std::string & str_sql);
 	int delete_cluster_from_metadata(const std::string & cluster_name);
 	int get_server_nodes_from_metadata(std::vector<Tpye_Ip_Paths> &vec_ip_paths);
-	int get_backup_info_from_metadata(std::string &backup_id, std::string &cluster_name, 
-										std::string &timestamp, std::vector<std::string> &vec_shard);
+	int get_backup_info_from_metadata(std::string &backup_id, std::string &cluster_name, std::string &timestamp, int &shards);
 };
 
 #endif // !SHARD_H

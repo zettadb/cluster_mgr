@@ -296,7 +296,8 @@ void Thread::run()
 	pid_t tid = gettid();
 	while (!Thread_manager::do_exit)
 	{
-		if (System::get_instance()->acquire_shard(this, decr_kicks()) && cur_shard)
+		if (System::get_instance()->get_cluster_mgr_working() &&
+			System::get_instance()->acquire_shard(this, decr_kicks()) && cur_shard)
 		{
 			syslog(Logger::LOG, "Thread (%p, %d) starts working on shard (%s.%s, %u)",
 				this, tid, cur_shard->get_cluster_name().c_str(),
@@ -333,13 +334,16 @@ extern "C" void *thread_func_storage_sync(void*thrdarg)
 
 	while (!Thread_manager::do_exit)
 	{
-		System::get_instance()->refresh_storages_info_to_computers();
-		System::get_instance()->refresh_storages_info_to_computers_metashard();
-
-		if(commit_log_count++ >= commit_log_count_max)
+		if(System::get_instance()->get_cluster_mgr_working())
 		{
-			commit_log_count = 0;
-			System::get_instance()->truncate_commit_log_from_metadata_server();
+			System::get_instance()->refresh_storages_info_to_computers();
+			System::get_instance()->refresh_storages_info_to_computers_metashard();
+
+			if(commit_log_count++ >= commit_log_count_max)
+			{
+				commit_log_count = 0;
+				System::get_instance()->truncate_commit_log_from_metadata_server();
+			}
 		}
 
 		Thread_manager::get_instance()->sleep_wait(thd, storage_sync_interval * 1000);

@@ -10,7 +10,7 @@
 #include "job.h"
 #include "log.h"
 #include "sys.h"
-#include "node_info.h"
+#include "shard.h"
 #include "http_client.h"
 #include "hdfs_client.h"
 #include "mysql/server/private/sql_cmd.h"
@@ -99,577 +99,6 @@ void Job::join_all()
 	}
 }
 
-void Job::get_local_ip()
-{
-	int fd, num;
-	struct ifreq ifq[16];
-	struct ifconf ifc;
-
-	fd = socket(AF_INET, SOCK_DGRAM, 0);
-	if(fd < 0)
-	{
-		syslog(Logger::ERROR, "socket failed");
-		return ;
-	}
-	
-	ifc.ifc_len = sizeof(ifq);
-	ifc.ifc_buf = (caddr_t)ifq;
-	if(ioctl(fd, SIOCGIFCONF, (char *)&ifc))
-	{
-		syslog(Logger::ERROR, "ioctl failed\n");
-		close(fd);
-		return ;
-	}
-	num = ifc.ifc_len / sizeof(struct ifreq);
-	if(ioctl(fd, SIOCGIFADDR, (char *)&ifq[num-1]))
-	{
-		syslog(Logger::ERROR, "ioctl failed\n");
-		close(fd);
-		return ;
-	}
-	close(fd);
-
-	for(int i=0; i<num; i++)
-	{
-		char *tmp_ip = inet_ntoa(((struct sockaddr_in*)(&ifq[i].ifr_addr))-> sin_addr);
-		//syslog(Logger::INFO, "tmp_ip=%s", tmp_ip);
-		//if(strcmp(tmp_ip, "127.0.0.1") != 0)
-		{
-			vec_local_ip.push_back(tmp_ip);
-		}
-	}
-
-	//for(auto &ip: vec_local_ip)
-	//	syslog(Logger::INFO, "vec_local_ip=%s", ip.c_str());
-}
-
-bool Job::check_local_ip(std::string &ip)
-{
-	for(auto &local_ip: vec_local_ip)
-		if(ip == local_ip)
-			return true;
-	
-	return false;
-}
-
-bool Job::http_para_cmd(const std::string &para, std::string &str_ret)
-{
-	bool ret = false;
-	cJSON *root;
-	cJSON *item;
-	Job_type job_type;
-
-	root = cJSON_Parse(para.c_str());
-	if(root == NULL)
-	{
-		syslog(Logger::ERROR, "cJSON_Parse error");	
-		goto end;
-	}
-
-	item = cJSON_GetObjectItem(root, "job_type");
-	if(item == NULL || !Job::get_instance()->get_job_type(item->valuestring, job_type))
-	{
-		syslog(Logger::ERROR, "http_para_cmd get_job_type error");
-		goto end;
-	}
-
-	if(job_type == JOB_GET_NODE)
-	{
-		ret = get_node_instance(root, str_ret);
-	}
-	else if(job_type == JOB_GET_STATUS)
-	{
-		ret = get_job_status(root, str_ret);
-	}
-	else if(job_type == JOB_CHECK_PORT)
-	{
-		ret = check_port_used(root, str_ret);
-	}
-	else if(job_type == JOB_GET_DISK_SIZE)
-	{
-		ret = get_disk_size(root, str_ret);
-	}
-	else if(job_type == JOB_CREATE_MACHINE)
-	{
-		ret = job_create_machine(root, str_ret);
-	}
-	else if(job_type == JOB_UPDATE_MACHINE)
-	{
-		ret = job_update_machine(root, str_ret);
-	}
-	else if(job_type == JOB_DELETE_MACHINE)
-	{
-		ret = job_delete_machine(root, str_ret);
-	}
-	else
-	{
-		if(job_type == JOB_CREATE_CLUSTER
-			|| job_type == JOB_DELETE_CLUSTER
-			|| job_type == JOB_BACKUP_CLUSTER
-			|| job_type == JOB_RESTORE_CLUSTER)
-		{
-			std::string info;
-			get_operation_status(info);
-			if(info.length() > 0)
-			{
-				str_ret = "{\"result\":\"busy\",\"info\":\"" + info + "\"}";
-				return true;
-			}
-		}
-		else
-			ret = false;
-	}
-
-end:
-	if(root != NULL)
-		cJSON_Delete(root);
-
-	return ret;
-}
-
-bool Job::get_job_status(cJSON *root, std::string &str_ret)
-{
-	std::string job_id, result, info;
-
-	cJSON *item = cJSON_GetObjectItem(root, "job_id");
-	if(item == NULL)
-	{
-		syslog(Logger::ERROR, "get_job_id error");
-		return false;
-	}
-	job_id = item->valuestring;
-	
-	if(!Job::get_instance()->get_jobid_status(job_id, result, info))
-		str_ret = "{\"result\":\"error\",\"info\":\"job id no find\"}";
-	else
-	{
-		cJSON *root;
-		char *cjson;
-
-		root = cJSON_CreateObject();
-		cJSON_AddStringToObject(root, "result", result.c_str());
-		cJSON_AddStringToObject(root, "info", info.c_str());
-
-		cjson = cJSON_Print(root);
-		str_ret = cjson;
-		cJSON_Delete(root);
-		free(cjson);
-	}
-
-	return true;
-}
-
-bool Job::check_cluster_name(std::string &cluster_name)
-{
-	Scopped_mutex sm(System::get_instance()->mtx);
-
-	//storage node
-	for (auto &cluster:System::get_instance()->kl_clusters)
-	{
-		if(cluster->get_name() == cluster_name)
-			return true;
-	}
-
-	return false;
-}
-
-bool Job::get_meta_info(std::vector<Tpye_Ip_Port_User_Pwd> &meta)
-{
-	Scopped_mutex sm(System::get_instance()->mtx);
-	
-	for(auto &node: System::get_instance()->get_MetadataShard()->get_nodes())
-	{
-		std::string ip,user,pwd;
-		int port;
-		
-		node->get_ip_port(ip, port);
-		node->get_user_pwd(user, pwd);
-
-		meta.push_back(std::make_tuple(ip, port, user, pwd));
-	}
-
-	return (meta.size()>0);
-}
-
-bool Job::get_node_instance_port(Node* node_machine)
-{
-	Scopped_mutex sm(System::get_instance()->mtx);
-
-	std::string ip;
-	int port;
-
-	node_machine->instances = 0;
-	node_machine->instance_storage = 0;
-	node_machine->instance_computer = 0;
-	node_machine->port_storage = 0;
-	node_machine->port_computer = 0;
-
-	//meta node
-	for(auto &node: System::get_instance()->get_MetadataShard()->get_nodes())
-	{
-		node->get_ip_port(ip, port);
-		if(ip == node_machine->ip)
-			node_machine->instance_storage++;
-	}
-
-	//storage node
-	for (auto &cluster:System::get_instance()->kl_clusters)
-		for (auto &shard:cluster->storage_shards)
-			for (auto &node:shard->get_nodes())
-			{
-				node->get_ip_port(ip, port);
-				if(ip == node_machine->ip)
-				{
-					node_machine->instance_storage++;
-					if(port > node_machine->port_storage)
-						node_machine->port_storage = port;
-				}
-			}
-
-	//computer node
-	for (auto &cluster:System::get_instance()->kl_clusters)
-		for (auto &node:cluster->computer_nodes)
-		{
-			node->get_ip_port(ip, port);
-			if(ip == node_machine->ip)
-			{
-				node_machine->instance_computer++;
-				if(port > node_machine->port_computer)
-					node_machine->port_computer = port;
-			}
-		}
-
-	node_machine->instances = node_machine->instance_storage + node_machine->instance_computer;
-
-	if(node_machine->port_storage < storage_instance_port_start)
-		node_machine->port_storage = storage_instance_port_start;
-	else
-		node_machine->port_storage += 3;
-
-	if(node_machine->port_computer < computer_instance_port_start)
-		node_machine->port_computer = computer_instance_port_start;
-	else
-		node_machine->port_computer += 1;
-
-	return true;
-}
-
-bool Job::get_node_instance(cJSON *root, std::string &str_ret)
-{
-	Scopped_mutex sm(System::get_instance()->mtx);
-	
-	bool ret = false;
-	int node_count = 0;
-	cJSON *item;
-
-	std::vector<std::string> vec_node_ip;
-	int ip_count = 0;
-	while(true)
-	{
-		std::string node_ip = "node_ip" + std::to_string(ip_count++);
-		item = cJSON_GetObjectItem(root, node_ip.c_str());
-		if(item == NULL)
-			break;
-
-		vec_node_ip.push_back(item->valuestring);
-	}
-	
-	item = cJSON_GetObjectItem(root, "node_type");
-	if(item == NULL)
-	{
-		cJSON *ret_root;
-		cJSON *ret_item;
-		char *ret_cjson;
-		ret_root = cJSON_CreateObject();
-
-		//meta node
-		node_count = 0;
-		for(auto &node: System::get_instance()->get_MetadataShard()->get_nodes())
-		{
-			std::string ip;
-			int port;
-
-			node->get_ip_port(ip, port);
-
-			bool ip_match = (vec_node_ip.size() == 0);
-			for(auto &node_ip: vec_node_ip)
-			{
-				if(ip == node_ip)
-				{
-					ip_match = true;
-					break;
-				}
-			}
-
-			if(!ip_match)
-				continue;
-
-			std::string user,pwd;
-			node->get_user_pwd(user, pwd);
-
-			std::string str;
-			ret_item = cJSON_CreateObject();
-			str = "meta_node" + std::to_string(node_count++);
-			cJSON_AddItemToObject(ret_root, str.c_str(), ret_item);
-			
-			cJSON_AddStringToObject(ret_item, "ip", ip.c_str());
-			cJSON_AddNumberToObject(ret_item, "port", port);
-			cJSON_AddStringToObject(ret_item, "user", user.c_str());
-			cJSON_AddStringToObject(ret_item, "pwd", pwd.c_str());
-		}
-
-		//storage node
-		node_count = 0;
-		for (auto &cluster:System::get_instance()->kl_clusters)
-			for (auto &shard:cluster->storage_shards)
-				for (auto &node:shard->get_nodes())
-		{
-			std::string ip;
-			int port;
-
-			node->get_ip_port(ip, port);
-
-			bool ip_match = (vec_node_ip.size() == 0);
-			for(auto &node_ip: vec_node_ip)
-			{
-				if(ip == node_ip)
-				{
-					ip_match = true;
-					break;
-				}
-			}
-
-			if(!ip_match)
-				continue;
-
-			std::string user,pwd;
-			node->get_user_pwd(user, pwd);
-
-			std::string str;
-			ret_item = cJSON_CreateObject();
-			str = "storage_node" + std::to_string(node_count++);
-			cJSON_AddItemToObject(ret_root, str.c_str(), ret_item);
-			
-			cJSON_AddStringToObject(ret_item, "ip", ip.c_str());
-			cJSON_AddNumberToObject(ret_item, "port", port);
-			cJSON_AddStringToObject(ret_item, "user", user.c_str());
-			cJSON_AddStringToObject(ret_item, "pwd", pwd.c_str());
-			cJSON_AddStringToObject(ret_item, "cluster", cluster->get_name().c_str());
-			cJSON_AddStringToObject(ret_item, "shard", shard->get_name().c_str());
-		}
-
-		//computer node
-		node_count = 0;
-		for (auto &cluster:System::get_instance()->kl_clusters)
-			for (auto &node:cluster->computer_nodes)
-		{
-			std::string ip;
-			int port;
-		
-			node->get_ip_port(ip, port);
-		
-			bool ip_match = (vec_node_ip.size() == 0);
-			for(auto &node_ip: vec_node_ip)
-			{
-				if(ip == node_ip)
-				{
-					ip_match = true;
-					break;
-				}
-			}
-		
-			if(!ip_match)
-				continue;
-		
-			std::string user,pwd;
-			node->get_user_pwd(user, pwd);
-		
-			std::string str;
-			ret_item = cJSON_CreateObject();
-			str = "computer_node" + std::to_string(node_count++);
-			cJSON_AddItemToObject(ret_root, str.c_str(), ret_item);
-			
-			cJSON_AddStringToObject(ret_item, "ip", ip.c_str());
-			cJSON_AddNumberToObject(ret_item, "port", port);
-			cJSON_AddStringToObject(ret_item, "user", user.c_str());
-			cJSON_AddStringToObject(ret_item, "pwd", pwd.c_str());
-			cJSON_AddStringToObject(ret_item, "cluster", cluster->get_name().c_str());
-		}
-
-		ret_cjson = cJSON_Print(ret_root);
-		str_ret = ret_cjson;
-
-		if(ret_root != NULL)
-			cJSON_Delete(ret_root);
-		if(ret_cjson != NULL)
-			free(ret_cjson);
-	
-		return true;
-	}
-
-	if(strcmp(item->valuestring, "meta_node") == 0)
-	{
-		cJSON *ret_root;
-		cJSON *ret_item;
-		char *ret_cjson;
-		ret_root = cJSON_CreateObject();
-		
-		for(auto &node: System::get_instance()->get_MetadataShard()->get_nodes())
-		{
-			std::string ip;
-			int port;
-
-			node->get_ip_port(ip, port);
-
-			bool ip_match = (vec_node_ip.size() == 0);
-			for(auto &node_ip: vec_node_ip)
-			{
-				if(ip == node_ip)
-				{
-					ip_match = true;
-					break;
-				}
-			}
-
-			if(!ip_match)
-				continue;
-
-			std::string user,pwd;
-			node->get_user_pwd(user, pwd);
-
-			std::string str;
-			ret_item = cJSON_CreateObject();
-			str = "meta_node" + std::to_string(node_count++);
-			cJSON_AddItemToObject(ret_root, str.c_str(), ret_item);
-			
-			cJSON_AddStringToObject(ret_item, "ip", ip.c_str());
-			cJSON_AddNumberToObject(ret_item, "port", port);
-			cJSON_AddStringToObject(ret_item, "user", user.c_str());
-			cJSON_AddStringToObject(ret_item, "pwd", pwd.c_str());
-		}
-
-		ret_cjson = cJSON_Print(ret_root);
-		str_ret = ret_cjson;
-
-		if(ret_root != NULL)
-			cJSON_Delete(ret_root);
-		if(ret_cjson != NULL)
-			free(ret_cjson);
-
-		ret = true;
-	}
-	else if(strcmp(item->valuestring, "storage_node") == 0)
-	{
-		cJSON *ret_root;
-		cJSON *ret_item;
-		char *ret_cjson;
-		ret_root = cJSON_CreateObject();
-
-		for (auto &cluster:System::get_instance()->kl_clusters)
-			for (auto &shard:cluster->storage_shards)
-				for (auto &node:shard->get_nodes())
-		{
-			std::string ip;
-			int port;
-
-			node->get_ip_port(ip, port);
-
-			bool ip_match = (vec_node_ip.size() == 0);
-			for(auto &node_ip: vec_node_ip)
-			{
-				if(ip == node_ip)
-				{
-					ip_match = true;
-					break;
-				}
-			}
-
-			if(!ip_match)
-				continue;
-
-			std::string user,pwd;
-			node->get_user_pwd(user, pwd);
-
-			std::string str;
-			ret_item = cJSON_CreateObject();
-			str = "storage_node" + std::to_string(node_count++);
-			cJSON_AddItemToObject(ret_root, str.c_str(), ret_item);
-			
-			cJSON_AddStringToObject(ret_item, "ip", ip.c_str());
-			cJSON_AddNumberToObject(ret_item, "port", port);
-			cJSON_AddStringToObject(ret_item, "user", user.c_str());
-			cJSON_AddStringToObject(ret_item, "pwd", pwd.c_str());
-			cJSON_AddStringToObject(ret_item, "cluster", cluster->get_name().c_str());
-			cJSON_AddStringToObject(ret_item, "shard", shard->get_name().c_str());
-		}
-
-		ret_cjson = cJSON_Print(ret_root);
-		str_ret = ret_cjson;
-
-		if(ret_root != NULL)
-			cJSON_Delete(ret_root);
-		if(ret_cjson != NULL)
-			free(ret_cjson);
-
-		ret = true;
-	}
-	else if(strcmp(item->valuestring, "computer_node") == 0)
-	{
-		cJSON *ret_root;
-		cJSON *ret_item;
-		char *ret_cjson;
-		ret_root = cJSON_CreateObject();
-
-		for (auto &cluster:System::get_instance()->kl_clusters)
-			for (auto &node:cluster->computer_nodes)
-		{
-			std::string ip;
-			int port;
-
-			node->get_ip_port(ip, port);
-
-			bool ip_match = (vec_node_ip.size() == 0);
-			for(auto &node_ip: vec_node_ip)
-			{
-				if(ip == node_ip)
-				{
-					ip_match = true;
-					break;
-				}
-			}
-
-			if(!ip_match)
-				continue;
-
-			std::string user,pwd;
-			node->get_user_pwd(user, pwd);
-
-			std::string str;
-			ret_item = cJSON_CreateObject();
-			str = "computer_node" + std::to_string(node_count++);
-			cJSON_AddItemToObject(ret_root, str.c_str(), ret_item);
-			
-			cJSON_AddStringToObject(ret_item, "ip", ip.c_str());
-			cJSON_AddNumberToObject(ret_item, "port", port);
-			cJSON_AddStringToObject(ret_item, "user", user.c_str());
-			cJSON_AddStringToObject(ret_item, "pwd", pwd.c_str());
-			cJSON_AddStringToObject(ret_item, "cluster", cluster->get_name().c_str());
-		}
-
-		ret_cjson = cJSON_Print(ret_root);
-		str_ret = ret_cjson;
-
-		if(ret_root != NULL)
-			cJSON_Delete(ret_root);
-		if(ret_cjson != NULL)
-			free(ret_cjson);
-
-		ret = true;
-	}
-	
-	return ret;
-}
-
 void Job::notify_node_update(std::set<std::string> &alterant_node_ip, int type)
 {
 	return;
@@ -697,54 +126,6 @@ void Job::notify_node_update(std::set<std::string> &alterant_node_ip, int type)
 		int ret = Http_client::get_instance()->Http_client_post_para(post_url.c_str(), cjson, result_str);
 		free(cjson);
 	}
-}
-
-bool Job::check_port_used(cJSON *root, std::string &str_ret)
-{
-	cJSON *item;
-
-	std::string ip;
-	int port;
-	item = cJSON_GetObjectItem(root, "ip");
-	if(item == NULL)
-	{
-		syslog(Logger::ERROR, "get ip error");
-		return false;
-	}
-	ip = item->valuestring;
-	
-	item = cJSON_GetObjectItem(root, "port");
-	if(item == NULL)
-	{
-		syslog(Logger::ERROR, "get port error");
-		return false;
-	}
-	port = item->valueint;
-
-	////////////////////////////////////////////////
-	// check port used by socket connect
-	int socket_fd = Http_client::get_instance()->Http_client_socket(ip.c_str(), port);
-	if(socket_fd > 0)
-	{
-		close(socket_fd);
-		str_ret = "{\"port\":\"used\"}";
-		return true;
-	}
-
-	////////////////////////////////////////////////
-	// check port used by metadata tables
-	{
-		Scopped_mutex sm(System::get_instance()->mtx);
-		if(System::get_instance()->get_MetadataShard()->check_port_used(ip, port))
-		{
-			str_ret = "{\"port\":\"used\"}";
-			return true;
-		}
-	}
-
-	////////////////////////////////////////////////
-	str_ret = "{\"port\":\"unused\"}";
-	return true;
 }
 
 bool Job::get_disk_size(cJSON *root, std::string &str_ret)
@@ -912,13 +293,10 @@ bool Job::job_create_machine(cJSON *root, std::string &str_ret)
 			str_sql = "delete from server_nodes where hostaddr='" + hostaddr + "'";
 			syslog(Logger::INFO, "create_machine str_sql=%s", str_sql.c_str());
 			
+			if(System::get_instance()->execute_metadate_opertation(SQLCOM_INSERT, str_sql))
 			{
-				Scopped_mutex sm(System::get_instance()->mtx);
-				if(System::get_instance()->get_MetadataShard()->execute_metadate_opertation(SQLCOM_DELETE, str_sql))
-				{
-					job_status = "delete_machine error";
-					goto end;
-				}
+				job_status = "delete_machine error";
+				goto end;
 			}
 
 			//insert hostaddr to table
@@ -928,13 +306,10 @@ bool Job::job_create_machine(cJSON *root, std::string &str_ret)
 						+ std::to_string(comp_datadir_used) + ",NOW()";
 			syslog(Logger::INFO, "create_machine str_sql=%s", str_sql.c_str());
 			
+			if(System::get_instance()->execute_metadate_opertation(SQLCOM_INSERT, str_sql))
 			{
-				Scopped_mutex sm(System::get_instance()->mtx);
-				if(System::get_instance()->get_MetadataShard()->execute_metadate_opertation(SQLCOM_INSERT, str_sql))
-				{
-					job_status = "insert_machine error";
-					goto end;
-				}
+				job_status = "insert_machine error";
+				goto end;
 			}
 
 			cJSON_Delete(ret_root);
@@ -974,6 +349,59 @@ bool Job::job_update_machine(cJSON *root, std::string &str_ret)
 bool Job::job_delete_machine(cJSON *root, std::string &str_ret)
 {
 	return true;
+}
+
+bool Job::check_local_ip(std::string &ip)
+{
+	for(auto &local_ip: vec_local_ip)
+		if(ip == local_ip)
+			return true;
+	
+	return false;
+}
+
+void Job::get_local_ip()
+{
+	int fd, num;
+	struct ifreq ifq[16];
+	struct ifconf ifc;
+
+	fd = socket(AF_INET, SOCK_DGRAM, 0);
+	if(fd < 0)
+	{
+		syslog(Logger::ERROR, "socket failed");
+		return ;
+	}
+	
+	ifc.ifc_len = sizeof(ifq);
+	ifc.ifc_buf = (caddr_t)ifq;
+	if(ioctl(fd, SIOCGIFCONF, (char *)&ifc))
+	{
+		syslog(Logger::ERROR, "ioctl failed\n");
+		close(fd);
+		return ;
+	}
+	num = ifc.ifc_len / sizeof(struct ifreq);
+	if(ioctl(fd, SIOCGIFADDR, (char *)&ifq[num-1]))
+	{
+		syslog(Logger::ERROR, "ioctl failed\n");
+		close(fd);
+		return ;
+	}
+	close(fd);
+
+	for(int i=0; i<num; i++)
+	{
+		char *tmp_ip = inet_ntoa(((struct sockaddr_in*)(&ifq[i].ifr_addr))-> sin_addr);
+		//syslog(Logger::INFO, "tmp_ip=%s", tmp_ip);
+		//if(strcmp(tmp_ip, "127.0.0.1") != 0)
+		{
+			vec_local_ip.push_back(tmp_ip);
+		}
+	}
+
+	//for(auto &ip: vec_local_ip)
+	//	syslog(Logger::INFO, "vec_local_ip=%s", ip.c_str());
 }
 
 bool Job::get_uuid(std::string &uuid)
@@ -1168,13 +596,10 @@ bool Job::job_insert_operation_record(cJSON *root, std::string &result, std::str
 	str_sql = "delete from operation_record where job_id='" + job_id + "'";
 	//syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
 	
+	if(System::get_instance()->execute_metadate_opertation(SQLCOM_INSERT, str_sql))
 	{
-		Scopped_mutex sm(System::get_instance()->mtx);
-		if(System::get_instance()->get_MetadataShard()->execute_metadate_opertation(SQLCOM_DELETE, str_sql))
-		{
-			syslog(Logger::ERROR, "delete_operation_record error");
-			return false;
-		}
+		syslog(Logger::ERROR, "delete_operation_record error");
+		return false;
 	}
 
 	cjson = cJSON_Print(root);
@@ -1186,13 +611,10 @@ bool Job::job_insert_operation_record(cJSON *root, std::string &result, std::str
 	//syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
 	free(cjson);
 
+	if(System::get_instance()->execute_metadate_opertation(SQLCOM_INSERT, str_sql))
 	{
-		Scopped_mutex sm(System::get_instance()->mtx);
-		if(System::get_instance()->get_MetadataShard()->execute_metadate_opertation(SQLCOM_INSERT, str_sql))
-		{
-			syslog(Logger::ERROR, "insert operation_record error");
-			return false;
-		}
+		syslog(Logger::ERROR, "insert operation_record error");
+		return false;
 	}
 
 	return true;
@@ -1211,15 +633,13 @@ bool Job::job_update_operation_record(std::string &job_id, std::string &result, 
 	str_sql = "UPDATE operation_record set result='" + result + "',info='" + info + "' where job_id='" + job_id + "'";
 	//syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
 
+	if(System::get_instance()->execute_metadate_opertation(SQLCOM_UPDATE, str_sql))
 	{
-		Scopped_mutex sm(System::get_instance()->mtx);
-		if(System::get_instance()->get_MetadataShard()->execute_metadate_opertation(SQLCOM_UPDATE, str_sql))
-		{
-			syslog(Logger::ERROR, "update operation_record error");
-			return false;
-		}
+		syslog(Logger::ERROR, "update operation_record error");
+		return false;
+
 	}
-	
+
 	return true;
 }
 
@@ -1321,7 +741,7 @@ bool Job::job_create_program_path()
 	return true;
 }
 
-bool Job::job_create_shard(std::vector<Tpye_Ip_Port_Paths> &storages, std::string &cluster_name, int shards_id)
+bool Job::job_create_shard(std::vector<Tpye_Ip_Port_Paths> &storages, std::string &cluster_name, std::string &ha_mode, int shards_id)
 {
 	cJSON *root = NULL;
 	char *cjson = NULL;
@@ -1342,6 +762,7 @@ bool Job::job_create_shard(std::vector<Tpye_Ip_Port_Paths> &storages, std::strin
 	cJSON_AddStringToObject(root, "ver", http_cmd_version.c_str());
 	cJSON_AddStringToObject(root, "job_id", uuid_job_id.c_str());
 	cJSON_AddStringToObject(root, "job_type", "install_storage");
+	cJSON_AddStringToObject(root, "ha_mode", ha_mode.c_str());
 	cJSON_AddNumberToObject(root, "install_id", install_id);
 	cJSON_AddStringToObject(root, "group_uuid", uuid_shard.c_str());
 	item_node = cJSON_CreateArray();
@@ -1654,7 +1075,7 @@ end:
 	return ret;
 }
 
-bool Job::job_start_cluster(std::vector <std::vector<Tpye_Ip_Port_Paths>> &vec_shard, std::string &cluster_name)
+bool Job::job_start_cluster(std::vector <std::vector<Tpye_Ip_Port_Paths>> &vec_shard, std::string &cluster_name, std::string &ha_mode)
 {
 	cJSON *root = NULL;
 	char *cjson = NULL;
@@ -1709,7 +1130,7 @@ bool Job::job_start_cluster(std::vector <std::vector<Tpye_Ip_Port_Paths>> &vec_s
 	/////////////////////////////////////////////////////////
 	//create meta json
 	std::vector<Tpye_Ip_Port_User_Pwd> meta;
-	if(!get_meta_info(meta))
+	if(!System::get_instance()->get_meta_info(meta))
 	{
 		syslog(Logger::ERROR, "get_meta_info error");
 		return false;
@@ -1742,13 +1163,13 @@ bool Job::job_start_cluster(std::vector <std::vector<Tpye_Ip_Port_Paths>> &vec_s
 	// start cluster cmd
 	cmd = "cd " + instance_binaries_path + "/" + computer_prog_package_name + "/scripts/;";
 	cmd += "python2 create_cluster.py --shards_config ./pgsql_shards.json --comps_config ./pgsql_comps.json --meta_config ./pgsql_meta.json --cluster_name ";
-	cmd += cluster_name + " --cluster_owner abc --cluster_biz kunlun";
+	cmd += cluster_name + " --cluster_owner abc --cluster_biz kunlun --ha_mode " + ha_mode;
 	syslog(Logger::INFO, "job_start_cluster cmd %s", cmd.c_str());
 
 	pfd = popen(cmd.c_str(), "r");
 	if(!pfd)
 	{
-		syslog(Logger::ERROR, "install error %s", cmd);
+		syslog(Logger::ERROR, "install error %s", cmd.c_str());
 		return false;
 	}
 	while(fgets(buf, 256, pfd)!=NULL)
@@ -1764,7 +1185,7 @@ bool Job::job_start_cluster(std::vector <std::vector<Tpye_Ip_Port_Paths>> &vec_s
 	while(retry-->0 && !Job::do_exit)
 	{
 		sleep(1);
-		if(check_cluster_name(cluster_name))
+		if(System::get_instance()->check_cluster_name(cluster_name))
 			break;
 	}
 
@@ -1785,6 +1206,7 @@ void Job::job_create_cluster(cJSON *root)
 	std::string job_result;
 	std::string job_info;
 	std::string cluster_name;
+	std::string ha_mode;
 	std::string cmd;
 	cJSON *item;
 
@@ -1810,6 +1232,14 @@ void Job::job_create_cluster(cJSON *root)
 	syslog(Logger::INFO, "%s", job_info.c_str());
 	job_insert_operation_record(root, job_result, job_info);
 
+	item = cJSON_GetObjectItem(root, "ha_mode");
+	if(item == NULL)
+	{
+		job_info = "get ha_mode error";
+		goto end;
+	}
+	ha_mode = item->valuestring;
+
 	item = cJSON_GetObjectItem(root, "shards");
 	if(item == NULL)
 	{
@@ -1830,9 +1260,25 @@ void Job::job_create_cluster(cJSON *root)
 		goto end;
 	}
 	nodes = item->valueint;
-	if(nodes<1 || nodes>3)
+	if(ha_mode == "mgr")
 	{
-		job_info = "nodes(1-3) error";
+		if(nodes<3 || nodes>10)
+		{
+			job_info = "error, nodes>=3 && nodes<=10 in mgr mode";
+			goto end;
+		}
+	}
+	else if(ha_mode == "no_rep")
+	{
+		if(nodes!=1)
+		{
+			job_info = "error, nodes=1 in no_rep mode";
+			goto end;
+		}
+	}
+	else
+	{
+		job_info = "it is not support " + ha_mode;
 		goto end;
 	}
 
@@ -1856,15 +1302,15 @@ void Job::job_create_cluster(cJSON *root)
 		goto end;
 	}
 	cluster_name = item->valuestring;
-	if(check_cluster_name(cluster_name))
+	if(System::get_instance()->check_cluster_name(cluster_name))
 	{
 		job_info = "cluster_name is exist, error";
 		goto end;
 	}
 
-	if(!Node_info::get_instance()->update_nodes_info())
+	if(!Machine_info::get_instance()->update_machine_info())
 	{
-		job_info = "Node_info update_nodes_info() error";
+		job_info = "Machine_info update_machine_info() error";
 		goto end;
 	}
 
@@ -1889,9 +1335,9 @@ void Job::job_create_cluster(cJSON *root)
 	for(int i=0; i<shards; i++)
 	{
 		std::vector<Tpye_Ip_Port_Paths> vec_storage_ip_port_paths;
-		if(!Node_info::get_instance()->get_storage_nodes(nodes, vec_storage_ip_port_paths))
+		if(!Machine_info::get_instance()->get_storage_nodes(nodes, vec_storage_ip_port_paths))
 		{
-			job_info = "Node_info get_storage_nodes error";
+			job_info = "Machine_info get_storage_nodes error";
 			goto end;
 		}
 		vec_shard_storage_ip_port_paths.push_back(vec_storage_ip_port_paths);
@@ -1899,15 +1345,15 @@ void Job::job_create_cluster(cJSON *root)
 
 	///////////////////////////////////////////////////////////////////////////////
 	// get computer 
-	if(!Node_info::get_instance()->get_computer_nodes(comps, vec_comps_ip_port_paths))
+	if(!Machine_info::get_instance()->get_computer_nodes(comps, vec_comps_ip_port_paths))
 	{
-		job_info = "Node_info get_computer_nodes error";
+		job_info = "Machine_info get_computer_nodes error";
 		goto end;
 	}
 
 	///////////////////////////////////////////////////////////////////////////////
 	// get start index for shards and comps 
-	System::get_instance()->get_MetadataShard()->get_comp_nodes_id_seq(comps_id);
+	System::get_instance()->get_comp_nodes_id_seq(comps_id);
 	//syslog(Logger::INFO, "comps_id=%d", comps_id);
 	shards_id = 1;
 	comps_id += 1;
@@ -1919,7 +1365,7 @@ void Job::job_create_cluster(cJSON *root)
 		job_info = "create shard " + std::to_string(shards_id) + " start";
 		update_jobid_status(job_id, job_result, job_info);
 		syslog(Logger::INFO, "%s", job_info.c_str());
-		if(!job_create_shard(storages, cluster_name, shards_id++))
+		if(!job_create_shard(storages, cluster_name, ha_mode, shards_id++))
 		{
 			job_info = "create_shard error";
 			goto end;
@@ -1942,7 +1388,7 @@ void Job::job_create_cluster(cJSON *root)
 	job_info = "start cluster cmd";
 	update_jobid_status(job_id, job_result, job_info);
 	syslog(Logger::INFO, "%s", job_info.c_str());
-	if(!job_start_cluster(vec_shard_storage_ip_port_paths, cluster_name))
+	if(!job_start_cluster(vec_shard_storage_ip_port_paths, cluster_name, ha_mode))
 	{
 		job_info = "start_cluster error";
 		goto end;
@@ -2202,66 +1648,6 @@ end:
 	return ret;
 }
 
-bool Job::job_stop_cluster(std::vector <std::vector<Tpye_Ip_Port>> &vec_shard, std::vector<Tpye_Ip_Port> &comps, std::string &cluster_name)
-{
-	Scopped_mutex sm(System::get_instance()->mtx);
-
-	for (auto cluster_it=System::get_instance()->kl_clusters.begin(); cluster_it!=System::get_instance()->kl_clusters.end(); )
-	{
-		if(cluster_name != (*cluster_it)->get_name())
-		{
-			cluster_it++;
-			continue;
-		}
-
-		//get ip and port, then remove storage and shard
-		for(auto shard_it=(*cluster_it)->storage_shards.begin(); shard_it!=(*cluster_it)->storage_shards.end(); )
-		{
-			std::vector<Tpye_Ip_Port> vec_storage_ip_port;
-			for(auto node_it=(*shard_it)->get_nodes().begin(); node_it!=(*shard_it)->get_nodes().end(); )
-			{
-				std::string ip;
-				int port;
-				(*node_it)->get_ip_port(ip, port);
-				vec_storage_ip_port.push_back(std::make_pair(ip, port));
-				
-				delete *node_it;
-				node_it = (*shard_it)->get_nodes().erase(node_it);
-			}
-			vec_shard.push_back(vec_storage_ip_port);
-			
-			delete *shard_it;
-			shard_it = (*cluster_it)->storage_shards.erase(shard_it);
-		}
-
-		//get ip and port, then remove computer
-		for(auto comp_it=(*cluster_it)->computer_nodes.begin(); comp_it!=(*cluster_it)->computer_nodes.end(); )
-		{
-			std::string ip;
-			int port;
-			(*comp_it)->get_ip_port(ip, port);
-			comps.push_back(std::make_pair(ip, port));
-
-			delete *comp_it;
-			comp_it = (*cluster_it)->computer_nodes.erase(comp_it);
-		}
-
-		//remove cluster
-		delete *cluster_it;
-		System::get_instance()->kl_clusters.erase(cluster_it);
-		
-		break;
-	}
-
-	if(System::get_instance()->get_MetadataShard()->delete_cluster_from_metadata(cluster_name))
-	{
-		syslog(Logger::ERROR, "delete_cluster_from_metadata error");
-		return false;
-	}
-
-	return true;
-}
-
 void Job::job_delete_cluster(cJSON *root)
 {
 	std::unique_lock<std::mutex> lock(mutex_operation_);
@@ -2297,7 +1683,7 @@ void Job::job_delete_cluster(cJSON *root)
 		goto end;
 	}
 	cluster_name = item->valuestring;
-	if(!check_cluster_name(cluster_name))
+	if(!System::get_instance()->check_cluster_name(cluster_name))
 	{
 		job_info = "cluster_name is no exist, error";
 		goto end;
@@ -2308,7 +1694,7 @@ void Job::job_delete_cluster(cJSON *root)
 	job_info = "stop cluster start";
 	update_jobid_status(job_id, job_result, job_info);
 	syslog(Logger::INFO, "%s", job_info.c_str());
-	if(!job_stop_cluster(vec_shard_storage_ip_port, vec_comps_ip_port, cluster_name))
+	if(!System::get_instance()->stop_cluster(vec_shard_storage_ip_port, vec_comps_ip_port, cluster_name))
 	{
 		job_info = "end_cluster error";
 		goto end;
@@ -2362,86 +1748,27 @@ end:
 	job_update_operation_record(job_id, job_result, job_info);
 }
 
-bool Job::job_get_shard_ip_port(std::string &cluster_name, std::vector<Tpye_Shard_Ip_Port> &vec_shard_ip_port)
-{
-	Scopped_mutex sm(System::get_instance()->mtx);
-
-	std::string shard_name;
-	std::string ip;
-	int port;
-
-	//storage node
-	for (auto &cluster:System::get_instance()->kl_clusters)
-	{
-		if(cluster_name != cluster->get_name())
-			continue;
-
-		for (auto &shard:cluster->storage_shards)
-		{
-			Shard_node *cur_master = shard->get_master();
-			if(cur_master != NULL)
-			{
-				cur_master->get_ip_port(ip, port);
-				shard_name = shard->get_name();
-				vec_shard_ip_port.push_back(std::make_tuple(shard_name, ip, port));
-			}
-			else
-			{
-				return false;
-			}
-		}
-
-		break;
-	}
-
-	return (vec_shard_ip_port.size()!=0);
-}
-
-bool Job::job_get_shards_name(std::string &shards_name, std::vector<Tpye_Shard_Ip_Port> &vec_shard_ip_port)
-{
-	cJSON *root = NULL;
-	cJSON *item_sub;
-	char *cjson = NULL;
-
-	/////////////////////////////////////////////////////////
-	// create json parameter
-	root = cJSON_CreateArray();
-	for(auto &shard_ip_port: vec_shard_ip_port)
-	{
-		item_sub = cJSON_CreateObject();
-		cJSON_AddItemToArray(root, item_sub);
-		cJSON_AddStringToObject(item_sub, "name", std::get<0>(shard_ip_port).c_str());
-	}
-
-	cjson = cJSON_Print(root);
-	//syslog(Logger::INFO, "cjson=%s",cjson);
-	shards_name = cjson;
-	cJSON_Delete(root);
-	free(cjson);
-
-	return true;
-}
-
-bool Job::job_backup_shard(std::string &cluster_name, Tpye_Shard_Ip_Port &shard_ip_port)
+bool Job::job_backup_shard(std::string &cluster_name, Tpye_Ip_Port &ip_port, int shard_id)
 {
 	cJSON *root = NULL;
 	char *cjson = NULL;
 
 	bool ret = false;
-	std::string uuid_job_id;
+	std::string shard_name,uuid_job_id;
 	std::string post_url,get_status,result_str;
 	get_uuid(uuid_job_id);
-	
+	shard_name = "shard" + std::to_string(shard_id);
+
 	/////////////////////////////////////////////////////////
 	// create json parameter
 	root = cJSON_CreateObject();
 	cJSON_AddStringToObject(root, "ver", http_cmd_version.c_str());
 	cJSON_AddStringToObject(root, "job_id", uuid_job_id.c_str());
 	cJSON_AddStringToObject(root, "job_type", "backup_shard");
-	cJSON_AddStringToObject(root, "ip", std::get<1>(shard_ip_port).c_str());
-	cJSON_AddNumberToObject(root, "port", std::get<2>(shard_ip_port));
+	cJSON_AddStringToObject(root, "ip", ip_port.first.c_str());
+	cJSON_AddNumberToObject(root, "port", ip_port.second);
 	cJSON_AddStringToObject(root, "cluster_name", cluster_name.c_str());
-	cJSON_AddStringToObject(root, "shard_name", std::get<0>(shard_ip_port).c_str());
+	cJSON_AddStringToObject(root, "shard_name", shard_name.c_str());
 	cJSON_AddStringToObject(root, "hdfs_ip", hdfs_server_ip.c_str());
 	cJSON_AddNumberToObject(root, "hdfs_port", hdfs_server_port);
 
@@ -2455,7 +1782,7 @@ bool Job::job_backup_shard(std::string &cluster_name, Tpye_Shard_Ip_Port &shard_
 
 	/////////////////////////////////////////////////////////
 	// http post parameter to node
-	post_url = "http://" + std::get<1>(shard_ip_port) + ":" + std::to_string(node_mgr_http_port);
+	post_url = "http://" + ip_port.first + ":" + std::to_string(node_mgr_http_port);
 	
 	int retry = 3;
 	while(retry-->0 && !Job::do_exit)
@@ -2521,10 +1848,7 @@ bool Job::job_backup_shard(std::string &cluster_name, Tpye_Shard_Ip_Port &shard_
 			}
 			else if(result == "succeed")
 			{
-				syslog(Logger::INFO, "backup %s:%s:%d finish!", 
-									std::get<0>(shard_ip_port).c_str(), 
-									std::get<1>(shard_ip_port).c_str(), 
-									std::get<2>(shard_ip_port));
+				syslog(Logger::INFO, "backup shard %d:%s:%d finish!", shard_id, ip_port.first.c_str(), ip_port.second);
 				break;
 			}
 		}
@@ -2556,9 +1880,10 @@ void Job::job_backup_cluster(cJSON *root)
 	std::string job_info;
 	std::string backup_cluster_name,backup_info;
 	std::string str_sql,timestamp,shards_name;
+	int shards_id = 0;
 	cJSON *item;
 
-	std::vector<Tpye_Shard_Ip_Port> vec_shard_ip_port;
+	std::vector<Tpye_Ip_Port> vec_ip_port;
 
 	item = cJSON_GetObjectItem(root, "job_id");
 	if(item == NULL)
@@ -2573,6 +1898,8 @@ void Job::job_backup_cluster(cJSON *root)
 	update_jobid_status(job_id, job_result, job_info);
 	syslog(Logger::INFO, "%s", job_info.c_str());
 	job_insert_operation_record(root, job_result, job_info);
+
+	System::get_instance()->set_cluster_mgr_working(false);
 
 	item = cJSON_GetObjectItem(root, "backup_info");
 	if(item == NULL)
@@ -2592,7 +1919,7 @@ void Job::job_backup_cluster(cJSON *root)
 
 	/////////////////////////////////////////////////////////
 	// get master node of erver shard
-	if(!job_get_shard_ip_port(backup_cluster_name, vec_shard_ip_port))
+	if(!System::get_instance()->get_shard_ip_port_backup(backup_cluster_name, vec_ip_port))
 	{
 		job_info = "get cluster_shard_ip_port error";
 		goto end;
@@ -2600,9 +1927,13 @@ void Job::job_backup_cluster(cJSON *root)
 
 	///////////////////////////////////////////////////////////////////////////////
 	// backup every shard
-	for(auto &shard_ip_port: vec_shard_ip_port)
+	for(auto &ip_port: vec_ip_port)
 	{
-		if(!job_backup_shard(backup_cluster_name, shard_ip_port))
+		shards_id++;
+		job_info = "backup shard " + std::to_string(shards_id) + " start";
+		update_jobid_status(job_id, job_result, job_info);
+		syslog(Logger::INFO, "%s", job_info.c_str());
+		if(!job_backup_shard(backup_cluster_name, ip_port, shards_id))
 		{
 			job_info = "job_backup_shard error";
 			goto end;
@@ -2612,18 +1943,14 @@ void Job::job_backup_cluster(cJSON *root)
 	///////////////////////////////////////////////////////////////////////////////
 	// save to metadata table
 	get_timestamp(timestamp);
-	job_get_shards_name(shards_name, vec_shard_ip_port);
-	str_sql = "INSERT INTO cluster_backups(backup_info,cluster_name,shards_name,when_created) VALUES('"
-				+ backup_info + "','" + backup_cluster_name + "','" + shards_name + "','" + timestamp + "')";
+	str_sql = "INSERT INTO cluster_backups(backup_info,cluster_name,shards,when_created) VALUES('"
+				+ backup_info + "','" + backup_cluster_name + "'," + std::to_string(shards_id) + ",'" + timestamp + "')";
 	syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
 
+	if(System::get_instance()->execute_metadate_opertation(SQLCOM_INSERT, str_sql))
 	{
-		Scopped_mutex sm(System::get_instance()->mtx);
-		if(System::get_instance()->get_MetadataShard()->execute_metadate_opertation(SQLCOM_INSERT, str_sql))
-		{
-			job_info = "insert cluster_backups error";
-			goto end;
-		}
+		job_info = "insert cluster_backups error";
+		goto end;
 	}
 
 	job_result = "succeed";
@@ -2631,6 +1958,7 @@ void Job::job_backup_cluster(cJSON *root)
 	update_jobid_status(job_id, job_result, job_info);
 	syslog(Logger::INFO, "%s", job_info.c_str());
 	job_update_operation_record(job_id, job_result, job_info);
+	System::get_instance()->set_cluster_mgr_working(true);
 	return;
 
 end:
@@ -2638,9 +1966,10 @@ end:
 	update_jobid_status(job_id, job_result, job_info);
 	syslog(Logger::INFO, "%s", job_info.c_str());
 	job_update_operation_record(job_id, job_result, job_info);
+	System::get_instance()->set_cluster_mgr_working(true);
 }
 
-bool Job::job_restore_shard(std::string &cluster_name, std::string &shard_name, std::string &timestamp, Tpye_Shard_Ip_Port &shard_ip_port)
+bool Job::job_restore_shard(std::string &cluster_name, std::string &shard_name, std::string &timestamp, Tpye_Ip_Port &ip_port)
 {
 	cJSON *root = NULL;
 	char *cjson = NULL;
@@ -2656,8 +1985,8 @@ bool Job::job_restore_shard(std::string &cluster_name, std::string &shard_name, 
 	cJSON_AddStringToObject(root, "ver", http_cmd_version.c_str());
 	cJSON_AddStringToObject(root, "job_id", uuid_job_id.c_str());
 	cJSON_AddStringToObject(root, "job_type", "restore_shard");
-	cJSON_AddStringToObject(root, "ip", std::get<1>(shard_ip_port).c_str());
-	cJSON_AddNumberToObject(root, "port", std::get<2>(shard_ip_port));
+	cJSON_AddStringToObject(root, "ip", ip_port.first.c_str());
+	cJSON_AddNumberToObject(root, "port", ip_port.second);
 	cJSON_AddStringToObject(root, "cluster_name", cluster_name.c_str());
 	cJSON_AddStringToObject(root, "shard_name", shard_name.c_str());
 	cJSON_AddStringToObject(root, "timestamp", timestamp.c_str());
@@ -2674,7 +2003,7 @@ bool Job::job_restore_shard(std::string &cluster_name, std::string &shard_name, 
 
 	/////////////////////////////////////////////////////////
 	// http post parameter to node
-	post_url = "http://" + std::get<1>(shard_ip_port) + ":" + std::to_string(node_mgr_http_port);
+	post_url = "http://" + ip_port.first + ":" + std::to_string(node_mgr_http_port);
 	
 	int retry = 3;
 	while(retry-->0 && !Job::do_exit)
@@ -2738,12 +2067,9 @@ bool Job::job_restore_shard(std::string &cluster_name, std::string &shard_name, 
 				syslog(Logger::ERROR, "restore fail %s", info.c_str());
 				goto end;
 			}
-			else if(result == "restore succeed")
+			else if(result == "succeed")
 			{
-				syslog(Logger::INFO, "retore %s:%s:%d finish!", 
-									std::get<0>(shard_ip_port).c_str(), 
-									std::get<1>(shard_ip_port).c_str(), 
-									std::get<2>(shard_ip_port));
+				syslog(Logger::INFO, "retore %s:%s:%d finish!", shard_name.c_str(), ip_port.first.c_str(), ip_port.second);
 				break;
 			}
 		}
@@ -2773,13 +2099,14 @@ void Job::job_restore_cluster(cJSON *root)
 	std::string job_result;
 	std::string job_info;
 	std::string backup_id;
-	std::string backup_cluster_name;
-	std::string restore_cluster_name;
-	std::string timestamp;
+	std::string backup_cluster_name,backup_ha_mode;
+	std::string restore_cluster_name,restore_ha_mode;
+	std::string shard_name,timestamp;
+	int shards_id = 0;
+	int shards;
 	cJSON *item;
 
-	std::vector<std::string> vec_shard;
-	std::vector<Tpye_Shard_Ip_Port> vec_shard_ip_port;
+	std::vector<std::vector<Tpye_Ip_Port>> vec_vec_ip_port;
 
 	item = cJSON_GetObjectItem(root, "job_id");
 	if(item == NULL)
@@ -2794,6 +2121,8 @@ void Job::job_restore_cluster(cJSON *root)
 	update_jobid_status(job_id, job_result, job_info);
 	syslog(Logger::INFO, "%s", job_info.c_str());
 	job_insert_operation_record(root, job_result, job_info);
+
+	System::get_instance()->set_cluster_mgr_working(false);
 
 	item = cJSON_GetObjectItem(root, "id");
 	if(item == NULL)
@@ -2813,15 +2142,15 @@ void Job::job_restore_cluster(cJSON *root)
 
 	/////////////////////////////////////////////////////////
 	// get backup recored info from metadata table
-	if(System::get_instance()->get_MetadataShard()->get_backup_info_from_metadata(backup_id, backup_cluster_name, timestamp, vec_shard))
+	if(System::get_instance()->get_backup_info_from_metadata(backup_id, backup_cluster_name, timestamp, shards))
 	{
 		job_info = "get_backup_info_from_metadata error";
 		goto end;
 	}
 
 	/////////////////////////////////////////////////////////
-	// get master node of erver shard
-	if(!job_get_shard_ip_port(restore_cluster_name, vec_shard_ip_port))
+	// get all node from erver shard
+	if(!System::get_instance()->get_shard_ip_port_restore(restore_cluster_name, vec_vec_ip_port))
 	{
 		job_info = "get cluster_shard_ip_port error";
 		goto end;
@@ -2829,20 +2158,30 @@ void Job::job_restore_cluster(cJSON *root)
 
 	/////////////////////////////////////////////////////////
 	// check shards number
-	if(vec_shard.size() != vec_shard_ip_port.size())
+	if(shards != vec_vec_ip_port.size())
 	{
-		job_info = "shards of backup and restore is error";
+		job_info = "shards of backup and restore is different";
 		goto end;
 	}
 
 	///////////////////////////////////////////////////////////////////////////////
 	// restore every shard
-	for(int i=0; i<vec_shard.size(); i++)
+	for(auto &vec_ip_port: vec_vec_ip_port)
 	{
-		if(!job_restore_shard(backup_cluster_name, vec_shard[i], timestamp, vec_shard_ip_port[i]))
+		shards_id++;
+		job_info = "restore shard " + std::to_string(shards_id) + " start";
+		update_jobid_status(job_id, job_result, job_info);
+		syslog(Logger::INFO, "%s", job_info.c_str());
+
+		shard_name = "shard" +std::to_string(shards_id);
+		for(auto &ip_port: vec_ip_port)
 		{
-			job_info = "job_restore_shard error";
-			goto end;
+			syslog(Logger::INFO, "restore shard node start");
+			if(!job_restore_shard(backup_cluster_name, shard_name, timestamp, ip_port))
+			{
+				job_info = "job_restore_shard error";
+				goto end;
+			}
 		}
 	}
 
@@ -2851,6 +2190,7 @@ void Job::job_restore_cluster(cJSON *root)
 	update_jobid_status(job_id, job_result, job_info);
 	syslog(Logger::INFO, "%s", job_info.c_str());
 	job_update_operation_record(job_id, job_result, job_info);
+	System::get_instance()->set_cluster_mgr_working(true);
 	return;
 
 end:
@@ -2858,6 +2198,110 @@ end:
 	update_jobid_status(job_id, job_result, job_info);
 	syslog(Logger::INFO, "%s", job_info.c_str());
 	job_update_operation_record(job_id, job_result, job_info);
+	System::get_instance()->set_cluster_mgr_working(true);
+}
+
+bool Job::job_get_status(cJSON *root, std::string &str_ret)
+{
+	std::string job_id, result, info;
+
+	cJSON *item = cJSON_GetObjectItem(root, "job_id");
+	if(item == NULL)
+	{
+		syslog(Logger::ERROR, "get_job_id error");
+		return false;
+	}
+	job_id = item->valuestring;
+	
+	if(!Job::get_instance()->get_jobid_status(job_id, result, info))
+		str_ret = "{\"result\":\"error\",\"info\":\"job id no find\"}";
+	else
+	{
+		cJSON *ret_root;
+		char *ret_cjson;
+
+		ret_root = cJSON_CreateObject();
+		cJSON_AddStringToObject(ret_root, "result", result.c_str());
+		cJSON_AddStringToObject(ret_root, "info", info.c_str());
+
+		ret_cjson = cJSON_Print(ret_root);
+		str_ret = ret_cjson;
+		cJSON_Delete(ret_root);
+		free(ret_cjson);
+	}
+
+	return true;
+}
+
+bool Job::job_handle_ahead(const std::string &para, std::string &str_ret)
+{
+	bool ret = false;
+	cJSON *root;
+	cJSON *item;
+	Job_type job_type;
+
+	root = cJSON_Parse(para.c_str());
+	if(root == NULL)
+	{
+		syslog(Logger::ERROR, "cJSON_Parse error");	
+		goto end;
+	}
+
+	item = cJSON_GetObjectItem(root, "job_type");
+	if(item == NULL || !Job::get_instance()->get_job_type(item->valuestring, job_type))
+	{
+		syslog(Logger::ERROR, "job_handle_ahead get_job_type error");
+		goto end;
+	}
+
+	if(job_type == JOB_GET_STATUS)
+	{
+		ret = job_get_status(root, str_ret);
+	}
+	else if(job_type == JOB_GET_NODE)
+	{
+		ret = System::get_instance()->get_node_instance(root, str_ret);
+	}
+	else if(job_type == JOB_GET_DISK_SIZE)
+	{
+		ret = get_disk_size(root, str_ret);
+	}
+	else if(job_type == JOB_CREATE_MACHINE)
+	{
+		ret = job_create_machine(root, str_ret);
+	}
+	else if(job_type == JOB_UPDATE_MACHINE)
+	{
+		ret = job_update_machine(root, str_ret);
+	}
+	else if(job_type == JOB_DELETE_MACHINE)
+	{
+		ret = job_delete_machine(root, str_ret);
+	}
+	else
+	{
+		if(job_type == JOB_CREATE_CLUSTER
+			|| job_type == JOB_DELETE_CLUSTER
+			|| job_type == JOB_BACKUP_CLUSTER
+			|| job_type == JOB_RESTORE_CLUSTER)
+		{
+			std::string info;
+			get_operation_status(info);
+			if(info.length() > 0)
+			{
+				str_ret = "{\"result\":\"busy\",\"info\":\"" + info + "\"}";
+				return true;
+			}
+		}
+		else
+			ret = false;
+	}
+
+end:
+	if(root != NULL)
+		cJSON_Delete(root);
+
+	return ret;
 }
 
 void Job::job_handle(std::string &job)
