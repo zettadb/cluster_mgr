@@ -14,6 +14,9 @@
 #include <strings.h>
 #include <cstring>
 #include <pthread.h>
+#include <string>
+#include <vector>
+#include <tuple>
 
 typedef uint32_t uint;
 #ifdef ENABLE_DEBUG
@@ -28,6 +31,22 @@ typedef uint32_t uint;
 
 
 #define KUNLUN_METADATA_DBNAME "Kunlun_Metadata_DB"
+
+typedef std::tuple<std::string, int, int, int, int, int, int, int> Tpye_cluster_info;
+typedef std::tuple<std::string, int, std::string, std::string> Tpye_Ip_Port_User_Pwd;
+typedef std::tuple<std::string, int, std::vector<std::string>> Tpye_Ip_Port_Paths;
+typedef std::tuple<std::string, std::string, int> Tpye_Shard_Ip_Port;
+typedef std::tuple<std::string, int, int> Tpye_Path_Used_Free;
+
+typedef std::tuple<std::string, std::string> Tpye_string2;
+typedef std::tuple<std::string, std::string, std::string> Tpye_string3;
+typedef std::tuple<std::string, std::string, std::string, std::string> Tpye_string4;
+typedef std::tuple<std::string, std::string, std::string, std::string, std::string> Tpye_string5;
+
+typedef std::pair<std::string, int> Tpye_Ip_Port;
+typedef std::pair<std::string, int> Tpye_Path_Space;
+typedef std::pair<std::string, std::vector<std::string>> Tpye_Ip_Paths;
+
 
 #if __GLIBC__ == 2 && __GLIBC_MINOR__ < 30
 #include <sys/syscall.h>

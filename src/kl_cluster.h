@@ -72,6 +72,11 @@ public:
 		pwd = gpsql_conn.pwd;
 	}
 
+	const std::string &get_name() const
+	{
+		return name;
+	}
+
 	bool refresh_node_configs(int port_,
 		const char * name_, const char * ip_, const char * user_, const char * pwd_)
 	{

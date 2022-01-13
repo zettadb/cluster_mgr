@@ -34,7 +34,7 @@ int PGSQL_CONN::connect(const char *database)
 
 	if (PQstatus(conn) != CONNECTION_OK)
 	{
-		syslog(Logger::ERROR, "Connected to pgsql %s fail...",conninfo);
+		syslog(Logger::ERROR, "Connected to pgsql fail: %s", PQerrorMessage(conn));
 		return 1;
 	}
 
@@ -76,12 +76,20 @@ int PGSQL_CONN::send_stmt(int pgres, const char *database, const char *stmt)
 	if(pgres == PG_COPYRES_TUPLES)
 	{
 		if (PQresultStatus(result) != PGRES_TUPLES_OK)
+		{
+			syslog(Logger::ERROR, "PQresultStatus error: %s", PQerrorMessage(conn));
+			close_conn();
 			ret = 1;
+		}
 	}
 	else
 	{
 		if (PQresultStatus(result) != PGRES_COMMAND_OK)
+		{
+			syslog(Logger::ERROR, "PQresultStatus error: %s", PQerrorMessage(conn));
+			close_conn();
 			ret = 1;
+		}
 	}
 
 	return ret;
@@ -167,7 +175,7 @@ int KunlunCluster::refresh_storages_to_computers()
 		else if(db == "template0")
 			continue;
 
-		vec_database.push_back(db);
+		vec_database.emplace_back(db);
 	}
 	computer->free_pgsql_result();
 
@@ -196,7 +204,7 @@ int KunlunCluster::refresh_storages_to_computers()
 				continue;
 
 			uint oid = strtol(PQgetvalue(presult,i,0), &endptr, 10);
-			vec_database_namespace_oid.push_back(std::make_tuple(db, ns, oid));
+			vec_database_namespace_oid.emplace_back(std::make_tuple(db, ns, oid));
 		}
 		computer->free_pgsql_result();
 	}
@@ -326,7 +334,7 @@ int KunlunCluster::refresh_storages_to_computers_metashard(MetadataShard &meta_s
 		else if(db == "template0")
 			continue;
 
-		vec_database.push_back(db);
+		vec_database.emplace_back(db);
 	}
 	computer->free_pgsql_result();
 
@@ -354,7 +362,7 @@ int KunlunCluster::refresh_storages_to_computers_metashard(MetadataShard &meta_s
 			else if(ns == "information_schema")
 				continue;
 
-			vec_database_namespace.push_back(std::make_pair(db, ns));
+			vec_database_namespace.emplace_back(std::make_pair(db, ns));
 		}
 		computer->free_pgsql_result();
 	}
@@ -481,7 +489,7 @@ unix_timestamp(UPDATE_TIME)<" + std::to_string(timesp);
 		while ((row = mysql_fetch_row(result)))
 		{
 			//syslog(Logger::ERROR, "vec_partition_tb row[0]=%s,row[1]=%s", row[0],row[1]);
-			vec_partition_tb.push_back(std::make_pair(std::string(row[0]),std::string(row[1])));
+			vec_partition_tb.emplace_back(std::make_pair(std::string(row[0]),std::string(row[1])));
 		}
 		
 		meta_master_sn->free_mysql_result();
@@ -492,10 +500,10 @@ unix_timestamp(UPDATE_TIME)<" + std::to_string(timesp);
 	std::set<std::string> set_recover;
 
 	std::vector<Shard *> all_shards;
-	all_shards.push_back(&meta_shard);
+	all_shards.emplace_back(&meta_shard);
 	for (auto &cluster:kl_clusters)
 		for (auto &shard:cluster->storage_shards)
-			all_shards.push_back(shard);
+			all_shards.emplace_back(shard);
 
 	for(auto &shard:all_shards)
 	{

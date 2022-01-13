@@ -155,6 +155,7 @@ public:
 		return mysql_conn.ip == ip && mysql_conn.port == port;
 	}
 
+	bool update_instance_cluster_info();
 	int start_mgr(Group_member_status st, bool as_master);
 	
 	MYSQL_RES *get_result() { return mysql_conn.result; }
@@ -420,7 +421,7 @@ public:
 	void add_node(Shard_node *node)
 	{
 		Scopped_mutex sm(mtx);
-		nodes.push_back(node);
+		nodes.emplace_back(node);
 		std::string ip;
 		int port;
 		node->get_ip_port(ip, port);
@@ -548,10 +549,16 @@ public:
 	int refresh_computers(std::vector<KunlunCluster *> &kl_clusters);
 	int check_port_used(std::string &ip, int port);
 	int get_comp_nodes_id_seq(int &comps_id);
+	int get_max_cluster_id(int &cluster_id);
 	int execute_metadate_opertation(enum_sql_command command, const std::string & str_sql);
-	int delete_cluster_from_metadata(const std::string & cluster_name);
-	int get_server_nodes_from_metadata(std::vector<Tpye_Ip_Paths> &vec_ip_paths);
-	int get_backup_info_from_metadata(std::string &backup_id, std::string &cluster_name, std::string &timestamp, int &shards);
+	int delete_cluster_from_metadata(std::string &cluster_name);
+	int delete_cluster_shard_from_metadata(std::string &cluster_name, std::string &shard_name);
+	int delete_cluster_shard_node_from_metadata(std::string &cluster_name, std::string &shard_name, Tpye_Ip_Port &ip_port);
+	int delete_cluster_comp_from_metadata(std::string &cluster_name, std::string &comp_name);
+	int get_server_nodes_from_metadata(std::vector<Machine*> &vec_machines);
+	int add_shard_nodes(std::string &cluster_name, std::string &shard_name, std::vector<Tpye_Ip_Port_User_Pwd> vec_ip_port_user_pwd);
+	int get_backup_info_from_metadata(std::string &cluster_name, std::string &timestamp, Tpye_cluster_info &cluster_info);
+	bool check_machine_hostaddr(std::string &hostaddr);
 };
 
 #endif // !SHARD_H

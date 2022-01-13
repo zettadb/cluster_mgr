@@ -13,7 +13,6 @@
 #include "shard.h"
 #include "os.h"
 #include "job.h"
-#include "cjson.h"
 #include "kl_cluster.h"
 #include "thread_manager.h"
 #include <unistd.h>
@@ -443,6 +442,17 @@ int Shard_node::connect()
 	return mysql_conn.connect();
 }
 
+bool Shard_node::update_instance_cluster_info()
+{
+	std::string cluster_name = owner->get_cluster_name();
+	std::string shard_name = owner->get_name();
+	std::string str_sql;
+
+	str_sql = "update kunlun_sysdb.cluster_info set cluster_name='" + cluster_name + "',shard_name='" + shard_name + "'";
+
+	return send_stmt(SQLCOM_UPDATE, str_sql.c_str(), str_sql.length(), stmt_retries);
+}
+
 /*
   do START GROUP_repliplication, and optionally after stop GROUP_repliplication
   if its status is ERROR rather than OFFLINE.
@@ -749,7 +759,7 @@ int Shard::check_mgr_cluster()
 		// for MEMBER_IN_RECOVERY, node i will very soon be usable with no further action needed.
 		if (stat == Shard_node::MEMBER_ERROR || stat == Shard_node::MEMBER_OFFLINE)
 		{
-			down_reachables.push_back(
+			down_reachables.emplace_back(
 				std::make_pair(i, (Shard_node::Group_member_status)stat));
 		}
 
@@ -819,6 +829,12 @@ int Shard::check_mgr_cluster()
 
 			if (reachables <= nodes.size() / 2)
 				goto out1;
+
+			if(down_reachables.size()>0)	//maybe first node is primary
+			{
+				max_sn = down_reachables[0].first;
+				max_stat = down_reachables[0].second;
+			}
 
 			for (auto &n:down_reachables)
 				if (n.first->get_latest_mgr_pos() > max_pos)
@@ -1009,10 +1025,10 @@ int System::process_recovered_prepared()
 
 	cluster_txns.insert(std::make_pair(meta_shard.get_cluster_id(), meta_tki));
 	std::vector<Shard *> all_shards;
-	all_shards.push_back(&meta_shard);
+	all_shards.emplace_back(&meta_shard);
 	for (auto &cluster:kl_clusters)
 		for (auto &shard:cluster->storage_shards)
-			all_shards.push_back(shard);
+			all_shards.emplace_back(shard);
 
 	for (auto &sd:all_shards)
 	{
@@ -1198,7 +1214,7 @@ static void process_prep_txns(const Shard::Txn_decision &txn_dsn,
 			itr2 = shard_txn_decisions.find(ps);
 			Assert(itr2 != shard_txn_decisions.end());
 		}
-		itr2->second.push_back(txn_dsn);
+		itr2->second.emplace_back(txn_dsn);
 	}
 	ti.processed = true;
 }
@@ -1240,12 +1256,12 @@ static void convert_preps2ti(Shard *ps, const Shard::Prep_recvrd_txns_t &preps,
 		auto itr = cti.tkis.find(tk);
 		if (itr != cti.tkis.end())
 		{
-			itr->second.branches.push_back(ps);
+			itr->second.branches.emplace_back(ps);
 		}
 		else
 		{
 			MetadataShard::txn_info txninfo;
-			txninfo.branches.push_back(ps);
+			txninfo.branches.emplace_back(ps);
 			cti.tkis.insert(std::make_pair(tk, txninfo));
 		}
 
@@ -1313,7 +1329,7 @@ int Shard::get_xa_prepared()
 		tk.comp_nodeid = comp_nodeid;
 		tk.start_ts = start_ts;
 		tk.local_txnid = local_txnid;
-		txns.push_back(tk);
+		txns.emplace_back(tk);
 		// restore content in case it's used elsewhere.
 		*sp1 = '-';
 		*sp2 = '-';
@@ -1429,7 +1445,7 @@ int MetadataShard::refresh_shards(std::vector<KunlunCluster *> &kl_clusters)
 		if (!pcluster)
 		{
 			pcluster = new KunlunCluster(cluster_id, row[7]);
-			kl_clusters.push_back(pcluster);
+			kl_clusters.emplace_back(pcluster);
 			syslog(Logger::INFO, "Added KunlunCluster(%s.%u) into protection.", row[7], cluster_id);
 		}
 
@@ -1459,7 +1475,7 @@ int MetadataShard::refresh_shards(std::vector<KunlunCluster *> &kl_clusters)
 			
 			pshard = new Shard(shardid, row[1], STORAGE, ha_mode);
 			pshard->set_cluster_info(row[7], cluster_id);
-			pcluster->storage_shards.push_back(pshard);
+			pcluster->storage_shards.emplace_back(pshard);
 			syslog(Logger::INFO, "Added shard(%s.%s, %u) into protection.",
 				pshard->get_cluster_name().c_str(), pshard->get_name().c_str(),
 				pshard->get_id());
@@ -1568,7 +1584,7 @@ int MetadataShard::refresh_computers(std::vector<KunlunCluster *> &kl_clusters)
 			if (!pcomputer)
 			{
 				pcomputer = new Computer_node(compid, cluster->get_id(), port, row[1], row[2], row[4], row[5]);
-				cluster->computer_nodes.push_back(pcomputer);
+				cluster->computer_nodes.emplace_back(pcomputer);
 				syslog(Logger::INFO, "Added Computer(%s, %u, %s) into protection.",
 							cluster->get_name().c_str(), pcomputer->id, pcomputer->name.c_str());
 
@@ -1718,6 +1734,34 @@ int MetadataShard::get_comp_nodes_id_seq(int &comps_id)
 }
 
 /*
+  get max cluster id from metadata tables
+  @retval 0 succeed;
+  		  1 fail;
+*/
+int MetadataShard::get_max_cluster_id(int &cluster_id)
+{
+	Scopped_mutex sm(mtx);
+
+	if(cur_master == NULL)
+		return 1;
+
+	int ret = cur_master->send_stmt(SQLCOM_SELECT, CONST_STR_PTR_LEN("select max(id) from db_clusters"), stmt_retries);	
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+		if ((row = mysql_fetch_row(result)))
+		{
+			if(row[0] != NULL)
+				cluster_id = atoi(row[0]);
+		}
+		cur_master->free_mysql_result();
+	}
+
+	return ret;
+}
+
+/*
   execute metadate opertation
   @retval 0 succeed;
   		  1 fail;
@@ -1739,7 +1783,7 @@ int MetadataShard::execute_metadate_opertation(enum_sql_command command, const s
   @retval 0 succeed;
   		  1 fail;
 */
-int MetadataShard::delete_cluster_from_metadata(const std::string & cluster_name)
+int MetadataShard::delete_cluster_from_metadata(std::string & cluster_name)
 {
 	Scopped_mutex sm(mtx);
 
@@ -1747,11 +1791,11 @@ int MetadataShard::delete_cluster_from_metadata(const std::string & cluster_name
 		return 1;
 
 	int ret = 1;
-	int cluster_id = 0;
-	std::vector<int> vec_comp_id;
+	std::string cluster_id;
+	std::vector<std::string> vec_comp_id;
 
 	//get cluster_id
-	std::string str_sql  = "select id from db_clusters where name='" + cluster_name + "'";
+	std::string str_sql = "select id from db_clusters where name='" + cluster_name + "'";
 	ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
 	if (ret==0)
 	{
@@ -1760,13 +1804,16 @@ int MetadataShard::delete_cluster_from_metadata(const std::string & cluster_name
 		if ((row = mysql_fetch_row(result)))
 		{
 			if(row[0] != NULL)
-				cluster_id = atoi(row[0]);
+				cluster_id = row[0];
 		}
 		cur_master->free_mysql_result();
 	}
 
+	if(cluster_id.length()==0)
+		return 1;
+
 	//get comp_id
-	str_sql  = "select id from comp_nodes where db_cluster_id=" + std::to_string(cluster_id);
+	str_sql = "select id from comp_nodes where db_cluster_id=" + cluster_id;
 	ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
 	if (ret==0)
 	{
@@ -1775,55 +1822,239 @@ int MetadataShard::delete_cluster_from_metadata(const std::string & cluster_name
 		while ((row = mysql_fetch_row(result)))
 		{
 			if(row[0] != NULL)
-				vec_comp_id.push_back(atoi(row[0]));
+				vec_comp_id.emplace_back(row[0]);
 		}
 		cur_master->free_mysql_result();
 	}
 
 	//remove comp_nodes
-	str_sql  = "delete from comp_nodes where db_cluster_id=" + std::to_string(cluster_id);
-	ret = cur_master->send_stmt(SQLCOM_DELETE, str_sql.c_str(), str_sql.length(), stmt_retries);
-	if (ret!=0)
-		return ret;
+	str_sql = "delete from comp_nodes where db_cluster_id=" + cluster_id;
+	cur_master->send_stmt(SQLCOM_DELETE, str_sql.c_str(), str_sql.length(), stmt_retries);
 
 	//remove comp_nodes_id_seq
 	for(auto &comp_id: vec_comp_id)
 	{
-		str_sql  = "delete from comp_nodes_id_seq where id=" + std::to_string(comp_id);
-		ret = cur_master->send_stmt(SQLCOM_DELETE, str_sql.c_str(), str_sql.length(), stmt_retries);
-		if (ret!=0)
-			return ret;
+		str_sql  = "delete from comp_nodes_id_seq where id=" + comp_id;
+		cur_master->send_stmt(SQLCOM_DELETE, str_sql.c_str(), str_sql.length(), stmt_retries);
 	}
 
-	//remove shards
-	str_sql  = "delete from shards where db_cluster_id=" + std::to_string(cluster_id);
-	ret = cur_master->send_stmt(SQLCOM_DELETE, str_sql.c_str(), str_sql.length(), stmt_retries);
-	if (ret!=0)
-		return ret;
-
 	//remove shard_nodes
-	str_sql  = "delete from shard_nodes where db_cluster_id=" + std::to_string(cluster_id);
-	ret = cur_master->send_stmt(SQLCOM_DELETE, str_sql.c_str(), str_sql.length(), stmt_retries);
-	if (ret!=0)
-		return ret;
+	str_sql = "delete from shard_nodes where db_cluster_id=" + cluster_id;
+	cur_master->send_stmt(SQLCOM_DELETE, str_sql.c_str(), str_sql.length(), stmt_retries);
+
+	//remove shards
+	str_sql = "delete from shards where db_cluster_id=" + cluster_id;
+	cur_master->send_stmt(SQLCOM_DELETE, str_sql.c_str(), str_sql.length(), stmt_retries);
 
 	//remove db_clusters
-	str_sql  = "delete from db_clusters where id=" + std::to_string(cluster_id);
-	ret = cur_master->send_stmt(SQLCOM_DELETE, str_sql.c_str(), str_sql.length(), stmt_retries);
-	if (ret!=0)
-		return ret;
+	str_sql = "delete from db_clusters where id=" + cluster_id;
+	cur_master->send_stmt(SQLCOM_DELETE, str_sql.c_str(), str_sql.length(), stmt_retries);
 
 	//drop table commit_log_cluster_name
-	str_sql  = "drop table commit_log_" + cluster_name;
-	ret = cur_master->send_stmt(SQLCOM_DROP_TABLE, str_sql.c_str(), str_sql.length(), stmt_retries);
-	if (ret!=0)
-		return ret;
+	str_sql = "drop table commit_log_" + cluster_name;
+	cur_master->send_stmt(SQLCOM_DROP_TABLE, str_sql.c_str(), str_sql.length(), stmt_retries);
 
 	//drop table ddl_ops_log_cluster_name
-	str_sql  = "drop table ddl_ops_log_" + cluster_name;
-	ret = cur_master->send_stmt(SQLCOM_DROP_TABLE, str_sql.c_str(), str_sql.length(), stmt_retries);
-	if (ret!=0)
-		return ret;
+	str_sql = "drop table ddl_ops_log_" + cluster_name;
+	cur_master->send_stmt(SQLCOM_DROP_TABLE, str_sql.c_str(), str_sql.length(), stmt_retries);
+
+	return ret;
+}
+
+/*
+  delete cluster shard from metadata
+  @retval 0 succeed;
+  		  1 fail;
+*/
+int MetadataShard::delete_cluster_shard_from_metadata(std::string & cluster_name, std::string &shard_name)
+{
+	Scopped_mutex sm(mtx);
+
+	if(cur_master == NULL)
+		return 1;
+
+	int ret = 1;
+	std::string cluster_id;
+	std::string shard_id;
+
+	//get cluster_id
+	std::string str_sql = "select id from db_clusters where name='" + cluster_name + "'";
+	ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+		if ((row = mysql_fetch_row(result)))
+		{
+			if(row[0] != NULL)
+				cluster_id = row[0];
+		}
+		cur_master->free_mysql_result();
+	}
+
+	if(cluster_id.length()==0)
+		return 1;
+
+	//get shard_id
+	str_sql = "select id from shards where db_cluster_id=" + cluster_id + " and name='" + shard_name + "'";
+	ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+		if ((row = mysql_fetch_row(result)))
+		{
+			if(row[0] != NULL)
+				shard_id = row[0];
+		}
+		cur_master->free_mysql_result();
+	}
+
+	if(shard_id.length()==0)
+		return 1;
+
+	//remove ddl_ops_log_cluster_name
+	str_sql = "delete from ddl_ops_log_" + cluster_name + " where target_shard_id=" + shard_id;
+	cur_master->send_stmt(SQLCOM_DELETE, str_sql.c_str(), str_sql.length(), stmt_retries);
+
+	//remove shard_nodes
+	str_sql = "delete from shard_nodes where db_cluster_id=" + cluster_id + " and shard_id=" + shard_id;
+	cur_master->send_stmt(SQLCOM_DELETE, str_sql.c_str(), str_sql.length(), stmt_retries);
+
+	//remove shards
+	str_sql = "delete from shards where db_cluster_id=" + cluster_id + " and id=" + shard_id;
+	cur_master->send_stmt(SQLCOM_DELETE, str_sql.c_str(), str_sql.length(), stmt_retries);
+
+	return ret;
+}
+
+/*
+  delete cluster shard node from metadata
+  @retval 0 succeed;
+  		  1 fail;
+*/
+int MetadataShard::delete_cluster_shard_node_from_metadata(std::string &cluster_name, std::string &shard_name, Tpye_Ip_Port &ip_port)
+{
+	Scopped_mutex sm(mtx);
+
+	if(cur_master == NULL)
+		return 1;
+
+	int ret = 1;
+	std::string cluster_id;
+	std::string shard_id;
+
+	//get cluster_id
+	std::string str_sql = "select id from db_clusters where name='" + cluster_name + "'";
+	ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+		if ((row = mysql_fetch_row(result)))
+		{
+			if(row[0] != NULL)
+				cluster_id = row[0];
+		}
+		cur_master->free_mysql_result();
+	}
+
+	if(cluster_id.length()==0)
+		return 1;
+
+	//get shard_id
+	str_sql = "select id from shards where db_cluster_id=" + cluster_id + " and name='" + shard_name + "'";
+	ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+		if ((row = mysql_fetch_row(result)))
+		{
+			if(row[0] != NULL)
+				shard_id = row[0];
+		}
+		cur_master->free_mysql_result();
+	}
+
+	if(shard_id.length()==0)
+		return 1;
+
+	//remove shard_nodes
+	str_sql = "delete from shard_nodes where hostaddr='" + ip_port.first + "' and port=" + std::to_string(ip_port.second);
+	cur_master->send_stmt(SQLCOM_DELETE, str_sql.c_str(), str_sql.length(), stmt_retries);
+
+	//update shards
+	str_sql = "update shards set num_nodes=num_nodes-1";
+	str_sql += " where id=" + shard_id;
+	cur_master->send_stmt(SQLCOM_UPDATE, str_sql.c_str(), str_sql.length(), stmt_retries);
+
+	return ret;
+}
+
+/*
+  delete cluster cpmp from metadata
+  @retval 0 succeed;
+  		  1 fail;
+*/
+int MetadataShard::delete_cluster_comp_from_metadata(std::string &cluster_name, std::string &comp_name)
+{
+	Scopped_mutex sm(mtx);
+
+	if(cur_master == NULL)
+		return 1;
+
+	int ret = 1;
+	std::string cluster_id;
+	std::string comp_id;
+
+	//get cluster_id
+	std::string str_sql = "select id from db_clusters where name='" + cluster_name + "'";
+	ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+		if ((row = mysql_fetch_row(result)))
+		{
+			if(row[0] != NULL)
+				cluster_id = row[0];
+		}
+		cur_master->free_mysql_result();
+	}
+
+	if(cluster_id.length()==0)
+		return 1;
+
+	//get vec_shard_id
+	str_sql = "select id from comp_nodes where db_cluster_id=" + cluster_id + " and name='" + comp_name + "'";
+	ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+		if ((row = mysql_fetch_row(result)))
+		{
+			if(row[0] != NULL)
+				comp_id = row[0];
+		}
+		cur_master->free_mysql_result();
+	}
+
+	if(comp_id.length()==0)
+		return 1;
+
+	//remove commit_log_cluster_name
+	str_sql = "delete from commit_log_" + cluster_name + " where comp_node_id=" + comp_id;
+	cur_master->send_stmt(SQLCOM_DELETE, str_sql.c_str(), str_sql.length(), stmt_retries);
+
+	//remove comp_nodes_id_seq
+	str_sql = "delete from comp_nodes_id_seq where id=" + comp_id;
+	cur_master->send_stmt(SQLCOM_DELETE, str_sql.c_str(), str_sql.length(), stmt_retries);
+
+	//remove comp_nodes
+	str_sql = "delete from comp_nodes where id=" + comp_id;
+	cur_master->send_stmt(SQLCOM_DELETE, str_sql.c_str(), str_sql.length(), stmt_retries);
 
 	return ret;
 }
@@ -1833,14 +2064,14 @@ int MetadataShard::delete_cluster_from_metadata(const std::string & cluster_name
   @retval 0 succeed;
   		  1 fail;
 */
-int MetadataShard::get_server_nodes_from_metadata(std::vector<Tpye_Ip_Paths> &vec_ip_paths)
+int MetadataShard::get_server_nodes_from_metadata(std::vector<Machine*> &vec_machines)
 {
 	Scopped_mutex sm(mtx);
 
 	if(cur_master == NULL)
 		return 1;
 
-	std::string str_sql  = "select hostaddr,datadir,logdir,wal_log_dir,comp_datadir from server_nodes";
+	std::string str_sql = "select hostaddr,rack_id,datadir,logdir,wal_log_dir,comp_datadir,total_mem,total_cpu_cores from server_nodes";
 	int ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
 	if (ret==0)
 	{
@@ -1848,14 +2079,104 @@ int MetadataShard::get_server_nodes_from_metadata(std::vector<Tpye_Ip_Paths> &ve
 		MYSQL_ROW row;
 		while ((row = mysql_fetch_row(result)))
 		{
-			std::vector<std::string> vec_paths;
-			vec_paths.push_back(row[1]);
-			vec_paths.push_back(row[2]);
-			vec_paths.push_back(row[3]);
-			vec_paths.push_back(row[4]);
-			vec_ip_paths.push_back(std::make_pair(row[0], vec_paths));
+			bool is_null = false;
+			for(int i=0; i<8; i++)
+			{
+				if(row[i] == NULL)
+				{
+					is_null = true;
+					break;
+				}
+
+			}
+
+			if(!is_null)
+			{
+				std::string hostaddr = row[0];
+				std::vector<std::string> vec_paths;
+				vec_paths.emplace_back(row[2]);
+				vec_paths.emplace_back(row[3]);
+				vec_paths.emplace_back(row[4]);
+				vec_paths.emplace_back(row[5]);
+				Tpye_string3 t_string3 = std::make_tuple(row[1],row[6],row[7]);
+				Machine *machine = new Machine(hostaddr, vec_paths, t_string3);
+				vec_machines.emplace_back(machine);
+			}
 		}
 		cur_master->free_mysql_result();
+	}
+
+	return ret;
+}
+
+/*
+  add shard nodes to metadata table
+  @retval 0 succeed;
+  		  1 fail;
+*/
+int MetadataShard::add_shard_nodes(std::string &cluster_name, std::string &shard_name, std::vector<Tpye_Ip_Port_User_Pwd> vec_ip_port_user_pwd)
+{
+	Scopped_mutex sm(mtx);
+
+	if(cur_master == NULL)
+		return 1;
+
+	int ret = 1;
+	std::string cluster_id;
+	std::string shard_id;
+
+	//get cluster_id
+	std::string str_sql = "select id from db_clusters where name='" + cluster_name + "'";
+	ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+		if ((row = mysql_fetch_row(result)))
+		{
+			if(row[0] != NULL)
+				cluster_id = row[0];
+		}
+		cur_master->free_mysql_result();
+	}
+
+	if(cluster_id.length()==0)
+		return 1;
+
+	//get shard_id
+	str_sql = "select id from shards where db_cluster_id=" + cluster_id + " and name='" + shard_name + "'";
+	ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+		if ((row = mysql_fetch_row(result)))
+		{
+			if(row[0] != NULL)
+				shard_id = row[0];
+		}
+		cur_master->free_mysql_result();
+	}
+
+	if(shard_id.length()==0)
+		return 1;
+
+	//update shards
+	str_sql = "update shards set num_nodes=num_nodes+" + std::to_string(vec_ip_port_user_pwd.size());
+	str_sql += " where id=" + shard_id;
+	ret = cur_master->send_stmt(SQLCOM_UPDATE, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if(ret)
+		return ret;
+
+	//add shard_nodes
+	for(auto &ip_port_user_pwd :vec_ip_port_user_pwd)
+	{
+		str_sql = "insert into shard_nodes(hostaddr, port, user_name, passwd, shard_id, db_cluster_id, svr_node_id, master_priority) values('";
+		str_sql += std::get<0>(ip_port_user_pwd) + "',"	+ std::to_string(std::get<1>(ip_port_user_pwd)) + ",'" + std::get<2>(ip_port_user_pwd);
+		str_sql += "','" + std::get<3>(ip_port_user_pwd) + "'," + shard_id + "," + cluster_id + ",1,0)";
+		ret = cur_master->send_stmt(SQLCOM_INSERT, str_sql.c_str(), str_sql.length(), stmt_retries);
+		if(ret)
+			return ret;
 	}
 
 	return ret;
@@ -1866,14 +2187,53 @@ int MetadataShard::get_server_nodes_from_metadata(std::vector<Tpye_Ip_Paths> &ve
   @retval 0 succeed;
   		  1 fail;
 */
-int MetadataShard::get_backup_info_from_metadata(std::string &backup_id, std::string &cluster_name, std::string &timestamp, int &shards)
+int MetadataShard::get_backup_info_from_metadata(std::string &cluster_name, std::string &timestamp, Tpye_cluster_info &cluster_info)
 {
 	Scopped_mutex sm(mtx);
 
 	if(cur_master == NULL)
 		return 1;
 
-	std::string str_sql  = "select cluster_name,shards,when_created from cluster_backups where id=" + backup_id;
+	std::string str_sql  = "select ha_mode,shards,nodes,comps,max_storage_size,max_connections,cpu_cores,innodb_size from cluster_backups";
+	str_sql += " where cluster_name='" + cluster_name + "' and when_created<='" + timestamp + "' order by when_created desc";
+	int ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+
+		ret = 1;
+		if ((row = mysql_fetch_row(result)))
+		{
+			std::get<0>(cluster_info) = row[0];
+			std::get<1>(cluster_info) = atoi(row[1]);
+			std::get<2>(cluster_info) = atoi(row[2]);
+			std::get<3>(cluster_info) = atoi(row[3]);
+			std::get<4>(cluster_info) = atoi(row[4]);
+			std::get<5>(cluster_info) = atoi(row[5]);
+			std::get<6>(cluster_info) = atoi(row[6]);
+			std::get<7>(cluster_info) = atoi(row[7]);
+			ret = 0;
+		}
+		cur_master->free_mysql_result();
+	}
+
+	return ret;
+}
+
+/*
+  check machine hostaddr from metadata table 
+  @retval true succeed;
+  		  false fail;
+*/
+bool MetadataShard::check_machine_hostaddr(std::string &hostaddr)
+{
+	Scopped_mutex sm(mtx);
+
+	if(cur_master == NULL)
+		return false;
+
+	std::string str_sql  = "select hostaddr from server_nodes where hostaddr='" + hostaddr + "'";
 	int ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
 	if (ret==0)
 	{
@@ -1882,14 +2242,13 @@ int MetadataShard::get_backup_info_from_metadata(std::string &backup_id, std::st
 
 		if ((row = mysql_fetch_row(result)))
 		{
-			cluster_name = row[0];
-			shards = atoi(row[1]);
-			timestamp = row[2];
+			if(hostaddr == row[0])
+				ret = 1;
 		}
 		cur_master->free_mysql_result();
 	}
 
-	return ret;
+	return (ret == 1);
 }
 
 /*
@@ -2004,11 +2363,9 @@ int MetadataShard::fetch_meta_shard_nodes(Shard_node *sn, bool is_master,
 
 void Shard::maintenance()
 {
-	int ret;
+	int ret = 0;
 
-	if(get_mode() == HAVL_mode::HA_no_rep)
-		ret = 0;
-	else
+	if(get_mode() != HAVL_mode::HA_no_rep)
 		ret = check_mgr_cluster();
 	
 	// if ret not 0, master node isn't uniquely resolved or running.

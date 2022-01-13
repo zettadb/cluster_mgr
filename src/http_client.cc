@@ -20,7 +20,7 @@
 #include <unistd.h>
 #include <iostream>
 
-#define BUFSIZE 2048		//2K
+#define BUFSIZE 4096		//4K
 #define HTTP_DEFAULT_PORT 	80
 
 #define HTTP_GET_STR "GET /%s HTTP/1.0\r\n\

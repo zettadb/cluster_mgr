@@ -24,7 +24,7 @@
 #include <unistd.h>
 #include <iostream>
 
-#define BUFSIZE 2048		//2K
+#define BUFSIZE 4096		//4K
 
 static const char *lpHttpHtmlOk = "HTTP/1.0 200 OK\r\nContent-Type: text/html\r\nContent-Length: ";
 static const char *lpHttpBinOk = "HTTP/1.0 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ";
@@ -77,7 +77,7 @@ int Http_server::start_http_thread()
 		do_exit = 1;
 		return -1;
 	}
-	vec_pthread.push_back(hdl);
+	vec_pthread.emplace_back(hdl);
 
 	//start http server work thread
 	for(int i=0; i<num_http_threads; i++)
@@ -91,7 +91,7 @@ int Http_server::start_http_thread()
 			do_exit = 1;
 			return -1;
 		}
-		vec_pthread.push_back(hdl);
+		vec_pthread.emplace_back(hdl);
 	}
 
 	return 0;
@@ -711,8 +711,8 @@ void Http_server::Http_server_accept()
 	pfdwakeup.events = POLLIN;
 
 	std::vector<struct pollfd> pollfds;
-	pollfds.push_back(pfdlisten);
-	pollfds.push_back(pfdwakeup);
+	pollfds.emplace_back(pfdlisten);
+	pollfds.emplace_back(pfdwakeup);
 
 	while (!Http_server::do_exit)
 	{

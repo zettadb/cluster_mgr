@@ -10,6 +10,7 @@
 #include "sys.h"
 #include "log.h"
 #include "config.h"
+#include "machine_info.h"
 #include "thread_manager.h"
 #include <signal.h>
 #include <pthread.h>
@@ -148,7 +149,7 @@ void Thread_manager::start_worker_thread()
 		}
 
 		thd->set_pthread_hdl(hdl);
-		thrds.push_back(thd);
+		thrds.emplace_back(thd);
 	}
 
 	//start storage sync thread
@@ -167,7 +168,7 @@ void Thread_manager::start_worker_thread()
 		}
 
 		thd->set_pthread_hdl(hdl);
-		thrds.push_back(thd);
+		thrds.emplace_back(thd);
 	}
 }
 
@@ -343,6 +344,7 @@ extern "C" void *thread_func_storage_sync(void*thrdarg)
 			{
 				commit_log_count = 0;
 				System::get_instance()->truncate_commit_log_from_metadata_server();
+				Machine_info::get_instance()->update_machines_info();
 			}
 		}
 
