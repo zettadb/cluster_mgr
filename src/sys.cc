@@ -151,12 +151,15 @@ int System::setup_metadata_shard()
 		is_master = true;
 		sn->get_ip_port(master_ip, master_port);
 		if (meta_shard.set_master(sn))
+		{
+			meta_shard.set_mode(Shard::HAVL_mode::HA_no_rep);
 			syslog(Logger::WARNING,
 		   		"Suppose primary node of shard(%s.%s, %u) to be (%s:%d, %u) since it's out of the meta-shard MGR cluster. It must have latest list of metadata nodes otherwise Kunlun DDC won't be able to work correctly.",
 		   		meta_shard.get_cluster_name().c_str(),
 				meta_shard.get_name().c_str(),
 		   		meta_shard.get_id(), master_ip.c_str(), master_port,
 				sn->get_id());
+		}
 	}
 
 	/*
@@ -929,6 +932,8 @@ bool System::get_node_instance(cJSON *root, std::string &str_ret)
 
 bool System::get_meta(cJSON *root, std::string &str_ret)
 {
+	Scopped_mutex sm(mtx);
+
 	cJSON *ret_root;
 	cJSON *ret_item;
 	char *ret_cjson;
@@ -966,6 +971,8 @@ bool System::get_meta(cJSON *root, std::string &str_ret)
 
 bool System::get_cluster(cJSON *root, std::string &str_ret)
 {
+	Scopped_mutex sm(mtx);
+
 	cJSON *ret_root;
 	cJSON *ret_item;
 	char *ret_cjson;
@@ -997,6 +1004,8 @@ bool System::get_cluster(cJSON *root, std::string &str_ret)
 
 bool System::get_storage(cJSON *root, std::string &str_ret)
 {
+	Scopped_mutex sm(mtx);
+
 	cJSON *ret_root;
 	cJSON *ret_item;
 	cJSON *item;
@@ -1057,6 +1066,8 @@ bool System::get_storage(cJSON *root, std::string &str_ret)
 
 bool System::get_computer(cJSON *root, std::string &str_ret)
 {
+	Scopped_mutex sm(mtx);
+
 	cJSON *ret_root;
 	cJSON *ret_item;
 	cJSON *item;
@@ -1100,6 +1111,217 @@ bool System::get_computer(cJSON *root, std::string &str_ret)
 
 		break;
 	}
+
+	ret_cjson = cJSON_Print(ret_root);
+	str_ret = ret_cjson;
+
+	if(ret_root != NULL)
+		cJSON_Delete(ret_root);
+	if(ret_cjson != NULL)
+		free(ret_cjson);
+
+	return true;
+}
+
+bool System::get_variable(cJSON *root, std::string &str_ret)
+{
+	Scopped_mutex sm(mtx);
+
+	cJSON *ret_root;
+	cJSON *item;
+	char *ret_cjson;
+	std::string variable,ip,result,value;
+	int port;
+
+	item = cJSON_GetObjectItem(root, "variable");
+	if(item == NULL || item->valuestring == NULL)
+	{
+		syslog(Logger::ERROR, "get variable error");
+		return false;
+	}
+	variable = item->valuestring;
+
+	item = cJSON_GetObjectItem(root, "ip");
+	if(item == NULL || item->valuestring == NULL)
+	{
+		syslog(Logger::ERROR, "get ip error");
+		return false;
+	}
+	ip = item->valuestring;
+
+	item = cJSON_GetObjectItem(root, "port");
+	if(item == NULL || item->valuestring == NULL)
+	{
+		syslog(Logger::ERROR, "get port error");
+		return false;
+	}
+	port = atoi(item->valuestring);
+
+	for(auto &node: meta_shard.get_nodes())
+	{
+		if(node->matches_ip_port(ip, port))
+		{
+			if(node->get_variables(variable, value)==0)
+				result = "true";
+			else
+				result = "false";
+
+			goto end;
+		}
+	}
+
+	for (auto &cluster:kl_clusters)
+	{
+		for(auto &shard:cluster->storage_shards)
+		{
+			for(auto &node:shard->get_nodes())
+			{
+				if(node->matches_ip_port(ip, port))
+				{
+					if(node->get_variables(variable, value)==0)
+						result = "true";
+					else
+						result = "false";
+
+					goto end;
+				}
+			}
+		}
+
+		for(auto &comp:cluster->computer_nodes)
+		{
+			if(comp->matches_ip_port(ip, port))
+			{
+				if(comp->get_variables(variable, value)==0)
+					result = "true";
+				else
+					result = "false";
+
+				goto end;
+			}
+		}
+	}
+
+	if(result.length()==0)
+		result = "false";
+
+end:
+
+	ret_root = cJSON_CreateObject();
+	cJSON_AddStringToObject(ret_root, "result", result.c_str());
+	cJSON_AddStringToObject(ret_root, "value", value.c_str());
+
+	ret_cjson = cJSON_Print(ret_root);
+	str_ret = ret_cjson;
+
+	if(ret_root != NULL)
+		cJSON_Delete(ret_root);
+	if(ret_cjson != NULL)
+		free(ret_cjson);
+
+	return true;
+}
+
+bool System::set_variable(cJSON *root, std::string &str_ret)
+{
+	Scopped_mutex sm(mtx);
+
+	cJSON *ret_root;
+	cJSON *item;
+	char *ret_cjson;
+	std::string variable,ip,result,value_int,value_str;
+	int port;
+
+	item = cJSON_GetObjectItem(root, "variable");
+	if(item == NULL || item->valuestring == NULL)
+	{
+		syslog(Logger::ERROR, "get variable error");
+		return false;
+	}
+	variable = item->valuestring;
+
+	item = cJSON_GetObjectItem(root, "value_int");
+	if(item == NULL || item->valuestring == NULL)
+	{
+		item = cJSON_GetObjectItem(root, "value_str");
+		if(item == NULL || item->valuestring == NULL)
+		{
+			syslog(Logger::ERROR, "get value_int & value_str error");
+			return false;
+		}
+		value_str = item->valuestring;
+	}
+	else
+		value_int = item->valuestring;
+
+	item = cJSON_GetObjectItem(root, "ip");
+	if(item == NULL || item->valuestring == NULL)
+	{
+		syslog(Logger::ERROR, "get ip error");
+		return false;
+	}
+	ip = item->valuestring;
+
+	item = cJSON_GetObjectItem(root, "port");
+	if(item == NULL || item->valuestring == NULL)
+	{
+		syslog(Logger::ERROR, "get port error");
+		return false;
+	}
+	port = atoi(item->valuestring);
+
+	for(auto &node: meta_shard.get_nodes())
+	{
+		if(node->matches_ip_port(ip, port))
+		{
+			if(node->set_variables(variable, value_int, value_str)==0)
+				result = "true";
+			else
+				result = "false";
+
+			goto end;
+		}
+	}
+
+	for (auto &cluster:kl_clusters)
+	{
+		for(auto &shard:cluster->storage_shards)
+		{
+			for(auto &node:shard->get_nodes())
+			{
+				if(node->matches_ip_port(ip, port))
+				{
+					if(node->set_variables(variable, value_int, value_str)==0)
+						result = "true";
+					else
+						result = "false";
+
+					goto end;
+				}
+			}
+		}
+
+		for(auto &comp:cluster->computer_nodes)
+		{
+			if(comp->matches_ip_port(ip, port))
+			{
+				if(comp->set_variables(variable, value_int, value_str)==0)
+					result = "true";
+				else
+					result = "false";
+
+				goto end;
+			}
+		}
+	}
+
+	if(result.length()==0)
+		result = "false";
+
+end:
+
+	ret_root = cJSON_CreateObject();
+	cJSON_AddStringToObject(ret_root, "result", result.c_str());
 
 	ret_cjson = cJSON_Print(ret_root);
 	str_ret = ret_cjson;
@@ -1224,6 +1446,42 @@ bool System::get_comps_ip_port(std::string &cluster_name, std::string &comp_name
 	}
 
 	return true;
+}
+
+bool System::update_variables(std::string &cluster_name, std::string &shard_name, Tpye_Ip_Port &ip_port, Tpye_string2 &t_string2)
+{
+	Scopped_mutex sm(mtx);
+	bool ret = false;
+
+	for (auto &cluster:kl_clusters)
+	{
+		if(cluster_name != cluster->get_name())
+			continue;
+
+		//get ip and port
+		for(auto &shard:cluster->storage_shards)
+		{
+			if(shard_name != shard->get_name())
+				continue;
+
+			for(auto &node:shard->get_nodes())
+			{
+				if(node->matches_ip_port(ip_port.first, ip_port.second))
+				{
+					if(node->update_variables(t_string2)==0)
+						ret = true;
+
+					break;
+				}
+			}
+
+			break;
+		}
+
+		break;
+	}
+
+	return ret;
 }
 
 bool System::add_shard_nodes(std::string &cluster_name, std::string &shard_name, std::vector<Tpye_Ip_Port_User_Pwd> vec_ip_port_user_pwd)
@@ -1358,8 +1616,7 @@ bool System::stop_cluster_shard_node(std::string &cluster_name, std::string &sha
 
 			for(auto node_it=(*shard_it)->get_nodes().begin(); node_it!=(*shard_it)->get_nodes().end(); node_it++)
 			{
-				(*node_it)->get_ip_port(ip, port);
-				if(port == ip_port.second && ip == ip_port.first)
+				if((*node_it)->matches_ip_port(ip_port.first, ip_port.second))
 				{
 					(*shard_it)->remove_node((*node_it)->get_id());
 					break;

@@ -77,6 +77,11 @@ public:
 		return name;
 	}
 
+	bool matches_ip_port(const std::string &ip, int port) const
+	{
+		return gpsql_conn.ip == ip && gpsql_conn.port == port;
+	}
+
 	bool refresh_node_configs(int port_,
 		const char * name_, const char * ip_, const char * user_, const char * pwd_)
 	{
@@ -122,6 +127,8 @@ public:
 	void close_conn() { gpsql_conn.close_conn(); }
 	PGresult *get_result() { return gpsql_conn.result; }
 	void free_pgsql_result() { gpsql_conn.free_pgsql_result(); }
+	bool get_variables(std::string &variable, std::string &value);
+	bool set_variables(std::string &variable, std::string &value_int, std::string &value_str);
 };
 
 class KunlunCluster

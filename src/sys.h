@@ -111,10 +111,13 @@ public:
 	bool get_cluster(cJSON *root, std::string &str_ret);
 	bool get_storage(cJSON *root, std::string &str_ret);
 	bool get_computer(cJSON *root, std::string &str_ret);
+	bool get_variable(cJSON *root, std::string &str_ret);
+	bool set_variable(cJSON *root, std::string &str_ret);
 	bool get_shards_ip_port(std::string &cluster_name, std::vector <std::vector<Tpye_Ip_Port>> &vec_vec_shard);
 	bool get_shards_ip_port(std::string &cluster_name, std::string &shard_name, std::vector<Tpye_Ip_Port> &vec_shard);
 	bool get_comps_ip_port(std::string &cluster_name, std::vector<Tpye_Ip_Port> &vec_comp);
 	bool get_comps_ip_port(std::string &cluster_name, std::string &comp_name, std::vector<Tpye_Ip_Port> &vec_comp);
+	bool update_variables(std::string &cluster_name, std::string &shard_name, Tpye_Ip_Port &ip_port, Tpye_string2 &t_string2);
 	bool add_shard_nodes(std::string &cluster_name, std::string &shard_name, std::vector<Tpye_Ip_Port_User_Pwd> vec_ip_port_user_pwd);
 	bool stop_cluster(std::string &cluster_name);
 	bool stop_cluster_shard(std::string &cluster_name, std::string &shard_name);

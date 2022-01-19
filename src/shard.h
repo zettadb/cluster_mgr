@@ -155,6 +155,9 @@ public:
 		return mysql_conn.ip == ip && mysql_conn.port == port;
 	}
 
+	bool update_variables(Tpye_string2 &t_string2);
+	bool get_variables(std::string &variable, std::string &value);
+	bool set_variables(std::string &variable, std::string &value_int, std::string &value_str);
 	bool update_instance_cluster_info();
 	int start_mgr(Group_member_status st, bool as_master);
 	
@@ -404,6 +407,12 @@ public:
 	{
 		Scopped_mutex sm(mtx);
 		return ha_mode;
+	}
+
+	void set_mode(HAVL_mode mode)
+	{
+		Scopped_mutex sm(mtx);
+		ha_mode = mode;
 	}
 
 	uint get_id() const

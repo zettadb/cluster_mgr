@@ -442,6 +442,47 @@ int Shard_node::connect()
 	return mysql_conn.connect();
 }
 
+bool Shard_node::update_variables(Tpye_string2 &t_string2)
+{
+	std::string str_sql = "set persist " + std::get<0>(t_string2) + "='" + std::get<1>(t_string2) + "'";
+	return send_stmt(SQLCOM_SET_OPTION, str_sql.c_str(), str_sql.length(), stmt_retries);
+}
+
+bool Shard_node::get_variables(std::string &variable, std::string &value)
+{
+	std::string str_sql = "select @@" + variable;
+	int ret = send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret)
+		return -1;
+
+    MYSQL_RES *result = get_result();
+    MYSQL_ROW row;
+    if ((row = mysql_fetch_row(result)))
+    {
+		value = row[0];
+	}
+	else
+	{
+		ret = -1;
+	}
+
+	free_mysql_result();
+	return ret;
+}
+
+bool Shard_node::set_variables(std::string &variable, std::string &value_int, std::string &value_str)
+{
+	std::string str_sql;
+
+	if(value_int.length())
+		str_sql = "set persist " + variable + "=" + value_int;
+	else
+		str_sql = "set persist " + variable + "='" + value_str + "'";
+	syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
+
+	return send_stmt(SQLCOM_SET_OPTION, str_sql.c_str(), str_sql.length(), stmt_retries);
+}
+
 bool Shard_node::update_instance_cluster_info()
 {
 	std::string cluster_name = owner->get_cluster_name();
@@ -449,7 +490,6 @@ bool Shard_node::update_instance_cluster_info()
 	std::string str_sql;
 
 	str_sql = "update kunlun_sysdb.cluster_info set cluster_name='" + cluster_name + "',shard_name='" + shard_name + "'";
-
 	return send_stmt(SQLCOM_UPDATE, str_sql.c_str(), str_sql.length(), stmt_retries);
 }
 

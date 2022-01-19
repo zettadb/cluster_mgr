@@ -121,6 +121,37 @@ send_stmt(int pgres, const char *database, const char *stmt, int nretries)
 	return ret;
 }
 
+bool Computer_node::get_variables(std::string &variable, std::string &value)
+{
+	int ret;
+	PGresult *presult;
+	MYSQL_RES *result;
+	MYSQL_ROW row;
+	std::string str_sql;
+
+	str_sql = "show " + variable;
+	ret = send_stmt(PG_COPYRES_TUPLES, "postgres", str_sql.c_str(), stmt_retries);
+	if(ret)
+		return -1;
+
+	presult = get_result();
+	if(PQntuples(presult)==1)
+	{
+		value = PQgetvalue(presult,0,0);
+	}
+	else
+	{
+		ret = -1;
+	}
+	free_pgsql_result();
+
+	return ret;
+}
+
+bool Computer_node::set_variables(std::string &variable, std::string &value_int, std::string &value_str)
+{
+	return true;
+}
 
 KunlunCluster::KunlunCluster(uint id_, const std::string &name_):
 	id(id_),name(name_)

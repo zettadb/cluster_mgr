@@ -129,6 +129,43 @@ void Job::notify_node_update(std::set<std::string> &alterant_node_ip, int type)
 	}
 }
 
+bool Job::check_timestamp(cJSON *root, std::string &str_ret)
+{
+	cJSON *ret_root = NULL;
+	char *ret_cjson = NULL;
+	cJSON *item;
+
+	uint64_t cluster_timestamp,node_timestamp;
+	std::string timestamp;
+	get_timestamp(timestamp);
+
+	item = cJSON_GetObjectItem(root, "timestamp");
+	if(item == NULL || item->valuestring == NULL)
+	{
+		syslog(Logger::ERROR, "get timestamp error");
+		return false;
+	}
+
+	cluster_timestamp = atol(timestamp.c_str());
+	node_timestamp = atol(item->valuestring);
+
+	ret_root = cJSON_CreateObject();
+	if(labs(cluster_timestamp-node_timestamp)<3)
+		cJSON_AddStringToObject(ret_root, "result", "true");
+	else
+		cJSON_AddStringToObject(ret_root, "result", "false");
+
+	ret_cjson = cJSON_Print(ret_root);
+	str_ret = ret_cjson;
+
+	if(ret_root != NULL)
+		cJSON_Delete(ret_root);
+	if(ret_cjson != NULL)
+		free(ret_cjson);
+
+	return true;
+}
+
 bool Job::check_local_ip(std::string &ip)
 {
 	for(auto &local_ip: vec_local_ip)
@@ -918,7 +955,7 @@ start:
 	// get status from node 
 	get_status = "{\"ver\":\"" + http_cmd_version + "\",\"job_id\":\"" + uuid_job_id + "\",\"job_type\":\"get_status\"}";
 	
-	retry = 60;
+	retry = 120;
 	while(retry-->0 && !Job::do_exit)
 	{
 		sleep(1);
@@ -1217,7 +1254,7 @@ start:
 	// get status from node 
 	get_status = "{\"ver\":\"" + http_cmd_version + "\",\"job_id\":\"" + uuid_job_id + "\",\"job_type\":\"get_status\"}";
 	
-	retry = 60;
+	retry = 90;
 	while(retry-->0 && !Job::do_exit)
 	{
 		sleep(1);
@@ -2758,122 +2795,6 @@ end:
 	System::get_instance()->set_cluster_mgr_working(true);
 }
 
-bool Job::job_update_group_seeds(Tpye_Ip_Port &ip_port, std::string &group_seeds)
-{
-	cJSON *root = NULL;
-	char *cjson = NULL;
-
-	bool ret = false;
-	int retry;
-	std::string post_url,get_status,result_str;
-	std::string uuid_job_id;
-	get_uuid(uuid_job_id);
-
-	/////////////////////////////////////////////////////////
-	// create json parameter
-	root = cJSON_CreateObject();
-	cJSON_AddStringToObject(root, "ver", http_cmd_version.c_str());
-	cJSON_AddStringToObject(root, "job_id", uuid_job_id.c_str());
-	cJSON_AddStringToObject(root, "job_type", "group_seeds");
-	cJSON_AddStringToObject(root, "ip", ip_port.first.c_str());
-	cJSON_AddNumberToObject(root, "port", ip_port.second);
-	cJSON_AddStringToObject(root, "user", "pgx");
-	cJSON_AddStringToObject(root, "password", "pgx_pwd");
-	cJSON_AddStringToObject(root, "group_seeds", group_seeds.c_str());
-
-	/////////////////////////////////////////////////////////
-	// http post parameter to node
-	post_url = "http://" + ip_port.first + ":" + std::to_string(node_mgr_http_port);
-
-	retry = 3;
-	cjson = cJSON_Print(root);
-	//syslog(Logger::INFO, "cjson=%s",cjson);
-	while(retry-->0 && !Job::do_exit)
-	{
-		if(Http_client::get_instance()->Http_client_post_para(post_url.c_str(), cjson, result_str)==0)
-			break;
-	}
-	free(cjson);
-	cjson = NULL;
-
-	if(retry<0)
-	{
-		syslog(Logger::ERROR, "update group seeds fail because http post");
-		goto end;
-	}
-	
-	/////////////////////////////////////////////////////////
-	// get status from node 
-	get_status = "{\"ver\":\"" + http_cmd_version + "\",\"job_id\":\"" + uuid_job_id + "\",\"job_type\":\"get_status\"}";
-	
-	retry = 30;
-	while(retry-->0 && !Job::do_exit)
-	{
-		sleep(1);
-
-		if(Http_client::get_instance()->Http_client_post_para(post_url.c_str(), get_status.c_str(), result_str)==0)
-		{
-			cJSON *ret_root;
-			cJSON *ret_item;
-			std::string result,info;
-
-			//syslog(Logger::INFO, "result_str=%s",result_str.c_str());
-			ret_root = cJSON_Parse(result_str.c_str());
-			if(ret_root == NULL)
-			{
-				syslog(Logger::ERROR, "cJSON_Parse error");	
-				goto end;
-			}
-
-			ret_item = cJSON_GetObjectItem(ret_root, "result");
-			if(ret_item == NULL || ret_item->valuestring == NULL)
-			{
-				syslog(Logger::ERROR, "get result error");
-				cJSON_Delete(ret_root);
-				goto end;
-			}
-			result = ret_item->valuestring;
-
-			ret_item = cJSON_GetObjectItem(ret_root, "info");
-			if(ret_item == NULL || ret_item->valuestring == NULL)
-			{
-				syslog(Logger::ERROR, "get info error");
-				cJSON_Delete(ret_root);
-				goto end;
-			}
-			info = ret_item->valuestring;
-			cJSON_Delete(ret_root);
-
-			if(result == "error")
-			{
-				syslog(Logger::ERROR, "update group seeds fail %s", info.c_str());
-				goto end;
-			}
-			else if(result == "succeed")
-			{
-				syslog(Logger::INFO, "update group seeds %s:%d finish!", ip_port.first.c_str(), ip_port.second);
-				break;
-			}
-		}
-	}
-
-	if(retry<0)
-	{
-		syslog(Logger::ERROR, "update group seeds timeout %s", result_str.c_str());
-		goto end;
-	}
-
-	ret = true;
-
-end:
-	if(root!=NULL)
-		cJSON_Delete(root);
-	if(cjson!=NULL)
-		free(cjson);
-
-	return ret;
-}
-
 bool Job::job_update_shard_nodes(std::string &cluster_name, std::string &shard_name)
 {
 	cJSON *root = NULL;
@@ -2886,6 +2807,7 @@ bool Job::job_update_shard_nodes(std::string &cluster_name, std::string &shard_n
 	int nodes_num;
 
 	std::vector<Tpye_Ip_Port> vec_storage_ip_port;
+	Tpye_string2 t_string2;
 
 	/////////////////////////////////////////////////////////
 	// get shards_ip_port by cluster_name and shard_name
@@ -2948,13 +2870,15 @@ bool Job::job_update_shard_nodes(std::string &cluster_name, std::string &shard_n
 			group_seeds = ip_sub + ":" + std::to_string(port_sub);
 	}
 
+	t_string2 = std::make_tuple("group_replication_group_seeds", group_seeds);
+
 	/////////////////////////////////////////////////////////
 	//update group_seeds to every node 
 	for(auto &ip_port: vec_storage_ip_port)
 	{
-		if(!job_update_group_seeds(ip_port, group_seeds))
+		if(!System::get_instance()->update_variables(cluster_name, shard_name, ip_port, t_string2))
 		{
-			syslog(Logger::ERROR, "job_update_group_seeds error");
+			syslog(Logger::ERROR, "update_group_seeds error");
 			goto end;
 		}
 	}
@@ -3547,7 +3471,7 @@ bool Job::job_backup_shard(std::string &cluster_name, Tpye_Ip_Port &ip_port, int
 	// get status from node 
 	get_status = "{\"ver\":\"" + http_cmd_version + "\",\"job_id\":\"" + uuid_job_id + "\",\"job_type\":\"get_status\"}";
 	
-	retry = 90;
+	retry = 60*60*3;	//3 hours
 	while(retry-->0 && !Job::do_exit)
 	{
 		sleep(1);
@@ -3796,7 +3720,7 @@ bool Job::job_restore_storage(std::string &cluster_name, std::string &shard_name
 	// get status from node 
 	get_status = "{\"ver\":\"" + http_cmd_version + "\",\"job_id\":\"" + uuid_job_id + "\",\"job_type\":\"get_status\"}";
 	
-	retry = 90;
+	retry = 60*60*3;	//3 hours
 	while(retry-->0 && !Job::do_exit)
 	{
 		sleep(1);
@@ -3916,7 +3840,7 @@ bool Job::job_restore_computer(std::string &cluster_name, Tpye_Ip_Port &ip_port)
 	// get status from node 
 	get_status = "{\"ver\":\"" + http_cmd_version + "\",\"job_id\":\"" + uuid_job_id + "\",\"job_type\":\"get_status\"}";
 	
-	retry = 90;
+	retry = 60*30;	//30 minutes
 	while(retry-->0 && !Job::do_exit)
 	{
 		sleep(1);
@@ -4421,6 +4345,12 @@ bool Job::get_job_type(char *str, Job_type &job_type)
 		job_type = JOB_GET_STORAGE;
 	else if(strcmp(str, "get_computer")==0)
 		job_type = JOB_GET_COMPUTER;
+	else if(strcmp(str, "check_timestamp")==0)
+		job_type = JOB_CHECK_TIMESTAMP;
+	else if(strcmp(str, "get_variable")==0)
+		job_type = JOB_GET_VARIABLE;
+	else if(strcmp(str, "set_variable")==0)
+		job_type = JOB_SET_VARIABLE;
 	else if(strcmp(str, "create_machine")==0)
 		job_type = JOB_CREATE_MACHINE;
 	else if(strcmp(str, "update_machine")==0)
@@ -4512,6 +4442,18 @@ bool Job::job_handle_ahead(const std::string &para, std::string &str_ret)
 	else if(job_type == JOB_GET_COMPUTER)
 	{
 		ret = System::get_instance()->get_computer(root, str_ret);
+	}
+	else if(job_type == JOB_GET_VARIABLE)
+	{
+		ret = System::get_instance()->get_variable(root, str_ret);
+	}
+	else if(job_type == JOB_SET_VARIABLE)
+	{
+		ret = System::get_instance()->set_variable(root, str_ret);
+	}
+	else if(job_type == JOB_CHECK_TIMESTAMP)
+	{
+		ret = check_timestamp(root, str_ret);
 	}
 	else
 	{

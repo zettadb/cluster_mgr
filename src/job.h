@@ -31,6 +31,9 @@ JOB_GET_META,
 JOB_GET_CLUSTER,
 JOB_GET_STORAGE,
 JOB_GET_COMPUTER,
+JOB_CHECK_TIMESTAMP,
+JOB_GET_VARIABLE,
+JOB_SET_VARIABLE,
 JOB_CREATE_MACHINE, 
 JOB_UPDATE_MACHINE, 
 JOB_DELETE_MACHINE, 
@@ -85,6 +88,7 @@ public:
 	void join_all();
 
 	void notify_node_update(std::set<std::string> &alterant_node_ip, int type);
+	bool check_timestamp(cJSON *root, std::string &str_ret);
 	bool check_local_ip(std::string &ip);
 	void get_local_ip();
 	void get_user_name();
@@ -127,7 +131,6 @@ public:
 	bool job_start_comps(std::string &cluster_name);
 	void job_add_comps(cJSON *root);
 	void job_delete_comp(cJSON *root);
-	bool job_update_group_seeds(Tpye_Ip_Port &ip_port, std::string &group_seeds);
 	bool job_update_shard_nodes(std::string &cluster_name, std::string &shard_name);
 	void job_add_nodes(cJSON *root);
 	bool job_delete_shard_json(std::string &cluster_name, std::string &shard_name, Tpye_Ip_Port &ip_port);
