@@ -90,10 +90,10 @@ program_binaries_path = ../../../program_binaries
 instance_binaries_path = ../../../instance_binaries
 
 # storage_prog_package_name
-storage_prog_package_name = percona-8.0.18-bin-rel
+storage_prog_package_name = kunlun-storage-0.9.1
 
 # computer_prog_package_name
-computer_prog_package_name = postgresql-11.5-rel
+computer_prog_package_name = kunlun-server-0.9.1
 
 # storage instance port start
 storage_instance_port_start = 57330

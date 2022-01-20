@@ -565,6 +565,10 @@ public:
 	int delete_cluster_shard_node_from_metadata(std::string &cluster_name, std::string &shard_name, Tpye_Ip_Port &ip_port);
 	int delete_cluster_comp_from_metadata(std::string &cluster_name, std::string &comp_name);
 	int get_server_nodes_from_metadata(std::vector<Machine*> &vec_machines);
+	int get_meta_instance(Machine* machine);
+	int get_storage_instance_port(Machine* machine);
+	int get_computer_instance_port(Machine* machine);
+	int update_instance_status(Tpye_Ip_Port &ip_port, std::string &status, int &type);
 	int add_shard_nodes(std::string &cluster_name, std::string &shard_name, std::vector<Tpye_Ip_Port_User_Pwd> vec_ip_port_user_pwd);
 	int get_backup_info_from_metadata(std::string &cluster_name, std::string &timestamp, Tpye_cluster_info &cluster_info);
 	bool check_machine_hostaddr(std::string &hostaddr);

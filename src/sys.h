@@ -106,6 +106,7 @@ public:
 	bool get_cluster_shard_order(std::string &cluster_name, std::string &shard_name, int &order);
 	bool get_meta_info(std::vector<Tpye_Ip_Port_User_Pwd> &meta);
 	bool get_machine_instance_port(Machine* machine);
+	bool update_instance_status(Tpye_Ip_Port &ip_port, std::string &status, int &type);
 	bool get_node_instance(cJSON *root, std::string &str_ret);
 	bool get_meta(cJSON *root, std::string &str_ret);
 	bool get_cluster(cJSON *root, std::string &str_ret);

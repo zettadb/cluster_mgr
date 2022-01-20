@@ -553,49 +553,15 @@ bool System::get_machine_instance_port(Machine* machine)
 {
 	Scopped_mutex sm(mtx);
 
-	std::string ip;
-	int port;
-
 	machine->instances = 0;
 	machine->instance_storage = 0;
 	machine->instance_computer = 0;
 	machine->port_storage = 0;
 	machine->port_computer = 0;
 
-	//meta node
-	for(auto &node: meta_shard.get_nodes())
-	{
-		node->get_ip_port(ip, port);
-		if(ip == machine->ip)
-			machine->instance_storage++;
-	}
-
-	//storage node
-	for (auto &cluster:kl_clusters)
-		for (auto &shard:cluster->storage_shards)
-			for (auto &node:shard->get_nodes())
-			{
-				node->get_ip_port(ip, port);
-				if(ip == machine->ip)
-				{
-					machine->instance_storage++;
-					if(port > machine->port_storage)
-						machine->port_storage = port;
-				}
-			}
-
-	//computer node
-	for (auto &cluster:kl_clusters)
-		for (auto &node:cluster->computer_nodes)
-		{
-			node->get_ip_port(ip, port);
-			if(ip == machine->ip)
-			{
-				machine->instance_computer++;
-				if(port > machine->port_computer)
-					machine->port_computer = port;
-			}
-		}
+	meta_shard.get_meta_instance(machine);
+	meta_shard.get_storage_instance_port(machine);
+	meta_shard.get_computer_instance_port(machine);
 
 	machine->instances = machine->instance_storage + machine->instance_computer;
 
@@ -608,6 +574,19 @@ bool System::get_machine_instance_port(Machine* machine)
 		machine->port_computer = computer_instance_port_start;
 	else
 		machine->port_computer += 1;
+
+	return true;
+}
+
+bool System::update_instance_status(Tpye_Ip_Port &ip_port, std::string &status, int &type)
+{
+	Scopped_mutex sm(mtx);
+
+	if(meta_shard.update_instance_status(ip_port, status, type))
+	{
+		//syslog(Logger::ERROR, "update_instance_status error");
+		return false;
+	}
 
 	return true;
 }

@@ -150,7 +150,7 @@ bool Job::check_timestamp(cJSON *root, std::string &str_ret)
 	node_timestamp = atol(item->valuestring);
 
 	ret_root = cJSON_CreateObject();
-	if(labs(cluster_timestamp-node_timestamp)<3)
+	if(ABS(cluster_timestamp,node_timestamp)<3)
 		cJSON_AddStringToObject(ret_root, "result", "true");
 	else
 		cJSON_AddStringToObject(ret_root, "result", "false");
@@ -746,6 +746,236 @@ end:
 	job_update_operation_record(job_id, job_result, job_info, hostaddr);
 }
 
+bool Job::job_control_instance(Tpye_Ip_Port &ip_port, std::string type, std::string control)
+{
+	cJSON *root = NULL;
+	char *cjson = NULL;
+
+	bool ret = false;
+	std::string uuid_job_id;
+	std::string post_url,get_status,result_str;
+	get_uuid(uuid_job_id);
+	
+	/////////////////////////////////////////////////////////
+	// create json parameter
+	root = cJSON_CreateObject();
+	cJSON_AddStringToObject(root, "ver", http_cmd_version.c_str());
+	cJSON_AddStringToObject(root, "job_id", uuid_job_id.c_str());
+	cJSON_AddStringToObject(root, "job_type", "control_instance");
+	cJSON_AddStringToObject(root, "type", type.c_str());
+	cJSON_AddStringToObject(root, "control", control.c_str());
+	cJSON_AddStringToObject(root, "ip", ip_port.first.c_str());
+	cJSON_AddNumberToObject(root, "port", ip_port.second);
+
+	/////////////////////////////////////////////////////////
+	// send json parameter to node
+
+	cjson = cJSON_Print(root);
+	cJSON_Delete(root);
+	root = NULL;
+	//syslog(Logger::INFO, "cjson=%s",cjson);
+
+	/////////////////////////////////////////////////////////
+	// http post parameter to node
+	post_url = "http://" + ip_port.first + ":" + std::to_string(node_mgr_http_port);
+	
+	int retry = 3;
+	while(retry-->0 && !Job::do_exit)
+	{
+		if(Http_client::get_instance()->Http_client_post_para(post_url.c_str(), cjson, result_str)==0)
+			break;
+	}
+	free(cjson);
+	cjson = NULL;
+
+	if(retry<0)
+	{
+		syslog(Logger::ERROR, "control instance fail because http post");
+		goto end;
+	}
+
+	/////////////////////////////////////////////////////////
+	// get status from node 
+	get_status = "{\"ver\":\"" + http_cmd_version + "\",\"job_id\":\"" + uuid_job_id + "\",\"job_type\":\"get_status\"}";
+	
+	retry = 30;
+	while(retry-->0 && !Job::do_exit)
+	{
+		sleep(1);
+
+		if(Http_client::get_instance()->Http_client_post_para(post_url.c_str(), get_status.c_str(), result_str)==0)
+		{
+			cJSON *ret_root;
+			cJSON *ret_item;
+			std::string result,info;
+			
+			//syslog(Logger::INFO, "result_str=%s",result_str.c_str());
+			ret_root = cJSON_Parse(result_str.c_str());
+			if(ret_root == NULL)
+			{
+				syslog(Logger::ERROR, "cJSON_Parse error"); 
+				goto end;
+			}
+
+			ret_item = cJSON_GetObjectItem(ret_root, "result");
+			if(ret_item == NULL || ret_item->valuestring == NULL)
+			{
+				syslog(Logger::ERROR, "get result error");
+				cJSON_Delete(ret_root);
+				goto end;
+			}
+			result = ret_item->valuestring;
+			
+			ret_item = cJSON_GetObjectItem(ret_root, "info");
+			if(ret_item == NULL || ret_item->valuestring == NULL)
+			{
+				syslog(Logger::ERROR, "get info error");
+				cJSON_Delete(ret_root);
+				goto end;
+			}
+			info = ret_item->valuestring;
+			cJSON_Delete(ret_root);
+
+			if(result == "error")
+			{
+				syslog(Logger::ERROR, "control fail %s", info.c_str());
+				goto end;
+			}
+			else if(result == "succeed")
+			{
+				syslog(Logger::INFO, "control %s %s:%d finish!", control.c_str(), ip_port.first.c_str(), ip_port.second);
+				break;
+			}
+		}
+	}
+
+	if(retry<0)
+	{
+		syslog(Logger::ERROR, "control instance timeout %s", result_str.c_str());
+		goto end;
+	}
+
+	ret = true;
+
+end:
+	if(root!=NULL)
+		cJSON_Delete(root);
+	if(cjson!=NULL)
+		free(cjson);
+
+	return ret;
+}
+
+void Job::job_control_instance(cJSON *root)
+{
+	std::string job_id;
+	std::string job_result;
+	std::string job_info;
+
+	std::string ip, instance_status, info_other, type, control;
+	int port;
+	int instance_type = 0;
+	Tpye_Ip_Port ip_port;
+
+	cJSON *item;
+	item = cJSON_GetObjectItem(root, "job_id");
+	if(item == NULL || item->valuestring == NULL)
+	{
+		syslog(Logger::ERROR, "get_job_id error");
+		return;
+	}
+	job_id = item->valuestring;
+
+	item = cJSON_GetObjectItem(root, "control");
+	if(item == NULL || item->valuestring == NULL)
+	{
+		job_info = "get control error";
+		goto end;
+	}
+	control = item->valuestring;
+
+	item = cJSON_GetObjectItem(root, "ip");
+	if(item == NULL || item->valuestring == NULL)
+	{
+		job_info = "get ip error";
+		goto end;
+	}
+	ip = item->valuestring;
+
+	item = cJSON_GetObjectItem(root, "port");
+	if(item == NULL || item->valuestring == NULL)
+	{
+		job_info = "get port error";
+		goto end;
+	}
+	port = atoi(item->valuestring);
+
+	job_result = "not_started";
+	job_info = "control instance working";
+	info_other = ip + std::to_string(port);
+	update_jobid_status(job_id, job_result, job_info);
+	syslog(Logger::INFO, "%s", job_info.c_str());
+	job_insert_operation_record(root, job_result, job_info, info_other);
+
+	System::get_instance()->set_cluster_mgr_working(false);
+
+	//////////////////////////////////////////////////////////
+	// update meta table status by ip and port
+	if(control == "stop")
+		instance_status = "inactive";
+	else if(control == "start" || control == "restart")
+		instance_status = "active";
+	else
+	{
+		job_info = "control type error";
+		goto end;
+	}
+
+	ip_port = std::make_pair(ip, port);
+	if(!System::get_instance()->update_instance_status(ip_port, instance_status, instance_type))
+	{
+		job_info = "update_instance_status error";
+		goto end;
+	}
+
+	//////////////////////////////////////////////////////////
+	// stop instance by ip and port
+	if(instance_type == 1)
+	{
+		type = "storage";
+	}
+	else if(instance_type == 2)
+	{
+		type = "computer";
+	}
+	else
+	{
+		job_info = "instance ip_port no find";
+		goto end;
+	}
+
+	if(!job_control_instance(ip_port, type, control))
+	{
+		job_info = "job_control_instance error";
+		goto end;
+	}
+
+	job_result = "done";
+	job_info = "control instance succeed";
+	update_jobid_status(job_id, job_result, job_info);
+	syslog(Logger::INFO, "%s", job_info.c_str());
+	job_update_operation_record(job_id, job_result, job_info, info_other);
+	System::get_instance()->set_cluster_mgr_working(true);
+	return;
+
+end:
+	job_result = "failed";
+	update_jobid_status(job_id, job_result, job_info);
+	syslog(Logger::ERROR, "%s", job_info.c_str());
+	job_update_operation_record(job_id, job_result, job_info, info_other);
+	System::get_instance()->set_cluster_mgr_working(true);
+}
+
 bool Job::job_generate_cluster_name(std::string &cluster_name)
 {
 	int cluster_id = 0;
@@ -773,53 +1003,29 @@ bool Job::job_generate_cluster_name(std::string &cluster_name)
 
 bool Job::job_create_program_path()
 {
-	std::string cmd, cmd_path, program_path, instance_path;
+	std::string cmd, cmd_path, program_path;
 
-	//upzip from program_binaries_path to instance_binaries_path for install cmd
+	//upzip to program_binaries_path for install cmd
 	//storage
-	cmd_path = instance_binaries_path + "/" + storage_prog_package_name + "/dba_tools";
-	
+	cmd_path = program_binaries_path + "/" + storage_prog_package_name + "/dba_tools";
 	if(access(cmd_path.c_str(), F_OK) != 0)
 	{
 		syslog(Logger::INFO, "upzip %s.tgz" , storage_prog_package_name.c_str());
-		//////////////////////////////
-		//upzip from program_binaries_path to instance_binaries_path
 		program_path = program_binaries_path + "/" + storage_prog_package_name + ".tgz";
-		instance_path = instance_binaries_path;
 
-		//////////////////////////////
-		//mkdir instance_path
-		cmd = "mkdir -p " + instance_path;
-		if(!job_system_cmd(cmd))
-			return false;
-
-		//////////////////////////////
-		//tar to instance_path
-		cmd = "tar zxf " + program_path + " -C " + instance_path;
+		cmd = "tar zxf " + program_path + " -C " + program_binaries_path;
 		if(!job_system_cmd(cmd))
 			return false;
 	}
 
 	//computer
-	cmd_path = instance_binaries_path + "/" + computer_prog_package_name + "/scripts";
-	
+	cmd_path = program_binaries_path + "/" + computer_prog_package_name + "/scripts";
 	if(access(cmd_path.c_str(), F_OK) != 0)
 	{
 		syslog(Logger::INFO, "upzip %s.tgz" , computer_prog_package_name.c_str());
-		//////////////////////////////
-		//upzip from program_binaries_path to instance_binaries_path
 		program_path = program_binaries_path + "/" + computer_prog_package_name + ".tgz";
-		instance_path = instance_binaries_path;
 
-		//////////////////////////////
-		//mkdir instance_path
-		cmd = "mkdir -p " + instance_path;
-		if(!job_system_cmd(cmd))
-			return false;
-
-		//////////////////////////////
-		//tar to instance_path
-		cmd = "tar zxf " + program_path + " -C " + instance_path;
+		cmd = "tar zxf " + program_path + " -C " + program_binaries_path;
 		if(!job_system_cmd(cmd))
 			return false;
 	}
@@ -856,7 +1062,7 @@ bool Job::job_create_meta_jsonfile()
 
 	/////////////////////////////////////////////////////////
 	// save json file to cluster_json_path
-	jsonfile_path = instance_binaries_path + "/" + computer_prog_package_name + "/scripts/pgsql_meta.json";
+	jsonfile_path = program_binaries_path + "/" + computer_prog_package_name + "/scripts/pgsql_meta.json";
 	cjson = cJSON_Print(root);
 	if(cjson != NULL)
 	{
@@ -904,7 +1110,7 @@ bool Job::job_create_shards_jsonfile(std::vector <std::vector<Tpye_Ip_Port_Paths
 
 	/////////////////////////////////////////////////////////
 	// save json file to cluster_json_path and cmd_path
-	jsonfile_path = instance_binaries_path + "/" + computer_prog_package_name + "/scripts/pgsql_shards.json";
+	jsonfile_path = program_binaries_path + "/" + computer_prog_package_name + "/scripts/pgsql_shards.json";
 	cjson = cJSON_Print(root);
 	if(cjson != NULL)
 	{
@@ -1368,7 +1574,7 @@ bool Job::job_create_comps(std::vector<Tpye_Ip_Port_Paths> &comps, std::string &
 	{
 		job_save_file(jsonfile_path, cjson);
 
-		jsonfile_path = instance_binaries_path + "/" + computer_prog_package_name + "/scripts/pgsql_comps.json";
+		jsonfile_path = program_binaries_path + "/" + computer_prog_package_name + "/scripts/pgsql_comps.json";
 		job_save_file(jsonfile_path, cjson);
 
 		free(cjson);
@@ -1407,7 +1613,7 @@ bool Job::job_start_cluster(std::string &cluster_name, std::string &ha_mode)
 
 	/////////////////////////////////////////////////////////
 	// start cluster cmd
-	cmd = "cd " + instance_binaries_path + "/" + computer_prog_package_name + "/scripts/;";
+	cmd = "cd " + program_binaries_path + "/" + computer_prog_package_name + "/scripts/;";
 	cmd += "python2 create_cluster.py --shards_config ./pgsql_shards.json --comps_config ./pgsql_comps.json --meta_config ./pgsql_meta.json --cluster_name ";
 	cmd += cluster_name + " --cluster_owner abc --cluster_biz kunlun --ha_mode " + ha_mode;
 	syslog(Logger::INFO, "job_start_cluster cmd %s", cmd.c_str());
@@ -2144,7 +2350,7 @@ bool Job::job_start_shards(std::string &cluster_name, std::vector<std::string> &
 
 	/////////////////////////////////////////////////////////
 	// start cluster cmd
-	cmd = "cd " + instance_binaries_path + "/" + computer_prog_package_name + "/scripts/;";
+	cmd = "cd " + program_binaries_path + "/" + computer_prog_package_name + "/scripts/;";
 	cmd += "python2 add_shards.py --config ./pgsql_shards.json --meta_config ./pgsql_meta.json --cluster_name " + cluster_name;
 	syslog(Logger::INFO, "job_start_shards cmd %s", cmd.c_str());
 
@@ -2488,7 +2694,7 @@ bool Job::job_start_comps(std::string &cluster_name)
 
 	/////////////////////////////////////////////////////////
 	// start cluster cmd
-	cmd = "cd " + instance_binaries_path + "/" + computer_prog_package_name + "/scripts/;";
+	cmd = "cd " + program_binaries_path + "/" + computer_prog_package_name + "/scripts/;";
 	cmd += "python2 add_comp_nodes.py --config ./pgsql_comps.json --meta_config ./pgsql_meta.json --cluster_name " + cluster_name;
 	syslog(Logger::INFO, "job_start_copms cmd %s", cmd.c_str());
 
@@ -4357,6 +4563,8 @@ bool Job::get_job_type(char *str, Job_type &job_type)
 		job_type = JOB_UPDATE_MACHINE;
 	else if(strcmp(str, "delete_machine")==0)
 		job_type = JOB_DELETE_MACHINE;
+	else if(strcmp(str, "control_instance")==0)
+		job_type = JOB_CONTROL_INSTANCE;
 	else if(strcmp(str, "create_cluster")==0)
 		job_type = JOB_CREATE_CLUSTER;
 	else if(strcmp(str, "delete_cluster")==0)
@@ -4522,6 +4730,10 @@ void Job::job_handle(std::string &job)
 	else if(job_type == JOB_DELETE_MACHINE)
 	{
 		job_delete_machine(root);
+	}
+	else if(job_type == JOB_CONTROL_INSTANCE)
+	{
+		job_control_instance(root);
 	}
 	else if(job_type == JOB_CREATE_CLUSTER)
 	{

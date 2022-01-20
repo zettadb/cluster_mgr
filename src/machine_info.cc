@@ -399,7 +399,6 @@ bool Machine_info::update_machines_info()
 		}
 		else
 		{
-			
 			if(!update_machine_in_table(*machine))
 			{
 				syslog(Logger::ERROR, "update_machine_in_table error");

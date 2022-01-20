@@ -37,6 +37,7 @@ JOB_SET_VARIABLE,
 JOB_CREATE_MACHINE, 
 JOB_UPDATE_MACHINE, 
 JOB_DELETE_MACHINE, 
+JOB_CONTROL_INSTANCE, 
 JOB_CREATE_CLUSTER, 
 JOB_DELETE_CLUSTER, 
 JOB_ADD_SHARDS, 
@@ -107,6 +108,9 @@ public:
 	void job_create_machine(cJSON *root);
 	void job_update_machine(cJSON *root);
 	void job_delete_machine(cJSON *root);
+
+	bool job_control_instance(Tpye_Ip_Port &ip_port, std::string type, std::string control);
+	void job_control_instance(cJSON *root);
 
 	bool job_generate_cluster_name(std::string &cluster_name);
 	bool job_create_program_path();
