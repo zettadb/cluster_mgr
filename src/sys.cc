@@ -152,7 +152,21 @@ int System::setup_metadata_shard()
 		sn->get_ip_port(master_ip, master_port);
 		if (meta_shard.set_master(sn))
 		{
-			meta_shard.set_mode(Shard::HAVL_mode::HA_no_rep);
+			ret = sn->send_stmt(SQLCOM_SELECT, CONST_STR_PTR_LEN("select count(*) from meta_db_nodes"), 3);
+			if (ret)
+				return ret;
+
+			result = sn->get_result();
+			if ((row = mysql_fetch_row(result)))
+			{
+				if(row[0] != NULL && strcmp(row[0],"1") == 0)
+				{
+					meta_shard.set_mode(Shard::HAVL_mode::HA_no_rep);
+					syslog(Logger::INFO, "set meta shard as HA_no_rep");
+				}
+			}
+			sn->free_mysql_result();
+			
 			syslog(Logger::WARNING,
 		   		"Suppose primary node of shard(%s.%s, %u) to be (%s:%d, %u) since it's out of the meta-shard MGR cluster. It must have latest list of metadata nodes otherwise Kunlun DDC won't be able to work correctly.",
 		   		meta_shard.get_cluster_name().c_str(),
