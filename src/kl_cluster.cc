@@ -238,6 +238,7 @@ int KunlunCluster::refresh_storages_to_computers()
 			vec_database_namespace_oid.emplace_back(std::make_tuple(db, ns, oid));
 		}
 		computer->free_pgsql_result();
+		computer->close_conn();
 	}
 
 	////////////////////////////////////////////////////////
@@ -320,6 +321,7 @@ int KunlunCluster::refresh_storages_to_computers()
 				//syslog(Logger::INFO, "str_sql222222 = %s", str_sql.c_str());
 				bool ret = comp->send_stmt(PG_COPYRES_EVENTS, std::get<0>(dbnsid.first).c_str(), str_sql.c_str(), stmt_retries);
 				comp->free_pgsql_result();
+				comp->close_conn();
 			}
 		}
 	}
@@ -396,6 +398,7 @@ int KunlunCluster::refresh_storages_to_computers_metashard(MetadataShard &meta_s
 			vec_database_namespace.emplace_back(std::make_pair(db, ns));
 		}
 		computer->free_pgsql_result();
+		computer->close_conn();
 	}
 
 	////////////////////////////////////////////////////////
