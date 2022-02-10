@@ -1,0 +1,6 @@
+add_library(util_func OBJECT meta_info.cc error_code.cc)
+target_include_directories(util_func INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_include_directories(util_func PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../")
+target_include_directories(util_func PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../resources/include")
+target_include_directories(util_func PUBLIC "${PROJECT_BINARY_DIR}")
+target_include_directories(util_func PUBLIC "/home/snowao/code/kunlun/zettalib/include")

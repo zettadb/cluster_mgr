@@ -1,0 +1,7 @@
+add_library(request_framework OBJECT handleRequestThread.cc missionRequest.cc requestBase.cc remoteTask.cc)
+target_include_directories(request_framework INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_include_directories(request_framework PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../")
+target_include_directories(request_framework PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../op_mysql")
+target_include_directories(request_framework PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../vendor/include")
+target_include_directories(request_framework PUBLIC "${PROJECT_BINARY_DIR}")
+target_include_directories(request_framework PUBLIC "/home/snowao/code/kunlun/zettalib/include")
