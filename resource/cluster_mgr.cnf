@@ -42,8 +42,11 @@ meta_user = pgx
 # meta data server user's password 
 meta_pwd = pgx_pwd
 
+# cluster mgr http port
+cluster_mgr_brpc_http_port = 8010
+
 # log file path and name
-log_file = ./cluster_mgr.log
+log_file = ../log/sys_cluster_mgr.log
 
 # NO. of times a SQL statement is resent for execution when MySQL connection broken.
 statement_retries = 3

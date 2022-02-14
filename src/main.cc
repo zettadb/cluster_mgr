@@ -11,7 +11,7 @@
 #include "http_server/node_channel.h"
 #include "log.h"
 #include "os.h"
-#include "proc_env.h"
+#include "zettalib/proc_env.h"
 #include "stdio.h"
 #include "sys.h"
 #include "sys_config.h"

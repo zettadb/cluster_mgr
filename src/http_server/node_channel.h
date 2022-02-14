@@ -8,7 +8,7 @@
 #define _NODE_CHANNEL_H_
 
 #include "brpc/channel.h"
-#include "op_mysql/op_mysql.h"
+#include "zettalib/op_mysql.h"
 #include "zettalib/errorcup.h"
 #include "request_framework/requestValueDefine.h"
 #include "util_func/error_code.h"

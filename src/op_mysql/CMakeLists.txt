@@ -1,6 +1,0 @@
-add_library(op_mysql OBJECT op_mysql.cc)
-target_include_directories(op_mysql INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}")
-target_include_directories(op_mysql PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../")
-target_include_directories(op_mysql PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../vendor/include")
-target_include_directories(op_mysql PUBLIC "${PROJECT_BINARY_DIR}")
-target_include_directories(op_mysql PUBLIC "/home/snowao/code/kunlun/zettalib/include")

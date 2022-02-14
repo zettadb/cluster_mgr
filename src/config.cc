@@ -39,6 +39,8 @@ extern std::string computer_prog_package_name;
 extern int64_t storage_instance_port_start;
 extern int64_t computer_instance_port_start;
 
+extern int64_t cluster_mgr_brpc_http_port;
+
 Configs *Configs::get_instance()
 {
 	if (m_inst == NULL)
@@ -206,7 +208,7 @@ void Configs::define_configs()
 		"Number of job work threads to create.");
 	define_int_config("num_http_threads", num_http_threads, 1, 10, 3,
 		"Number of http server threads to create.");
-	define_int_config("cluster_mgr_http_port", cluster_mgr_http_port, 1000, 65535, 5000,
+	define_int_config("cluster_mgr_brpc_http_port", cluster_mgr_http_port, 1000, 65535, 5000,
 		"http server listen port.");
 
 	char def_log_path[64];

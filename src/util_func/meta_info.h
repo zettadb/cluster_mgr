@@ -7,7 +7,7 @@
 #ifndef _KUNLUN_META_INFO_UTIL_FUNC_H_
 #define _KUNLUN_META_INFO_UTIL_FUNC_H_
 #include "request_framework/requestValueDefine.h"
-#include "op_mysql/op_mysql.h"
+#include "zettalib/op_mysql.h"
 
 namespace kunlun
 {

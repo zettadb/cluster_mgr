@@ -253,6 +253,8 @@ extern int64_t meta_svr_port;
 extern std::string meta_svr_user;
 extern std::string meta_svr_pwd;
 
+int64_t cluster_mgr_brpc_http_port;
+
 brpc::Server *NewHttpServer()
 {
 
@@ -292,7 +294,7 @@ brpc::Server *NewHttpServer()
   }
   brpc::ServerOptions *options = new brpc::ServerOptions();
   options->idle_timeout_sec = -1;
-  if (server->Start(5001, options) != 0)
+  if (server->Start(cluster_mgr_brpc_http_port, options) != 0)
   {
     syslog(Logger::ERROR, "http server start failed,");
     return nullptr;

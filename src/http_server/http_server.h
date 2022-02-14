@@ -13,7 +13,7 @@
 #include "proto/clustermng.pb.h"
 #include "request_framework/requestBase.h"
 #include "request_framework/handleRequestThread.h"
-#include "op_mysql/op_mysql.h"
+#include "zettalib/op_mysql.h"
 #include "zettalib/errorcup.h"
 #include "util_func/error_code.h"
 #include "request_framework/missionRequest.h"
