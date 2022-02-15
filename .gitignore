@@ -8,7 +8,6 @@ build*
 .clang_complete
 install/*
 *.o
-*.a
 .vscode/*
 CsdbBuild.sh
 GPATH

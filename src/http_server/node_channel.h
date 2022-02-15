@@ -10,6 +10,7 @@
 #include "brpc/channel.h"
 #include "zettalib/op_mysql.h"
 #include "zettalib/errorcup.h"
+#include "zettalib/zthread.h"
 #include "request_framework/requestValueDefine.h"
 #include "util_func/error_code.h"
 #include <map>
@@ -23,9 +24,8 @@ typedef struct NodeSpecSt_
 } NodeSpecSt;
 
 // Not thread-safe yet
-class GlobalNodeChannelManager : public kunlun::ErrorCup, public kunlun::GlobalErrorNum
+class GlobalNodeChannelManager : public kunlun::ZThread, public kunlun::ErrorCup, public kunlun::GlobalErrorNum
 {
-
 public:
   GlobalNodeChannelManager()
   {
@@ -35,9 +35,11 @@ public:
 
   bool Init();
   brpc::Channel *getNodeChannel(const char *);
+  int run();
 
 private:
   bool initNodeChannelMap();
+  void reloadFromMeta();
 
 private:
   kunlun::MysqlConnection *mysql_conn_;

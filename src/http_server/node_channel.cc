@@ -24,6 +24,18 @@ GlobalNodeChannelManager::~GlobalNodeChannelManager()
   }
 }
 
+int GlobalNodeChannelManager::run(){
+  while(1){
+    reloadFromMeta();
+    sleep(1);
+  }
+  return 0;
+}
+
+void GlobalNodeChannelManager::reloadFromMeta(){
+  return ;
+}
+
 brpc::Channel *GlobalNodeChannelManager::getNodeChannel(const char *addr)
 {
   auto iter = nodes_channel_map_.find(addr);
@@ -76,7 +88,7 @@ bool GlobalNodeChannelManager::initNodeChannelMap()
       // return false;
     }
     syslog(Logger::INFO, "Channel %s for Node Manager init successfully", node_hostaddr_str);
-    nodes_channel_map_[node_hostaddr_str] = channel;
+    nodes_channel_map_[result[i]["hostaddr"]] = channel;
   }
   return true;
 }
