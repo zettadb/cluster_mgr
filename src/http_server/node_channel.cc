@@ -75,7 +75,7 @@ bool GlobalNodeChannelManager::initNodeChannelMap()
     brpc::ChannelOptions channel_options;
     channel_options.max_retry = 10;
     channel_options.protocol = "http";
-    channel_options.timeout_ms = 5000;
+    channel_options.timeout_ms = 5000000;
 
     int ret = channel->Init(url, "", &channel_options);
     if (ret != 0)

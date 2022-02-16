@@ -10,7 +10,7 @@ static void CallBC(brpc::Controller *cntl)
 {
   if (!cntl->Failed())
   {
-    syslog(Logger::INFO, "CallBc");
+    syslog(Logger::INFO, "CallBc(): response is %s",cntl->response_attachment().to_string().c_str());
     return;
   }
   syslog(Logger::ERROR, "%s", cntl->ErrorText().c_str());

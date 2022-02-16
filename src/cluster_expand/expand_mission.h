@@ -23,8 +23,12 @@ namespace kunlun
     virtual bool SetUpMisson() override final;
     virtual void TearDownImpl() override final;
     virtual bool FillRequestBodyStImpl() override final;
+    bool MakeDir();
+    bool DumpTable();
+    bool LoadTable();
 
   private:
+    std::string mydumper_tmp_data_dir_;
   };
 };     // namespace kunlun
 #endif /*_EXPAND_MISSION_H_*/

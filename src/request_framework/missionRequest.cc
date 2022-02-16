@@ -11,8 +11,8 @@ MissionRequest::~MissionRequest() {}
 void MissionRequest::SetUpImpl()
 {
   task_manager_ = new TaskManager();
-  ArrangeRemoteTask();
   SetUpMisson();
+  ArrangeRemoteTask();
 }
 
 void MissionRequest::DealRequest()
