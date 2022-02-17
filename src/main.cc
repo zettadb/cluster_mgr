@@ -5,17 +5,17 @@
    combined with Common Clause Condition 1.0, as detailed in the NOTICE file.
 */
 
-#include "config.h"
-#include "global.h"
+#include "kl_mentain/config.h"
+#include "kl_mentain/global.h"
 #include "http_server/http_server.h"
 #include "http_server/node_channel.h"
-#include "log.h"
-#include "os.h"
+#include "kl_mentain/log.h"
+#include "kl_mentain/os.h"
 #include "zettalib/proc_env.h"
 #include "stdio.h"
-#include "sys.h"
+#include "kl_mentain/sys.h"
 #include "sys_config.h"
-#include "thread_manager.h"
+#include "kl_mentain/thread_manager.h"
 #include <signal.h>
 #include <unistd.h>
 

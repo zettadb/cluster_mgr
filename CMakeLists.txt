@@ -18,34 +18,23 @@ set(ZETTALIB_LIB_PATH "/home/snowao/code/kunlun/zettalib/build/output/lib")
 link_directories(${PROJECT_SOURCE_DIR}/src/vendor/lib)
 link_directories(${ZETTALIB_LIB_PATH})
 configure_file(src/sys_config.h.in sys_config.h)
+add_subdirectory(src/kl_mentain)
 add_subdirectory(src/http_server)
 add_subdirectory(src/request_framework)
 add_subdirectory(src/util_func)
 add_subdirectory(src/cluster_expand)
-add_executable(cluster_mgr
-  src/config.cc 
-  src/log.cc 
-  src/main.cc 
-  src/os.cc 
-  src/shard.cc 
-  src/sys.cc 
-  src/txn.cc 
-  src/thread_manager.cc 
-  src/kl_cluster.cc 
-  src/machine_info.cc
-  src/http_server.cc 
-  src/http_client.cc 
-  src/job.cc 
-  src/cjson.cc)
+add_executable(cluster_mgr src/main.cc)
 target_include_directories(cluster_mgr PUBLIC
   "${PROJECT_BINARY_DIR}"
   "${ZETTALIB_INCLUDE_PATH}"
   "${PROJECT_SOURCE_DIR}/src/vendor/include"
+  "${PROJECT_SOURCE_DIR}/src/kl_mentain"
   "${PROJECT_SOURCE_DIR}/src/http_server"
   "${PROJECT_SOURCE_DIR}/src/request_framework"
   "${PROJECT_SOURCE_DIR}/src/util_func"
   "${PROJECT_SOURCE_DIR}/src/cluster_expand")
 target_link_libraries(cluster_mgr 
+  kl_mentain
   http_server 
   request_framework 
   util_func 
