@@ -19,16 +19,26 @@ namespace kunlun
   public:
     explicit ExpandClusterMission(Json::Value *doc) : super(doc){};
     ~ExpandClusterMission(){};
+
     virtual bool ArrangeRemoteTask() override final;
     virtual bool SetUpMisson() override final;
     virtual void TearDownImpl() override final;
     virtual bool FillRequestBodyStImpl() override final;
+
+  private:
     bool MakeDir();
     bool DumpTable();
     bool LoadTable();
+    bool TableCatchUp();
+    bool TransferFile();
 
   private:
+    //Will be initialized in setup phase
     std::string mydumper_tmp_data_dir_;
+    std::string src_shard_node_address_;
+    int64_t src_shard_node_port_;
+    std::string dst_shard_node_address_;
+    int64_t dst_shard_node_port_;
   };
 };     // namespace kunlun
 #endif /*_EXPAND_MISSION_H_*/

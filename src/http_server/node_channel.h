@@ -36,6 +36,7 @@ public:
   bool Init();
   brpc::Channel *getNodeChannel(const char *);
   int run();
+  kunlun::MysqlConnection *get_meta_conn();
 
 private:
   bool initNodeChannelMap();

@@ -24,6 +24,10 @@ GlobalNodeChannelManager::~GlobalNodeChannelManager()
   }
 }
 
+kunlun::MysqlConnection * GlobalNodeChannelManager::get_meta_conn(){
+  return mysql_conn_;
+}
+
 int GlobalNodeChannelManager::run(){
   while(1){
     reloadFromMeta();
