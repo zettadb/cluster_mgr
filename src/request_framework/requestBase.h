@@ -39,7 +39,11 @@ public:
   // Derived class should implament it
   // Invoked by SetUp()
   virtual void SetUpImpl() = 0;
-  virtual void DealRequest() = 0;
+
+  void DealRequest();
+  // Derived class should implament it
+  // Invoked by DealRequestImpl()
+  virtual void DealRequestImpl() = 0;
 
   // the response will be sent in TearDown()
   void TearDown();
@@ -63,6 +67,8 @@ public:
   ClusterRequestTypes get_request_type();
 
   bool ParseBodyToJson(const std::string &);
+
+  virtual void ReportStatus();
 
   // forbid copy
   ClusterRequest(const ClusterRequest &) = delete;

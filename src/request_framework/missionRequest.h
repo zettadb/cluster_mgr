@@ -26,7 +26,7 @@ public:
   virtual bool ArrangeRemoteTask() = 0;
   // user shold add setup logic here
   virtual bool SetUpMisson() = 0;
-  void DealRequest() override final;
+  void DealRequestImpl() override final;
   TaskManager *get_task_manager() { return task_manager_; }
 
 private:

@@ -7,20 +7,18 @@
 #include "http_server.h"
 #include "bthread/bthread.h"
 #include "butil/iobuf.h"
+#include "cluster_expand/expand_mission.h"
 #include "request_framework/missionRequest.h"
 #include "strings.h"
-#include "util_func/meta_info.h"
 #include "util_func/error_code.h"
-#include "cluster_expand/expand_mission.h"
+#include "util_func/meta_info.h"
 
-typedef struct AsynArgs_
-{
+typedef struct AsynArgs_ {
   HttpServiceImpl *http_serivce_impl;
   ClusterRequest *cluster_request;
 } AsynArgs;
 
-static void *AsyncDispatchRequest(void *args)
-{
+static void *AsyncDispatchRequest(void *args) {
   AsynArgs *asynargs = static_cast<AsynArgs *>(args);
   ClusterRequest *request = asynargs->cluster_request;
   asynargs->http_serivce_impl->get_request_handle_thread()->DispatchRequest(
@@ -30,8 +28,7 @@ static void *AsyncDispatchRequest(void *args)
 }
 
 std::string
-HttpServiceImpl::MakeErrorInstantResponseBody(const char *error_msg)
-{
+HttpServiceImpl::MakeErrorInstantResponseBody(const char *error_msg) {
   // Json format
   Json::Value root;
   root["version"] = KUNLUN_JSON_BODY_VERSION;
@@ -48,8 +45,7 @@ HttpServiceImpl::MakeErrorInstantResponseBody(const char *error_msg)
 }
 
 std::string
-HttpServiceImpl::MakeAcceptInstantResponseBody(ClusterRequest *request)
-{
+HttpServiceImpl::MakeAcceptInstantResponseBody(ClusterRequest *request) {
   // Json format
   Json::Value root;
   root["version"] = KUNLUN_JSON_BODY_VERSION;
@@ -66,15 +62,13 @@ HttpServiceImpl::MakeAcceptInstantResponseBody(ClusterRequest *request)
 
 void HttpServiceImpl::Emit(google::protobuf::RpcController *cntl_base,
                            const HttpRequest *request, HttpResponse *response,
-                           google::protobuf::Closure *done)
-{
+                           google::protobuf::Closure *done) {
   brpc::ClosureGuard done_gurad(done);
 
   ClusterRequest *inner_request = GenerateRequest(cntl_base);
   brpc::Controller *cntl = static_cast<brpc::Controller *>(cntl_base);
 
-  if (!inner_request)
-  {
+  if (!inner_request) {
     cntl->http_response().set_content_type("text/plain");
     butil::IOBufBuilder info_buffer;
     info_buffer << MakeErrorInstantResponseBody(getErr()) << '\n';
@@ -92,8 +86,7 @@ void HttpServiceImpl::Emit(google::protobuf::RpcController *cntl_base,
   asynargs->cluster_request = inner_request;
 
   if (bthread_start_background(&bid, NULL, AsyncDispatchRequest, asynargs) !=
-      0)
-  {
+      0) {
     cntl->http_response().set_content_type("text/plain");
     butil::IOBufBuilder info_buffer;
     info_buffer << MakeErrorInstantResponseBody(
@@ -114,12 +107,9 @@ void HttpServiceImpl::Emit(google::protobuf::RpcController *cntl_base,
   return;
 }
 
-MissionRequest *
-HttpServiceImpl::MissionRequestFactory(Json::Value *doc)
-{
+MissionRequest *HttpServiceImpl::MissionRequestFactory(Json::Value *doc) {
   std::string job_type = (*doc)["job_type"].asString();
-  if (job_type.empty())
-  {
+  if (job_type.empty()) {
     setErr("The field `job_type` in Body must be a non empty valid string");
     return nullptr;
   }
@@ -127,8 +117,7 @@ HttpServiceImpl::MissionRequestFactory(Json::Value *doc)
       kunlun::GetReqTypeEnumByStr(job_type.c_str());
 
   MissionRequest *request = nullptr;
-  switch (request_type)
-  {
+  switch (request_type) {
   case kunlun::kClusterExpandType:
     request = new kunlun::ExpandClusterMission(doc);
     break;
@@ -141,20 +130,17 @@ HttpServiceImpl::MissionRequestFactory(Json::Value *doc)
 }
 
 bool HttpServiceImpl::ParseBodyToJsonDoc(const std::string &raw_body,
-                                         Json::Value *doc)
-{
+                                         Json::Value *doc) {
   Json::Reader reader;
   reader.parse(raw_body.c_str(), *doc);
-  if (!reader.good())
-  {
+  if (!reader.good()) {
     setErr("JSON parse error: %s, JSON string: %s",
            reader.getFormattedErrorMessages().c_str(), raw_body.c_str());
     return false;
   }
 
   // job_type is the only requeired filed in the request body
-  if (!doc->isMember("job_type"))
-  {
+  if (!doc->isMember("job_type")) {
     setErr("missing `job_type` key-value pair in the request body");
     return false;
   }
@@ -163,89 +149,115 @@ bool HttpServiceImpl::ParseBodyToJsonDoc(const std::string &raw_body,
 }
 
 ClusterRequest *
-HttpServiceImpl::GenerateRequest(google::protobuf::RpcController *cntl_base)
-{
+HttpServiceImpl::GenerateRequest(google::protobuf::RpcController *cntl_base) {
 
   brpc::Controller *cntl = static_cast<brpc::Controller *>(cntl_base);
   brpc::HttpMethod request_method = cntl->http_request().method();
 
   // parse Body
   Json::Value body_json_doc;
-  bool ret =
-      ParseBodyToJsonDoc(cntl->request_attachment().to_string(), &body_json_doc);
-  if (!ret)
-  {
+  bool ret = ParseBodyToJsonDoc(cntl->request_attachment().to_string(),
+                                &body_json_doc);
+  if (!ret) {
     return nullptr;
   }
 
   // fetch the unique request id from meta cluster
-  if (request_method == brpc::HTTP_METHOD_POST)
-  {
+  if (request_method == brpc::HTTP_METHOD_POST) {
     // generate missionRequest
     MissionRequest *mission_request = MissionRequestFactory(&body_json_doc);
-    if (!mission_request)
-    {
+    if (!mission_request) {
       // setErr() involked in Factory method
       // error info buffer has be already filled
       return nullptr;
     }
     // Generate request id here
     std::string request_id = GenerateRequestUniqueId(mission_request);
-    if (request_id.empty())
-    {
+    if (request_id.empty()) {
       return nullptr;
     }
     mission_request->set_request_unique_id(request_id);
     return mission_request;
   }
-  if (request_method == brpc::HTTP_METHOD_GET)
-  {
+  if (request_method == brpc::HTTP_METHOD_GET) {
     // generate fetchRequest
   }
   return nullptr;
 }
 
 void HttpServiceImpl::set_request_handle_thread(
-    HandleRequestThread *thread_handler)
-{
+    HandleRequestThread *thread_handler) {
   request_handle_thread_ = thread_handler;
 }
 
 void HttpServiceImpl::set_meta_cluster_mysql_conn(
-    kunlun::MysqlConnection *conn)
-{
+    kunlun::MysqlConnection *conn) {
   meta_cluster_mysql_conn_ = conn;
 }
 
-HandleRequestThread *HttpServiceImpl::get_request_handle_thread()
-{
+HandleRequestThread *HttpServiceImpl::get_request_handle_thread() {
   return request_handle_thread_;
 }
 
 std::string
-HttpServiceImpl::GenerateRequestUniqueId(ClusterRequest *inner_request)
-{
+HttpServiceImpl::GenerateRequestUniqueId(ClusterRequest *inner_request) {
   char sql_buffer[4096] = {'\0'};
-  sprintf(sql_buffer,
-          "insert into %s.cluster_general_job_log set job_type='%s'",
-          KUNLUN_METADATA_DB_NAME,
-          inner_request->get_request_body().job_type_str.c_str());
   kunlun::MysqlResult query_result;
+  sprintf(sql_buffer, "begin");
   int ret = meta_cluster_mysql_conn_->ExcuteQuery(sql_buffer, &query_result);
-  if (ret != 1)
-  {
+  if (ret != 0) {
     setExtraErr("%s", meta_cluster_mysql_conn_->getErr());
     return "";
   }
   bzero((void *)sql_buffer, (size_t)4096);
+  query_result.Clean();
+  sprintf(
+      sql_buffer,
+      "insert into %s.cluster_general_job_log set job_type='%s',user_name='%s'",
+      KUNLUN_METADATA_DB_NAME,
+      inner_request->get_request_body().job_type_str.c_str(),
+      inner_request->get_request_body().user_name.c_str());
+  ret = meta_cluster_mysql_conn_->ExcuteQuery(sql_buffer, &query_result);
+  if (ret != 1) {
+    setExtraErr("%s", meta_cluster_mysql_conn_->getErr());
+    return "";
+  }
+  bzero((void *)sql_buffer, (size_t)4096);
+  query_result.Clean();
   sprintf(sql_buffer, "select last_insert_id() as insert_id");
   ret = meta_cluster_mysql_conn_->ExcuteQuery(sql_buffer, &query_result);
-  if (ret != 0)
-  {
+  if (ret != 0) {
     setErr("%s", meta_cluster_mysql_conn_->getErr());
     return "";
   }
-  return std::string(query_result[0]["insert_id"]);
+  bzero((void *)sql_buffer, (size_t)4096);
+
+  std::string last_insert_id = std::string(query_result[0]["insert_id"]);
+  Json::Value paras = inner_request->get_body_json_document()["paras"];
+  Json::FastWriter writer;
+  writer.omitEndingLineFeed();
+  std::string paras_str = writer.write(paras);
+
+  query_result.Clean();
+  sprintf(sql_buffer,
+          "update %s.cluster_general_job_log set job_id= '%s',job_info='%s' "
+          "where id = %s",
+          KUNLUN_METADATA_DB_NAME, last_insert_id.c_str(), paras_str.c_str(),
+          last_insert_id.c_str());
+  ret = meta_cluster_mysql_conn_->ExcuteQuery(sql_buffer, &query_result);
+  if (ret != 1) {
+    setErr("%s", meta_cluster_mysql_conn_->getErr());
+    return "";
+  }
+  bzero((void *)sql_buffer, (size_t)4096);
+  query_result.Clean();
+  sprintf(sql_buffer, "commit");
+  ret = meta_cluster_mysql_conn_->ExcuteQuery(sql_buffer, &query_result);
+  if (ret != 0) {
+    setErr("%s", meta_cluster_mysql_conn_->getErr());
+    return "";
+  }
+  return last_insert_id;
 }
 
 extern std::string meta_svr_ip;
@@ -255,13 +267,11 @@ extern std::string meta_svr_pwd;
 
 int64_t cluster_mgr_brpc_http_port;
 
-brpc::Server *NewHttpServer()
-{
+brpc::Server *NewHttpServer() {
 
   HandleRequestThread *request_handle_thread = new HandleRequestThread();
   int ret = request_handle_thread->start();
-  if (ret < 0)
-  {
+  if (ret < 0) {
     syslog(Logger::ERROR, "Handle request thread start faild");
     delete request_handle_thread;
     return nullptr;
@@ -275,8 +285,7 @@ brpc::Server *NewHttpServer()
 
   kunlun::MysqlConnection *conn = new MysqlConnection(option);
   ret = conn->Connect();
-  if (!ret)
-  {
+  if (!ret) {
     syslog(Logger::ERROR, "%s", conn->getErr());
     delete conn;
     return nullptr;
@@ -287,15 +296,13 @@ brpc::Server *NewHttpServer()
   service->set_meta_cluster_mysql_conn(conn);
 
   brpc::Server *server = new brpc::Server();
-  if (server->AddService(service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0)
-  {
+  if (server->AddService(service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
     syslog(Logger::ERROR, "Add service to brpc::Server failed,");
     return nullptr;
   }
   brpc::ServerOptions *options = new brpc::ServerOptions();
   options->idle_timeout_sec = -1;
-  if (server->Start(cluster_mgr_brpc_http_port, options) != 0)
-  {
+  if (server->Start(cluster_mgr_brpc_http_port, options) != 0) {
     syslog(Logger::ERROR, "http server start failed,");
     return nullptr;
   }

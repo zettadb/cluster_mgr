@@ -6,41 +6,51 @@
 */
 #include "remoteTask.h"
 
-static void CallBC(brpc::Controller *cntl)
-{
-  if (!cntl->Failed())
-  {
-    syslog(Logger::INFO, "CallBc(): response is %s",cntl->response_attachment().to_string().c_str());
+static void CallBC(brpc::Controller *cntl) {
+  if (!cntl->Failed()) {
+    syslog(Logger::INFO, "CallBc(): response is %s",
+           cntl->response_attachment().to_string().c_str());
     return;
   }
   syslog(Logger::ERROR, "%s", cntl->ErrorText().c_str());
 }
+void RemoteTask::Set_call_back(void (*function)(brpc::Controller *cntl)) {
+  call_back_ = function;
+}
 
-void RemoteTask::AddNodeSubChannel(const char *node_hostaddr, brpc::Channel *sub_channel)
-{
+bool RemoteTask::TaskReport() { return TaskReportImpl(); }
+
+bool RemoteTask::TaskReportImpl() {
+  // default action
+  syslog(Logger::INFO, "Task Info Report, NotDefined");
+  return true;
+}
+
+void RemoteTask::AddNodeSubChannel(const char *node_hostaddr,
+                                   brpc::Channel *sub_channel) {
   auto iter = channel_map_.find(node_hostaddr);
-  if (iter == channel_map_.end())
-  {
-    std::pair<std::string, brpc::Channel *> pr = std::make_pair(node_hostaddr, sub_channel);
+  if (iter == channel_map_.end()) {
+    std::pair<std::string, brpc::Channel *> pr =
+        std::make_pair(node_hostaddr, sub_channel);
     channel_map_.insert(pr);
     return;
   }
-  syslog(Logger::INFO, "Already exists %s related channel handler. So ignore and continue", node_hostaddr);
+  syslog(Logger::INFO,
+         "Already exists %s related channel handler. So ignore and continue",
+         node_hostaddr);
   return;
 }
 
-const char *RemoteTask::get_task_spec_info() const
-{
+const char *RemoteTask::get_task_spec_info() const {
   return task_spec_info_.c_str();
 }
 
-void RemoteTask::SetPara(const char *node_hostaddr, Json::Value para)
-{
+void RemoteTask::SetPara(const char *node_hostaddr, Json::Value para) {
   paras_map_[node_hostaddr] = para;
 }
 
-void RemoteTask::setParaToRequestBody(brpc::Controller *cntl, std::string node_hostaddr)
-{
+void RemoteTask::setParaToRequestBody(brpc::Controller *cntl,
+                                      std::string node_hostaddr) {
   Json::Value para_json = paras_map_[node_hostaddr];
   Json::FastWriter writer;
   std::string body = writer.write(para_json);
@@ -49,18 +59,17 @@ void RemoteTask::setParaToRequestBody(brpc::Controller *cntl, std::string node_h
   // TODO: check JSON object is valid
 }
 
-bool RemoteTask::RunTaskImpl()
-{
+bool RemoteTask::RunTask() {
   std::map<std::string, brpc::CallId> call_id_map;
   auto iter = channel_map_.begin();
-  for (; iter != channel_map_.end(); iter++)
-  {
+  for (; iter != channel_map_.end(); iter++) {
     kunlunrpc::HttpService_Stub stub(iter->second);
     brpc::Controller *cntl = new brpc::Controller();
 
     setParaToRequestBody(cntl, iter->first);
 
-    google::protobuf::Closure *done = brpc::NewCallback(&CallBC, cntl);
+    google::protobuf::Closure *done =
+        brpc::NewCallback(call_back_ == nullptr ? &CallBC : call_back_, cntl);
     // `call_id` must be saved before the real RPC call
     call_id_map[iter->first] = (cntl->call_id());
 
@@ -68,19 +77,19 @@ bool RemoteTask::RunTaskImpl()
   }
   // sync wait response
   iter = channel_map_.begin();
-  for (; iter != channel_map_.end(); iter++)
-  {
+  for (; iter != channel_map_.end(); iter++) {
     brpc::CallId id = call_id_map[iter->first];
     brpc::Join(id);
   }
+  // report Info
+  TaskReport();
+
   return true;
 }
 
-void TaskManager::PushBackTask(RemoteTask *sub_task)
-{
+void TaskManager::PushBackTask(RemoteTask *sub_task) {
   return remote_task_vec_.push_back(sub_task);
 }
-const std::vector<RemoteTask *> &TaskManager::get_remote_task_vec()
-{
+const std::vector<RemoteTask *> &TaskManager::get_remote_task_vec() {
   return remote_task_vec_;
 }

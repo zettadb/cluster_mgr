@@ -11,47 +11,46 @@
 #define KUNLUN_JSON_BODY_VERSION "1.0"
 #define KUNLUN_METADATA_DB_NAME "kunlun_metadata_db"
 
-namespace kunlun
-{
-  enum RequestStatus
-  {
-    NOT_STARTED = 0,
-    ON_GOING,
-    DONE,
-    FAILED
-  };
+namespace kunlun {
+enum RequestStatus {
+  NOT_STARTED = 1,
+  ON_GOING,
+  DONE,
+  FAILED,
 
-  enum ClusterRequestTypes
-  {
-    kRequestTypeUndefined = 0,
-    kCreateClusterType,
-    kDropClusterType,
-    kComputeNodeAddType,
-    kComputeNodeDeleteType,
-    kShardAddType,
-    kShardDropType,
-    kShardNodeAddType,
-    kShardNodeDropType,
-    kClusterExpandType,
+  // status should add above
+  UNDIFINED = 1000
+};
 
-    // addtional type should add above
-    kRequestTypeMax
-  };
+enum ClusterRequestTypes {
+  kRequestTypeUndefined = 0,
+  kCreateClusterType,
+  kDropClusterType,
+  kComputeNodeAddType,
+  kComputeNodeDeleteType,
+  kShardAddType,
+  kShardDropType,
+  kShardNodeAddType,
+  kShardNodeDropType,
+  kClusterExpandType,
 
-  typedef struct RequestBody_
-  {
-    std::string version = "";
-    std::string request_id = "";
-    std::string job_type_str = "";
-    std::string timestamp = "";
-    void *paraList = nullptr;
-  } RequestBody;
+  // addtional type should add above
+  kRequestTypeMax
+};
 
-  inline bool ValidRpcBodyProtocal(std::string &version)
-  {
-    // TODO: ValidRpcBodyProtocal
-    return true;
-  }
+typedef struct RequestBody_ {
+  std::string version = "";
+  std::string request_id = "";
+  std::string job_type_str = "";
+  std::string timestamp = "";
+  std::string user_name = "";
+  void *paraList = nullptr;
+} RequestBody;
+
+inline bool ValidRpcBodyProtocal(std::string &version) {
+  // TODO: ValidRpcBodyProtocal
+  return true;
+}
 } // namespace kunlun
 
 #endif /*_request_value_define_h_*/

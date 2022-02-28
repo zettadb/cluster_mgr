@@ -6,13 +6,14 @@
   "job_id":"",
   "job_type": "expand_cluster",
   "timestamp" : "1435749309",
+  "user_name": "kunlun_test",
   "paras": {
     "cluster_id": "1",
     "dst_shard_id": "5",
     "src_shard_id": "2",
     "table_list": [
-      "`sbtest`.`sbtest1`",
-      "`sbtest`.`sbtest2`"
+      "sbtest.public.sbtest1",
+      "sbtest.public.sbtest2"
     ]
   }
 }

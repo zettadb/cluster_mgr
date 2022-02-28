@@ -11,14 +11,24 @@
 
 void ClusterRequest::SetUp()
 {
-  // TODO: ClusterRequest::SetUp()
-  status_ = ON_GOING;
   SetUpImpl();
+  status_ = ON_GOING;
+  ReportStatus();
+}
+
+void ClusterRequest::DealRequest()
+{
+  DealRequestImpl(); 
+  ReportStatus();
 }
 void ClusterRequest::TearDown()
 {
-  // TODO: ClusterRequest::TearDown()
   TearDownImpl();
+  ReportStatus();
+}
+
+void ClusterRequest::ReportStatus(){
+  syslog(Logger::INFO,"Request %s status: %d",request_unique_id_,status_);
 }
 
 void ClusterRequest::set_status(RequestStatus status)
@@ -71,6 +81,15 @@ bool ClusterRequest::FillRequestBodySt()
     return false;
   }
   request_body_.timestamp = body_json_document_["timestamp"].asString();
+  // parse user_name
+  if (!body_json_document_.isMember("user_name"))
+  {
+    set_err_num(EIVALID_REQUEST_PROTOCAL);
+    setExtraErr("missing `user_name` key-value pair in the request body");
+    return false;
+  }
+  request_body_.user_name = body_json_document_["user_name"].asString();
+
 
   return FillRequestBodyStImpl(); // Drived Class to implemented for parsing the individual paralist
 }

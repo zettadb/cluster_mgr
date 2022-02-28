@@ -15,14 +15,15 @@ void MissionRequest::SetUpImpl()
   ArrangeRemoteTask();
 }
 
-void MissionRequest::DealRequest()
+void MissionRequest::DealRequestImpl()
 {
+  set_status(kunlun::ON_GOING);
   // do the request iterator vec
   auto &task_vec = task_manager_->get_remote_task_vec();
   auto iter = task_vec.begin();
   for (; iter != task_vec.end(); iter++)
   {
-    bool ret = (*iter)->RunTaskImpl();
+    bool ret = (*iter)->RunTask();
     if (!ret)
     {
       setErr("%s", (*iter)->getErr());

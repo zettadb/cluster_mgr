@@ -16,8 +16,41 @@ extern int64_t meta_svr_port;
 extern std::string meta_svr_user;
 extern std::string meta_svr_pwd;
 
+void Expand_Call_Back(brpc::Controller *cntl) {
+  if (!cntl->Failed()) {
+    syslog(Logger::INFO, "Expand_Call_Back(): response is %s",
+           cntl->response_attachment().to_string().c_str());
+    return;
+  }
+  syslog(Logger::ERROR, "%s", cntl->ErrorText().c_str());
+}
+
+void ExpandClusterMission::ReportStatus() {
+  kunlun::MysqlConnection *meta_conn = g_node_channel_manager.get_meta_conn();
+  kunlun::RequestStatus status = get_status();
+  char sql[4096] = {'\0'};
+  if (status <= kunlun::ON_GOING) {
+    sprintf(sql,
+            "update kunlun_metadata_db.cluster_general_job_log set status = %d "
+            "where id = %s",
+            get_status(), get_request_unique_id().c_str());
+  } else {
+    sprintf(sql,
+            "update kunlun_metadata_db.cluster_general_job_log set status = %d ,"
+            "when_ended = CURRENT_TIMESTAMP(6) where id = %s",
+            get_status(), get_request_unique_id().c_str());
+  }
+  kunlun::MysqlResult result;
+  int ret = meta_conn->ExcuteQuery(sql, &result, true);
+  if (ret < 0) {
+    syslog(Logger::INFO, "Report Request status sql: %s ,failed: %s",
+           sql,meta_conn->getErr());
+  }
+  return;
+}
+
 bool ExpandClusterMission::MakeDir() {
-  RemoteTask *make_dir_task = new RemoteTask("Expand_Make_Dir");
+  ExpandClusterTask *make_dir_task = new ExpandClusterTask("Expand_Make_Dir");
   make_dir_task->AddNodeSubChannel(
       src_shard_node_address_.c_str(),
       g_node_channel_manager.getNodeChannel(src_shard_node_address_.c_str()));
@@ -36,7 +69,8 @@ bool ExpandClusterMission::MakeDir() {
 
 bool ExpandClusterMission::DumpTable() {
 
-  RemoteTask *dump_table_task = new RemoteTask("Expand_Dump_Table");
+  ExpandClusterTask *dump_table_task =
+      new ExpandClusterTask("Expand_Dump_Table");
   dump_table_task->AddNodeSubChannel(
       src_shard_node_address_.c_str(),
       g_node_channel_manager.getNodeChannel(src_shard_node_address_.c_str()));
@@ -72,7 +106,8 @@ bool ExpandClusterMission::DumpTable() {
 
 bool ExpandClusterMission::LoadTable() {
 
-  RemoteTask *load_table_task = new RemoteTask("Expand_Load_Table");
+  ExpandClusterTask *load_table_task =
+      new ExpandClusterTask("Expand_Load_Table");
   load_table_task->AddNodeSubChannel(
       dst_shard_node_address_.c_str(),
       g_node_channel_manager.getNodeChannel(dst_shard_node_address_.c_str()));
@@ -100,7 +135,8 @@ bool ExpandClusterMission::LoadTable() {
 
 bool ExpandClusterMission::TableCatchUp() {
 
-  RemoteTask *table_catchup_task = new RemoteTask("Expand_Catchup_Table");
+  ExpandClusterTask *table_catchup_task =
+      new ExpandClusterTask("Expand_Catchup_Table");
   table_catchup_task->AddNodeSubChannel(
       dst_shard_node_address_.c_str(),
       g_node_channel_manager.getNodeChannel(dst_shard_node_address_.c_str()));
@@ -129,8 +165,7 @@ bool ExpandClusterMission::TableCatchUp() {
           meta_cluster_url_.c_str(),
           orig_request["cluster_id"].asString().c_str(),
           table_list_str_.c_str(), mydumper_tmp_data_dir_.c_str(),
-          get_request_unique_id().c_str(),
-          get_request_unique_id().c_str());
+          get_request_unique_id().c_str(), get_request_unique_id().c_str());
   Json::Value paras;
   paras.append(table_catchup_arg_buf);
   root["para"] = paras;
@@ -139,39 +174,10 @@ bool ExpandClusterMission::TableCatchUp() {
   return true;
 }
 
-bool ExpandClusterMission::ArrangeRemoteTask() {
-
-  if (!MakeDir()) {
-    return false;
-  }
-
-  // Step1: Dump table
-  if (!DumpTable()) {
-    return false;
-  }
-
-  // Step2: Transfer dumped files
-  if (!TransferFile()) {
-    return false;
-  }
-
-  // Step3: Load data through Myloader
-  if (!LoadTable()) {
-    return false;
-  }
-
-  // Step4: SetUp the incremental data sync
-  if (!TableCatchUp()) {
-    return false;
-  }
-
-  // Step5: BroadCase the router changes
-
-  return true;
-}
 bool ExpandClusterMission::FillRequestBodyStImpl() { return true; }
 
 bool ExpandClusterMission::SetUpMisson() {
+
   syslog(Logger::INFO, "setup phase");
   char mydumper_tmp_data_dir[1024] = {'\0'};
   sprintf(mydumper_tmp_data_dir,
@@ -250,25 +256,58 @@ bool ExpandClusterMission::SetUpMisson() {
     table_spec_.table = tokenized[2];
 
     std::string dspc = "";
-    dspc += table_spec_.db ;
+    dspc += table_spec_.db;
     dspc += "_\\$\\$_";
     dspc += table_spec_.schema;
 
     if (i == 0) {
       table_list_str_.append(item);
-      table_list_str_storage_.append(dspc+"."+table_spec_.table);
+      table_list_str_storage_.append(dspc + "." + table_spec_.table);
     } else {
       table_list_str_.append(",");
       table_list_str_.append(item);
       table_list_str_storage_.append(",");
-      table_list_str_storage_.append(dspc+"."+table_spec_.table);
+      table_list_str_storage_.append(dspc + "." + table_spec_.table);
     }
   }
 
   return true;
 }
 void ExpandClusterMission::TearDownImpl() {
+  
+  set_status(kunlun::DONE);
   syslog(Logger::INFO, "teardown phase");
   return;
 }
 bool ExpandClusterMission::TransferFile() { return true; }
+
+bool ExpandClusterMission::ArrangeRemoteTask() {
+
+  if (!MakeDir()) {
+    return false;
+  }
+
+  // Step1: Dump table
+  if (!DumpTable()) {
+    return false;
+  }
+
+  // Step2: Transfer dumped files
+  if (!TransferFile()) {
+    return false;
+  }
+
+  // Step3: Load data through Myloader
+  if (!LoadTable()) {
+    return false;
+  }
+
+  // Step4: SetUp the incremental data sync
+  if (!TableCatchUp()) {
+    return false;
+  }
+
+  return true;
+}
+
+bool ExpandClusterTask::TaskReportImpl() { return true; }
