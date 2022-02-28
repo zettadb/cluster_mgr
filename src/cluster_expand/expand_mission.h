@@ -39,6 +39,9 @@ namespace kunlun
     int64_t src_shard_node_port_;
     std::string dst_shard_node_address_;
     int64_t dst_shard_node_port_;
+    std::string meta_cluster_url_;
+    std::string table_list_str_;
+    std::string table_list_str_storage_;
   };
 };     // namespace kunlun
 #endif /*_EXPAND_MISSION_H_*/

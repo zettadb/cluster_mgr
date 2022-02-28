@@ -6,10 +6,15 @@
 */
 #include "expand_mission.h"
 #include "http_server/node_channel.h"
+#include "zettalib/tool_func.h"
 #include "json/json.h"
 
-extern GlobalNodeChannelManager g_node_channel_manager;
 // http://192.168.0.104:10000/trac/wiki/kunlun.features.design.scale-out
+extern GlobalNodeChannelManager g_node_channel_manager;
+extern std::string meta_svr_ip;
+extern int64_t meta_svr_port;
+extern std::string meta_svr_user;
+extern std::string meta_svr_pwd;
 
 bool ExpandClusterMission::MakeDir() {
   RemoteTask *make_dir_task = new RemoteTask("Expand_Make_Dir");
@@ -48,14 +53,6 @@ bool ExpandClusterMission::DumpTable() {
            "EXPAND_CLUSTER request");
     return false;
   }
-  if (!request_json_body["paras"].isMember("table_list")) {
-    set_err_num(EIVALID_REQUEST_PROTOCAL);
-    setErr("Json Filed `paras`->`table_list` is not specified in request body "
-           "for the EXPAND_CLUSTER request");
-    return false;
-  }
-  Json::Value table_list = get_body_json_document()["paras"]["table_list"];
-
   char mydumper_arg_buf[2048] = {'\0'};
   sprintf(mydumper_arg_buf,
           " -h %s -u pgx -p pgx_pwd -P %d "
@@ -63,7 +60,7 @@ bool ExpandClusterMission::DumpTable() {
           "-c -T %s ",
           src_shard_node_address_.c_str(), src_shard_node_port_,
           mydumper_tmp_data_dir_.c_str(), mydumper_tmp_data_dir_.c_str(),
-          table_list[0].asString().c_str());
+          table_list_str_storage_.c_str());
 
   Json::Value paras;
   paras.append(mydumper_arg_buf);
@@ -86,14 +83,12 @@ bool ExpandClusterMission::LoadTable() {
   root["cluster_mgr_request_id"] = get_request_unique_id();
   root["task_spec_info"] = load_table_task->get_task_spec_info();
 
-  Json::Value table_list = get_body_json_document()["paras"]["table_list"];
-
   char myloader_arg_buf[2048] = {'\0'};
   sprintf(myloader_arg_buf,
           " -h %s -u pgx -p pgx_pwd -P %d -e -d %s --logfile %s/myloader.log",
           dst_shard_node_address_.c_str(), dst_shard_node_port_,
           mydumper_tmp_data_dir_.c_str(), mydumper_tmp_data_dir_.c_str(),
-          table_list[0].asString().c_str());
+          table_list_str_storage_.c_str());
 
   Json::Value paras;
   paras.append(myloader_arg_buf);
@@ -116,20 +111,26 @@ bool ExpandClusterMission::TableCatchUp() {
   root["cluster_mgr_request_id"] = get_request_unique_id();
   root["task_spec_info"] = table_catchup_task->get_task_spec_info();
 
-  Json::Value table_list = get_body_json_document()["paras"]["table_list"];
-
+  const Json::Value &orig_request = get_body_json_document()["paras"];
   char table_catchup_arg_buf[4096] = {'\0'};
   sprintf(table_catchup_arg_buf,
-          " -src_addr %s -src_port %d"
-          " -src_user pgx -src_pass pgx_pwd"
-          " -dst_addr %s -dst_port %d"
-          " -dst_user pgx -dst_pass pgx_pwd"
-          " --mydumper_metadata_file %s/metadata"
-          " -table_list %s",
+          " -src_shard_id=%s -src_addr=%s -src_port=%d -src_user=pgx"
+          " -src_pass=pgx_pwd"
+          " -dst_shard_id=%s -dst_addr=%s -dst_port=%d -dst_user=pgx"
+          " -dst_pass=pgx_pwd"
+          " -meta_url=%s -cluster_id=%s"
+          " -table_list=%s -mydumper_metadata_file=%s/metadata"
+          " -expand_info_suffix=%s"
+          " -logger_directory=TMP_DATA_PATH_PLACE_HOLDER/cluster_request_%s",
+          orig_request["src_shard_id"].asString().c_str(),
           src_shard_node_address_.c_str(), src_shard_node_port_,
+          orig_request["dst_shard_id"].asString().c_str(),
           dst_shard_node_address_.c_str(), dst_shard_node_port_,
-          mydumper_tmp_data_dir_.c_str(),table_list[0].asString().c_str());
-
+          meta_cluster_url_.c_str(),
+          orig_request["cluster_id"].asString().c_str(),
+          table_list_str_.c_str(), mydumper_tmp_data_dir_.c_str(),
+          get_request_unique_id().c_str(),
+          get_request_unique_id().c_str());
   Json::Value paras;
   paras.append(table_catchup_arg_buf);
   root["para"] = paras;
@@ -223,6 +224,46 @@ bool ExpandClusterMission::SetUpMisson() {
   }
   dst_shard_node_address_ = result[0]["hostaddr"];
   dst_shard_node_port_ = ::atoi(result[0]["port"]);
+  char meta_url_buff[2048] = {'\0'};
+  sprintf(meta_url_buff, "%s:%s@\\(%s:%d\\)/mysql", meta_svr_user.c_str(),
+          meta_svr_pwd.c_str(), meta_svr_ip.c_str(), meta_svr_port);
+  meta_cluster_url_ = meta_url_buff;
+
+  // table_list_str_
+  struct {
+    std::string db = "";
+    std::string schema = "";
+    std::string table = "";
+  } table_spec_;
+
+  Json::Value table_list = get_body_json_document()["paras"]["table_list"];
+  for (auto i = 0; i != table_list.size(); i++) {
+    std::string item = table_list[i].asString();
+    // tokenize to table_spec_
+    std::vector<std::string> tokenized = kunlun::StringTokenize(item, ".");
+    if (tokenized.size() != 3) {
+      setErr("table_list format is illegal,should by db.schema.table");
+      return false;
+    }
+    table_spec_.db = tokenized[0];
+    table_spec_.schema = tokenized[1];
+    table_spec_.table = tokenized[2];
+
+    std::string dspc = "";
+    dspc += table_spec_.db ;
+    dspc += "_\\$\\$_";
+    dspc += table_spec_.schema;
+
+    if (i == 0) {
+      table_list_str_.append(item);
+      table_list_str_storage_.append(dspc+"."+table_spec_.table);
+    } else {
+      table_list_str_.append(",");
+      table_list_str_.append(item);
+      table_list_str_storage_.append(",");
+      table_list_str_storage_.append(dspc+"."+table_spec_.table);
+    }
+  }
 
   return true;
 }
@@ -230,6 +271,4 @@ void ExpandClusterMission::TearDownImpl() {
   syslog(Logger::INFO, "teardown phase");
   return;
 }
-bool ExpandClusterMission::TransferFile(){
-  return true;
-}
+bool ExpandClusterMission::TransferFile() { return true; }

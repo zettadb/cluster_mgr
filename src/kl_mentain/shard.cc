@@ -847,11 +847,11 @@ int Shard::check_mgr_cluster() {
       // majority nodes unreachable, we don't know which to start as master,
       // so we can not start up the cluster otherwise we may lose committed
       // txns.
-      syslog(Logger::ERROR,
-             "More than half(%d/%u) nodes in the MGR cluster %s are "
-             "unreachable, unable to reliably startup the MGR cluster with the "
-             "right primary node.",
-             reachables, nodes.size() / 2, get_cluster_name().c_str());
+      //syslog(Logger::ERROR,
+      //       "More than half(%d/%u) nodes in the MGR cluster %s are "
+      //       "unreachable, unable to reliably startup the MGR cluster with the "
+      //       "right primary node.",
+      //       reachables, nodes.size() / 2, get_cluster_name().c_str());
       return -1;
     }
   }
@@ -1978,10 +1978,10 @@ void Shard::maintenance() {
     end_recovered_prepared_txns();
     get_xa_prepared();
   } else
-    syslog(Logger::WARNING,
-           "Got error %d from check_mgr_cluster() in shard (%s.%s, %u), "
-           "skipping prepared txns.",
-           ret, get_cluster_name().c_str(), get_name().c_str(), get_id());
+   // syslog(Logger::WARNING,
+   //        "Got error %d from check_mgr_cluster() in shard (%s.%s, %u), "
+   //        "skipping prepared txns.",
+   //        ret, get_cluster_name().c_str(), get_name().c_str(), get_id());
 
   set_thread_handler(NULL);
 }
