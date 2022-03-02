@@ -19,6 +19,7 @@
 #include "requestBase.h"
 #include "zettalib/errorcup.h"
 #include "json/json.h"
+#include <map>
 #include <mutex>
 #include <string>
 
@@ -30,12 +31,34 @@ enum REMOTE_TASK_STATUS {
   R_SUCCESS_DONE,
   R_FAILED_DONE
 };
+
+class RemoteTaskResponse : public kunlun::ErrorCup,
+                           public kunlun::GlobalErrorNum {
+public:
+  RemoteTaskResponse() : failed_occour_(false){};
+  ~RemoteTaskResponse(){};
+
+public:
+  bool ParseAttachment(const char *, const char *);
+  std::string SerializeResponseToStr();
+  bool ok();
+  Json::Value get_all_response_json();
+
+private:
+  std::mutex mutex_;
+  std::map<std::string, std::string> attachment_str_map_;
+  std::map<std::string, Json::Value> attachment_json_map_;
+  Json::Value all_response_;
+  bool failed_occour_;
+  std::string task_spec_info_;
+};
+
 class TaskManager;
 // RemoteTask is converted from the POST method's body
 class RemoteTask : public kunlun::ErrorCup, public kunlun::GlobalErrorNum {
 public:
   explicit RemoteTask(const char *task_name)
-      : task_spec_info_(task_name), call_back_(nullptr){};
+      : task_spec_info_(task_name), call_back_(nullptr), cb_context_(nullptr){};
   virtual ~RemoteTask(){};
 
 private:
@@ -58,10 +81,10 @@ public:
   bool Success();
   Json::Value GetExcuteErrorInfo();
   const char *get_task_spec_info() const;
-  const std::map<std::string, Json::Value> &get_response_map() const;
-  Json::Value getNodeResponse(const char *);
   void SetPara(const char *, Json::Value);
-  void Set_call_back(void (*function)(brpc::Controller *cntl));
+  void Set_call_back(void (*function)(void *));
+  void Set_cb_context(void *context);
+  RemoteTaskResponse *get_response();
 
 private:
   void set_response_map();
@@ -71,20 +94,33 @@ private:
   std::string task_spec_info_;
   std::map<std::string, brpc::Channel *> channel_map_;
   std::map<std::string, Json::Value> paras_map_;
-  void (*call_back_)(brpc::Controller *cntl);
+  RemoteTaskResponse response_;
+
+public:
+  void (*call_back_)(void *);
+  void *cb_context_;
 };
 
 class TaskManager : public kunlun::ErrorCup {
 public:
-  explicit TaskManager() {}
+  explicit TaskManager() {
+    serialized_result_ = "";
+    error_occour_ = false;
+  }
   ~TaskManager();
 
   void PushBackTask(RemoteTask *);
   const std::vector<RemoteTask *> &get_remote_task_vec();
+  void SerializeAllResponse();
+  bool ok();
+
+public:
+  std::string serialized_result_;
 
 private:
   // request which own current TaskManager
   std::vector<RemoteTask *> remote_task_vec_;
+  bool error_occour_;
 };
 
 #endif /*_CLUSTER_MNG_REMOTE_TASK_H_*/

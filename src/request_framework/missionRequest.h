@@ -27,6 +27,9 @@ public:
   // user shold add setup logic here
   virtual bool SetUpMisson() = 0;
   void DealRequestImpl() override final;
+  virtual void TearDownImpl() override final;
+  virtual bool TearDownMission() = 0;
+
   TaskManager *get_task_manager() { return task_manager_; }
 
 private:

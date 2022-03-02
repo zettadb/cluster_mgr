@@ -8,23 +8,23 @@
 #define _CLUSTER_MGR_HTTP_SERVER_H_
 
 #include "brpc/server.h"
-#include "json/json.h"
 #include "kl_mentain/log.h"
 #include "proto/clustermng.pb.h"
-#include "request_framework/requestBase.h"
 #include "request_framework/handleRequestThread.h"
-#include "zettalib/op_mysql.h"
-#include "zettalib/errorcup.h"
-#include "util_func/error_code.h"
 #include "request_framework/missionRequest.h"
+#include "request_framework/requestBase.h"
 #include "request_framework/requestValueDefine.h"
+#include "util_func/error_code.h"
+#include "zettalib/errorcup.h"
+#include "zettalib/op_mysql.h"
+#include "json/json.h"
 
 using namespace kunlunrpc;
-class HttpServiceImpl : public HttpService, public kunlun::ErrorCup, public kunlun::GlobalErrorNum
-{
+class HttpServiceImpl : public HttpService,
+                        public kunlun::ErrorCup,
+                        public kunlun::GlobalErrorNum {
 public:
-  HttpServiceImpl()
-  {
+  HttpServiceImpl() {
     request_handle_thread_ = nullptr;
     meta_cluster_mysql_conn_ = nullptr;
   };
@@ -43,6 +43,8 @@ public:
   std::string MakeAcceptInstantResponseBody(ClusterRequest *);
 
   std::string GenerateRequestUniqueId(ClusterRequest *);
+  std::string FetchRelatedIdInSameSession(kunlun::MysqlConnection *,
+                                          std::string);
   bool ParseBodyToJsonDoc(const std::string &, Json::Value *);
 
 private:

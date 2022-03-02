@@ -50,7 +50,7 @@ HttpServiceImpl::MakeAcceptInstantResponseBody(ClusterRequest *request) {
   Json::Value root;
   root["version"] = KUNLUN_JSON_BODY_VERSION;
   root["error_code"] = EintToStr(EOK);
-  root["job_id"] = request->get_request_body().request_id;
+  root["job_id"] = request->get_request_unique_id();
   root["job_type"] = request->get_request_body().job_type_str;
   root["status"] = "accept";
   Json::Value attachment;
@@ -238,12 +238,18 @@ HttpServiceImpl::GenerateRequestUniqueId(ClusterRequest *inner_request) {
   writer.omitEndingLineFeed();
   std::string paras_str = writer.write(paras);
 
+  std::string related_id = FetchRelatedIdInSameSession(
+      meta_cluster_mysql_conn_, inner_request->get_request_body().job_type_str);
+  if(related_id.empty()){
+    syslog(Logger::INFO,"Get empty related_id: %s",getErr());
+  }
   query_result.Clean();
-  sprintf(sql_buffer,
-          "update %s.cluster_general_job_log set job_id= '%s',job_info='%s' "
-          "where id = %s",
-          KUNLUN_METADATA_DB_NAME, last_insert_id.c_str(), paras_str.c_str(),
-          last_insert_id.c_str());
+  sprintf(
+      sql_buffer,
+      "update %s.cluster_general_job_log set related_id= '%s',job_info='%s' "
+      "where id = %s",
+      KUNLUN_METADATA_DB_NAME, related_id.c_str(), paras_str.c_str(),
+      last_insert_id.c_str());
   ret = meta_cluster_mysql_conn_->ExcuteQuery(sql_buffer, &query_result);
   if (ret != 1) {
     setErr("%s", meta_cluster_mysql_conn_->getErr());
@@ -258,6 +264,45 @@ HttpServiceImpl::GenerateRequestUniqueId(ClusterRequest *inner_request) {
     return "";
   }
   return last_insert_id;
+}
+
+std::string
+HttpServiceImpl::FetchRelatedIdInSameSession(kunlun::MysqlConnection *conn,
+                                             std::string job_type) {
+  char sql[2048] = {'\0'};
+  kunlun::MysqlResult result;
+  std::string related_id = "";
+  int ret = 0;
+
+  kunlun::ClusterRequestTypes request_type =
+      kunlun::GetReqTypeEnumByStr(job_type.c_str());
+
+  switch (request_type) {
+  case kunlun::kClusterExpandType:
+    sprintf(sql, "insert into kunlun_metadata_db.table_move_jobs set tab_file_format='logical'");
+    ret = conn->ExcuteQuery(sql, &result);
+    if (ret != 1) {
+      setErr("%s", conn->getErr());
+      break;
+    }
+
+    bzero((void *)sql, 2048);
+    result.Clean();
+
+    sprintf(sql, "select last_insert_id() as id");
+    ret = conn->ExcuteQuery(sql, &result);
+    if (ret != 0) {
+      setErr("%s", conn->getErr());
+      break;
+    }
+    related_id = result[0]["id"];
+    break;
+    // TODO: Add more above
+  default:
+    setErr("Undeal job type %s, related_id not set", job_type.c_str());
+    break;
+  }
+  return related_id;
 }
 
 extern std::string meta_svr_ip;

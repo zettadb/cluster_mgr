@@ -6,6 +6,7 @@
 */
 #include "expand_mission.h"
 #include "http_server/node_channel.h"
+#include "util_func/meta_info.h"
 #include "zettalib/tool_func.h"
 #include "json/json.h"
 
@@ -16,41 +17,41 @@ extern int64_t meta_svr_port;
 extern std::string meta_svr_user;
 extern std::string meta_svr_pwd;
 
-void Expand_Call_Back(brpc::Controller *cntl) {
-  if (!cntl->Failed()) {
-    syslog(Logger::INFO, "Expand_Call_Back(): response is %s",
-           cntl->response_attachment().to_string().c_str());
-    return;
-  }
-  syslog(Logger::ERROR, "%s", cntl->ErrorText().c_str());
+void Expand_Call_Back(void *cb_context) {
+  ExpandClusterTask *task = static_cast<ExpandClusterTask *>(cb_context);
+
+  syslog(Logger::INFO, "Expand_Call_Back() response");
 }
 
 void ExpandClusterMission::ReportStatus() {
   kunlun::MysqlConnection *meta_conn = g_node_channel_manager.get_meta_conn();
   kunlun::RequestStatus status = get_status();
-  char sql[4096] = {'\0'};
+  char sql[51200] = {'\0'};
   if (status <= kunlun::ON_GOING) {
     sprintf(sql,
             "update kunlun_metadata_db.cluster_general_job_log set status = %d "
             "where id = %s",
             get_status(), get_request_unique_id().c_str());
   } else {
-    sprintf(sql,
-            "update kunlun_metadata_db.cluster_general_job_log set status = %d ,"
-            "when_ended = CURRENT_TIMESTAMP(6) where id = %s",
-            get_status(), get_request_unique_id().c_str());
+    std::string memo = get_task_manager()->serialized_result_;
+    sprintf(
+        sql,
+        "update kunlun_metadata_db.cluster_general_job_log set status = %d ,"
+        "when_ended = CURRENT_TIMESTAMP(6) , memo = '%s' where id = %s",
+        get_status(), memo.c_str(), get_request_unique_id().c_str());
   }
   kunlun::MysqlResult result;
   int ret = meta_conn->ExcuteQuery(sql, &result, true);
   if (ret < 0) {
-    syslog(Logger::INFO, "Report Request status sql: %s ,failed: %s",
-           sql,meta_conn->getErr());
+    syslog(Logger::INFO, "Report Request status sql: %s ,failed: %s", sql,
+           meta_conn->getErr());
   }
   return;
 }
 
 bool ExpandClusterMission::MakeDir() {
-  ExpandClusterTask *make_dir_task = new ExpandClusterTask("Expand_Make_Dir");
+  ExpandClusterTask *make_dir_task =
+      new ExpandClusterTask("Expand_Make_Dir", related_id_.c_str(), this);
   make_dir_task->AddNodeSubChannel(
       src_shard_node_address_.c_str(),
       g_node_channel_manager.getNodeChannel(src_shard_node_address_.c_str()));
@@ -70,7 +71,7 @@ bool ExpandClusterMission::MakeDir() {
 bool ExpandClusterMission::DumpTable() {
 
   ExpandClusterTask *dump_table_task =
-      new ExpandClusterTask("Expand_Dump_Table");
+      new ExpandClusterTask("Expand_Dump_Table", related_id_.c_str(), this);
   dump_table_task->AddNodeSubChannel(
       src_shard_node_address_.c_str(),
       g_node_channel_manager.getNodeChannel(src_shard_node_address_.c_str()));
@@ -107,7 +108,7 @@ bool ExpandClusterMission::DumpTable() {
 bool ExpandClusterMission::LoadTable() {
 
   ExpandClusterTask *load_table_task =
-      new ExpandClusterTask("Expand_Load_Table");
+      new ExpandClusterTask("Expand_Load_Table", related_id_.c_str(), this);
   load_table_task->AddNodeSubChannel(
       dst_shard_node_address_.c_str(),
       g_node_channel_manager.getNodeChannel(dst_shard_node_address_.c_str()));
@@ -136,7 +137,7 @@ bool ExpandClusterMission::LoadTable() {
 bool ExpandClusterMission::TableCatchUp() {
 
   ExpandClusterTask *table_catchup_task =
-      new ExpandClusterTask("Expand_Catchup_Table");
+      new ExpandClusterTask("Expand_Catchup_Table", related_id_.c_str(), this);
   table_catchup_task->AddNodeSubChannel(
       dst_shard_node_address_.c_str(),
       g_node_channel_manager.getNodeChannel(dst_shard_node_address_.c_str()));
@@ -148,7 +149,7 @@ bool ExpandClusterMission::TableCatchUp() {
   root["task_spec_info"] = table_catchup_task->get_task_spec_info();
 
   const Json::Value &orig_request = get_body_json_document()["paras"];
-  char table_catchup_arg_buf[4096] = {'\0'};
+  char table_catchup_arg_buf[8192] = {'\0'};
   sprintf(table_catchup_arg_buf,
           " -src_shard_id=%s -src_addr=%s -src_port=%d -src_user=pgx"
           " -src_pass=pgx_pwd"
@@ -157,7 +158,8 @@ bool ExpandClusterMission::TableCatchUp() {
           " -meta_url=%s -cluster_id=%s"
           " -table_list=%s -mydumper_metadata_file=%s/metadata"
           " -expand_info_suffix=%s"
-          " -logger_directory=TMP_DATA_PATH_PLACE_HOLDER/cluster_request_%s",
+          " -logger_directory=TMP_DATA_PATH_PLACE_HOLDER/cluster_request_%s"
+          " -table_move_job_log_id=%s",
           orig_request["src_shard_id"].asString().c_str(),
           src_shard_node_address_.c_str(), src_shard_node_port_,
           orig_request["dst_shard_id"].asString().c_str(),
@@ -165,7 +167,8 @@ bool ExpandClusterMission::TableCatchUp() {
           meta_cluster_url_.c_str(),
           orig_request["cluster_id"].asString().c_str(),
           table_list_str_.c_str(), mydumper_tmp_data_dir_.c_str(),
-          get_request_unique_id().c_str(), get_request_unique_id().c_str());
+          get_request_unique_id().c_str(), get_request_unique_id().c_str(),
+          related_id_.c_str());
   Json::Value paras;
   paras.append(table_catchup_arg_buf);
   root["para"] = paras;
@@ -270,16 +273,35 @@ bool ExpandClusterMission::SetUpMisson() {
       table_list_str_storage_.append(dspc + "." + table_spec_.table);
     }
   }
+  // related_id banded with table_move_jobs
+  bzero((void *)sql_stmt, 1024);
+  result.Clean();
+
+  sprintf(sql_stmt,
+          "select related_id from kunlun_metadata_db.cluster_general_job_log "
+          "where id = %s",
+          get_request_unique_id().c_str());
+  ret = meta_conn->ExcuteQuery(sql_stmt, &result);
+  if (ret != 0 || result.GetResultLinesNum() < 1) {
+    setErr("can't fetch valid `related_id`, connection info: %s , or select "
+           "result is null",
+           meta_conn->getErr());
+    return false;
+  }
+  related_id_ = result[0]["related_id"];
 
   return true;
 }
-void ExpandClusterMission::TearDownImpl() {
-  
-  set_status(kunlun::DONE);
+bool ExpandClusterMission::TearDownMission() {
+
   syslog(Logger::INFO, "teardown phase");
-  return;
+  return true;
 }
 bool ExpandClusterMission::TransferFile() { return true; }
+
+std::string ExpandClusterMission::get_table_list_str() const {
+  return table_list_str_;
+}
 
 bool ExpandClusterMission::ArrangeRemoteTask() {
 
@@ -309,5 +331,63 @@ bool ExpandClusterMission::ArrangeRemoteTask() {
 
   return true;
 }
+bool ExpandClusterTask::TaskReportImpl() {
+  // here report the
+  std::string task_spec = get_task_spec_info();
+  kunlun::MysqlConnection *conn = g_node_channel_manager.get_meta_conn();
+  kunlun::MysqlResult result;
+  int ret = 0;
+  char sql[4096] = {'\0'};
 
-bool ExpandClusterTask::TaskReportImpl() { return true; }
+  Json::Value root = get_response()->get_all_response_json();
+  bool task_ok = get_response()->ok();
+  Json::FastWriter writer;
+  writer.omitEndingLineFeed();
+  std::string memo = writer.write(root);
+  if (task_spec == "Expand_Make_Dir") {
+    sprintf(sql,
+            "update kunlun_metadata_db.table_move_jobs set memo = '%s',"
+            "table_list='%s', src_shard = %s, dest_shard = %s where "
+            "id = %s",
+            memo.c_str(), mission_ptr_->get_table_list_str().c_str(),
+            mission_ptr_->get_body_json_document()["paras"]["src_shard_id"]
+                .asString()
+                .c_str(),
+            mission_ptr_->get_body_json_document()["paras"]["dst_shard_id"]
+                .asString()
+                .c_str(),
+            related_id_.c_str());
+    ret = conn->ExcuteQuery(sql, &result);
+  } else if (task_spec == "Expand_Dump_Table") {
+    sprintf(sql,
+            "update kunlun_metadata_db.table_move_jobs set memo = "
+            "'%s',status='transmitted' where "
+            "id = %s",
+            memo.c_str(), related_id_.c_str());
+    ret = conn->ExcuteQuery(sql, &result);
+  } else if (task_spec == "Expand_Load_Table") {
+    sprintf(sql,
+            "update kunlun_metadata_db.table_move_jobs set memo = "
+            "'%s',status='loaded' where "
+            "id = %s",
+            memo.c_str(), related_id_.c_str());
+    ret = conn->ExcuteQuery(sql, &result);
+  } else if (task_spec == "Expand_Catchup_Table") {
+    sprintf(sql,
+            "update kunlun_metadata_db.table_move_jobs set memo = "
+            "'%s',status='%s',when_ended = CURRENT_TIMESTAMP(6) where "
+            "id = %s",
+            memo.c_str(), task_ok ? "done" : "failed", related_id_.c_str());
+    ret = conn->ExcuteQuery(sql, &result);
+  } else {
+    //
+  }
+
+  if (ret < 0) {
+    syslog(Logger::ERROR, "%s", conn->getErr());
+  }
+
+  syslog(Logger::INFO, "ExpandClusterTask report: %s,sql: %s, related_id: %s",
+         get_task_spec_info(), sql, related_id_.c_str());
+  return true;
+}
