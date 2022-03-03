@@ -28,6 +28,7 @@ JOB_NONE,
 JOB_GET_STATUS,
 JOB_GET_INSTANCES,
 JOB_GET_META,
+JOB_GET_META_MODE,
 JOB_GET_CLUSTER,
 JOB_GET_STORAGE,
 JOB_GET_COMPUTER,
@@ -37,6 +38,9 @@ JOB_SET_VARIABLE,
 JOB_CREATE_MACHINE, 
 JOB_UPDATE_MACHINE, 
 JOB_DELETE_MACHINE, 
+JOB_UPDATE_PROMETHEUS, 
+JOB_POSTGRES_EXPORTER, 
+JOB_MYSQLD_EXPORTER, 
 JOB_CONTROL_INSTANCE, 
 JOB_CREATE_CLUSTER, 
 JOB_DELETE_CLUSTER, 
@@ -62,6 +66,7 @@ public:
 	static int do_exit;
 	std::vector<std::string> vec_local_ip;
 	std::string user_name;
+	std::string backup_storage;
 
 private:
 	static Job *m_inst;
@@ -99,8 +104,14 @@ public:
 	
 	bool update_operation_status(std::string &info);
 	bool get_operation_status(std::string &info);
-	bool job_insert_operation_record(cJSON *root, std::string &result, std::string &info, std::string &info_other);
-	bool job_update_operation_record(std::string &job_id, std::string &result, std::string &info, std::string &info_other);
+	bool job_get_cluster_info(std::string &cluster_name, Tpye_cluster_info &cluster_info);
+	bool job_update_cluster_info(std::string &cluster_name, char* cjson);
+	bool job_insert_operation_record(cJSON *root, std::string &result, std::string &info);
+	bool job_update_operation_record(std::string &job_id, std::string &result, std::string &info);
+	bool job_insert_roll_back_record(std::string &job_id, char* cjson);
+	bool job_delete_roll_back_record(std::string &job_id);
+	bool job_roll_back_record(std::string &job_id);
+	bool job_roll_back_check();
 
 	bool job_system_cmd(std::string &cmd);
 	bool job_save_file(std::string &path, char* buf);
@@ -109,6 +120,14 @@ public:
 	void job_update_machine(cJSON *root);
 	void job_delete_machine(cJSON *root);
 
+	bool job_restart_node_exporter(std::vector<std::string> &vec_node);
+	bool job_restart_postgres_exporter(std::string &ip, int port);
+	bool job_restart_mysql_exporter(std::string &ip, int port);
+	bool job_restart_prometheus();
+	bool job_update_prometheus();
+	void job_update_prometheus(cJSON *root);
+	void job_postgres_exporter(cJSON *root);
+	void job_mysqld_exporter(cJSON *root);
 	bool job_control_instance(Tpye_Ip_Port &ip_port, std::string type, std::string control);
 	void job_control_instance(cJSON *root);
 
@@ -117,22 +136,22 @@ public:
 	bool job_create_meta_jsonfile();
 	bool job_create_shards_jsonfile(std::vector <std::vector<Tpye_Ip_Port_Paths>> &vec_shard, std::vector<std::string> &vec_shard_name);
 	bool job_create_storage(Tpye_Ip_Port_Paths &storage, cJSON *root, int install_id);
-	bool job_create_nodes(std::vector<Tpye_Ip_Port_Paths> &storages, std::string &cluster_name, std::string &shard_name);
-	bool job_create_shard(std::vector<Tpye_Ip_Port_Paths> &storages, std::string &cluster_name, std::string &shard_name, std::string &ha_mode, int innodb_size);
+	bool job_create_nodes(std::vector<Tpye_Ip_Port_Paths> &storages, std::string &cluster_name, std::string &shard_name, std::string &job_id);
+	bool job_create_shard(std::vector<Tpye_Ip_Port_Paths> &storages, std::string &cluster_name, std::string &shard_name, std::string &job_id, Tpye_string2 &t_string2);
 	bool job_create_computer(Tpye_Ip_Port_Paths &computer, cJSON *root, int install_id);
-	bool job_create_comps(std::vector<Tpye_Ip_Port_Paths> &comps, std::string &cluster_name, std::vector<std::string> vec_comp_name, int comps_id);
-	bool job_start_cluster(std::string &cluster_name, std::string &ha_mode);
-	bool job_create_cluster(Tpye_cluster_info &cluster_info, std::string &cluster_name);
+	bool job_create_comps(std::vector<Tpye_Ip_Port_Paths> &comps, std::string &cluster_name, std::vector<std::string> &vec_comp_name, std::string &job_id, int comps_id);
+	bool job_start_cluster(std::string &cluster_name, std::string &job_id, std::string &ha_mode);
+	bool job_create_cluster(Tpye_cluster_info &cluster_info, std::string &cluster_name, std::string &job_id, std::set<std::string> &set_machine);
 	void job_create_cluster(cJSON *root);
 	bool job_delete_storage(Tpye_Ip_Port &storage);
 	bool job_delete_computer(Tpye_Ip_Port &computer);
 	void job_delete_cluster(cJSON *root);
 	void job_delete_cluster(std::string &cluster_name);
 
-	bool job_start_shards(std::string &cluster_name, std::vector<std::string> &vec_shard_name);
+	bool job_start_shards(std::string &cluster_name, std::vector<std::string> &vec_shard_name, std::string &job_id);
 	void job_add_shards(cJSON *root);
 	void job_delete_shard(cJSON *root);
-	bool job_start_comps(std::string &cluster_name);
+	bool job_start_comps(std::string &cluster_name, std::vector<std::string> &vec_comp_name, std::string &job_id);
 	void job_add_comps(cJSON *root);
 	void job_delete_comp(cJSON *root);
 	bool job_update_shard_nodes(std::string &cluster_name, std::string &shard_name);
@@ -140,8 +159,8 @@ public:
 	bool job_delete_shard_json(std::string &cluster_name, std::string &shard_name, Tpye_Ip_Port &ip_port);
 	void job_delete_node(cJSON *root);
 
-	bool job_get_cluster_info(std::string &cluster_name, Tpye_cluster_info &cluster_info);
-	bool job_backup_shard(std::string &cluster_name, Tpye_Ip_Port &ip_port, int shards_id);
+	bool job_backup_shard_node(std::string &cluster_name, int &cluster_id, Tpye_Shard_Id_Ip_Port_Id &shard_id_ip_port_id);
+	bool job_backup_shard(std::string &cluster_name, std::string &shard_name, std::string &datatime);
 	bool job_backup_cluster(std::string &cluster_name, std::string &datatime);
 	void job_backup_cluster(cJSON *root);
 	bool job_restore_storage(std::string &cluster_name, std::string &shard_name, std::string &timestamp, Tpye_Ip_Port &ip_port);

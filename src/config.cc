@@ -26,10 +26,7 @@ extern int64_t cluster_mgr_http_port;
 extern std::string http_web_path;
 extern std::string http_upload_path;
 extern std::string http_cmd_version;
-
 extern int64_t node_mgr_http_port;
-extern std::string hdfs_server_ip;
-extern int64_t hdfs_server_port;
 
 extern std::string cluster_json_path;
 extern std::string program_binaries_path;
@@ -38,6 +35,9 @@ extern std::string storage_prog_package_name;
 extern std::string computer_prog_package_name;
 extern int64_t storage_instance_port_start;
 extern int64_t computer_instance_port_start;
+
+extern std::string prometheus_path;
+extern int64_t prometheus_port_start;
 
 Configs *Configs::get_instance()
 {
@@ -224,14 +224,8 @@ void Configs::define_configs()
 
 	define_int_config("node_mgr_http_port", node_mgr_http_port, 0, 65535, 5001,
 		"node_mgr_http_port");
-
 	define_str_config("http_cmd_version", http_cmd_version, "0.1",
 		"http_cmd_version");
-
-	define_int_config("hdfs_server_port", hdfs_server_port, 0, 65535, 0,
-		"hdfs_server_port");
-	define_str_config("hdfs_server_ip", hdfs_server_ip, "localhost",
-		"hdfs_server_ip");
 
 	define_str_config("cluster_json_path", cluster_json_path, "./cluster_json",
 		"cluster_json_path");
@@ -244,11 +238,15 @@ void Configs::define_configs()
 	define_str_config("computer_prog_package_name", computer_prog_package_name, "postgresql-11.5-rel",
 		"computer_prog_package_name");
 
-	define_int_config("storage_instance_port_start", storage_instance_port_start, 0, 65535, 5330,
+	define_int_config("storage_instance_port_start", storage_instance_port_start, 0, 65535, 57330,
 		"storage_instance_port_start");
-	define_int_config("computer_instance_port_start", computer_instance_port_start, 0, 65535, 5030,
+	define_int_config("computer_instance_port_start", computer_instance_port_start, 0, 65535, 57030,
 		"computer_instance_port_start");
 
+	define_str_config("prometheus_path", prometheus_path, "../../../program_binaries/prometheus",
+		"prometheus_path");
+	define_int_config("prometheus_port_start", prometheus_port_start, 0, 65535, 57010,
+		"prometheus_port_start");
 
 	/*
 	  There is no practical way we can prevent multiple cluster_mgr processes

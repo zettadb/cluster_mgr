@@ -35,7 +35,7 @@ typedef uint32_t uint;
 typedef std::tuple<std::string, int, int, int, int, int, int, int> Tpye_cluster_info;
 typedef std::tuple<std::string, int, std::string, std::string> Tpye_Ip_Port_User_Pwd;
 typedef std::tuple<std::string, int, std::vector<std::string>> Tpye_Ip_Port_Paths;
-typedef std::tuple<std::string, std::string, int> Tpye_Shard_Ip_Port;
+typedef std::tuple<std::string, int, std::string, int, int> Tpye_Shard_Id_Ip_Port_Id;
 typedef std::tuple<std::string, int, int> Tpye_Path_Used_Free;
 
 typedef std::tuple<std::string, std::string> Tpye_string2;

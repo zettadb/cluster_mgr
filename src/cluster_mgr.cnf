@@ -77,12 +77,6 @@ http_cmd_version = 0.9
 # cluster create json path
 cluster_json_path = ./cluster_json
 
-# hdfs server port 
-hdfs_server_port = 57002
-
-# hdfs server ip address
-hdfs_server_ip = 192.168.0.128
-
 # program_binaries_path
 program_binaries_path = ../../../program_binaries
 
@@ -100,4 +94,10 @@ storage_instance_port_start = 57330
 
 # computer instance port start
 computer_instance_port_start = 57030
+
+# prometheus path
+prometheus_path = ../../../program_binaries/prometheus
+
+# prometheus port start
+prometheus_port_start = 57010
 

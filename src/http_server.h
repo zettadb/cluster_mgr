@@ -20,7 +20,7 @@
 class Http_server
 {
 public:
-	enum Http_type {HTTP_NONE, HTTP_GET, HTTP_POST};
+	enum Http_type {HTTP_NONE, HTTP_GET, HTTP_POST, HTTP_OPTIONS};
 	enum Content_type {Content_NONE, Application_json, Content_form_urlencoded, Content_form_data};
 	static int do_exit;
 private:
@@ -42,6 +42,7 @@ public:
 	}
 	int start_http_thread();
 	void join_all();
+	void GetDateTime(char* szDateTime);
 	bool Get_http_path(const char* buf, std::string &path);
 	bool Get_http_range(const char* buf, uint64_t *begin, uint64_t *end);
 	Http_type Get_http_type(const char* buf);

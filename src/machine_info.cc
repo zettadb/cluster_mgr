@@ -175,7 +175,6 @@ bool Machine_info::get_machine_path_space(Machine* machine, std::string &info)
 
 	cJSON *root = NULL;
 	cJSON *item;
-	cJSON *item_sub;
 	char *cjson = NULL;
 
 	cJSON *ret_root = NULL;
@@ -225,7 +224,7 @@ bool Machine_info::get_machine_path_space(Machine* machine, std::string &info)
 			ret_item = cJSON_GetObjectItem(ret_root, "result");
 			if(ret_item == NULL || ret_item->valuestring == NULL)
 			{
-				syslog(Logger::ERROR, "get result error");
+				syslog(Logger::ERROR, "get result item error");
 				goto end;
 			}
 			result = ret_item->valuestring;
@@ -233,7 +232,7 @@ bool Machine_info::get_machine_path_space(Machine* machine, std::string &info)
 			ret_item = cJSON_GetObjectItem(ret_root, "info");
 			if(ret_item == NULL || ret_item->valuestring == NULL)
 			{
-				syslog(Logger::ERROR, "get info error");
+				syslog(Logger::ERROR, "get info item error");
 				goto end;
 			}
 			info = ret_item->valuestring;
@@ -380,7 +379,7 @@ bool Machine_info::update_machines_info()
 
 	/////////////////////////////////////////////////////////
 	//get the machines from meta data table
-	if(System::get_instance()->get_server_nodes_from_metadata(vec_machines))
+	if(!System::get_instance()->get_server_nodes_from_metadata(vec_machines))
 	{
 		syslog(Logger::ERROR, "get_server_nodes_from_metadata error");
 		return false;
@@ -444,9 +443,31 @@ bool Machine_info::update_machines_info()
 	return (vec_machines.size() > 0);
 }
 
-bool Machine_info::get_storage_nodes(int nodes, std::vector<Tpye_Ip_Port_Paths> &vec_ip_port_paths)
+bool Machine_info::get_storage_nodes(int nodes, std::vector<Tpye_Ip_Port_Paths> &vec_ip_port_paths, std::set<std::string> &set_machine)
 {
 	std::lock_guard<std::mutex> lock(mutex_nodes_);
+
+	// remove other machine
+	if(set_machine.size() > 0)
+	{
+		for(auto it=vec_machines.begin(); it!=vec_machines.end(); )
+		{
+			bool in_set = false;
+			for(auto &machine: set_machine)
+			{
+				if(machine == (*it)->ip)
+				{
+					in_set = true;
+					break;
+				}
+			}
+
+			if(in_set)
+				it++;
+			else
+				it = vec_machines.erase(it);
+		}
+	}
 
 	if(vec_machines.size() == 0)
 		return false;
@@ -460,12 +481,24 @@ bool Machine_info::get_storage_nodes(int nodes, std::vector<Tpye_Ip_Port_Paths> 
 		vec_paths.emplace_back(std::get<0>(vec_machines[node_allocate]->vec_vec_path_used_free[1][0]));
 		vec_paths.emplace_back(std::get<0>(vec_machines[node_allocate]->vec_vec_path_used_free[2][0]));
 
+		while(1)
+		{
+			std::vector<int> vec_port;
+			vec_port.emplace_back(vec_machines[node_allocate]->port_storage);
+			vec_port.emplace_back(vec_machines[node_allocate]->port_storage+1);
+			vec_port.emplace_back(vec_machines[node_allocate]->port_storage+2);
+			
+			if(check_machine_port_idle(vec_machines[node_allocate]->ip, vec_port))
+				break;
+
+			vec_machines[node_allocate]->port_storage += 3;
+		}
+
 		vec_ip_port_paths.emplace_back(std::make_tuple(vec_machines[node_allocate]->ip, 
 									vec_machines[node_allocate]->port_storage, vec_paths));
-		
+
 		vec_machines[node_allocate]->port_storage += 3;
 		node_finish++;
-
 		node_allocate++;
 		node_allocate %= vec_machines.size();
 	}
@@ -479,9 +512,31 @@ bool Machine_info::get_storage_nodes(int nodes, std::vector<Tpye_Ip_Port_Paths> 
 	return true;
 }
 
-bool Machine_info::get_computer_nodes(int nodes, std::vector<Tpye_Ip_Port_Paths> &vec_ip_port_paths)
+bool Machine_info::get_computer_nodes(int nodes, std::vector<Tpye_Ip_Port_Paths> &vec_ip_port_paths, std::set<std::string> &set_machine)
 {
 	std::lock_guard<std::mutex> lock(mutex_nodes_);
+
+	// remove other machine
+	if(set_machine.size() > 0)
+	{
+		for(auto it=vec_machines.begin(); it!=vec_machines.end(); )
+		{
+			bool in_set = false;
+			for(auto &machine: set_machine)
+			{
+				if(machine == (*it)->ip)
+				{
+					in_set = true;
+					break;
+				}
+			}
+
+			if(in_set)
+				it++;
+			else
+				it = vec_machines.erase(it);
+		}
+	}
 
 	if(vec_machines.size() == 0)
 		return false;
@@ -493,12 +548,22 @@ bool Machine_info::get_computer_nodes(int nodes, std::vector<Tpye_Ip_Port_Paths>
 	{
 		std::vector<std::string> vec_paths;
 		vec_paths.emplace_back(std::get<0>(vec_machines[node_allocate]->vec_vec_path_used_free[3][0]));
+
+		while(1)
+		{
+			std::vector<int> vec_port;
+			vec_port.emplace_back(vec_machines[node_allocate]->port_computer);
+			if(check_machine_port_idle(vec_machines[node_allocate]->ip, vec_port))
+				break;
+
+			vec_machines[node_allocate]->port_computer += 1;
+		}
+
 		vec_ip_port_paths.emplace_back(std::make_tuple(vec_machines[node_allocate]->ip, 
 									vec_machines[node_allocate]->port_computer, vec_paths));
 		
 		vec_machines[node_allocate]->port_computer += 1;
 		node_finish++;
-
 		node_allocate++;
 		node_allocate %= vec_machines.size();
 	}
@@ -507,5 +572,77 @@ bool Machine_info::get_computer_nodes(int nodes, std::vector<Tpye_Ip_Port_Paths>
 	nodes_select = (nodes_select+nodes)%vec_machines.size();
 
 	return true;
+}
+
+bool Machine_info::check_machine_port_idle(std::string &ip, std::vector<int> &vec_port)
+{
+	bool ret = false;
+	cJSON *root = NULL;
+	cJSON *item;
+	char *cjson = NULL;
+
+	cJSON *ret_root = NULL;
+	cJSON *ret_item;
+
+	root = cJSON_CreateObject();
+	cJSON_AddStringToObject(root, "job_type", "check_port");
+	for(int i=0; i<vec_port.size(); i++)
+	{
+		std::string name = "port" + std::to_string(i);
+		cJSON_AddNumberToObject(root, name.c_str(), vec_port[i]);
+	}
+
+	cjson = cJSON_Print(root);
+	cJSON_Delete(root);
+	root = NULL;
+	
+	std::string post_url = "http://" + ip + ":" + std::to_string(node_mgr_http_port);
+	//syslog(Logger::INFO, "post_url=%s",post_url.c_str());
+	
+	std::string result, result_str;
+	int retry = 3;
+	while(retry-->0)
+	{
+		if(Http_client::get_instance()->Http_client_post_para(post_url.c_str(), cjson, result_str)==0)
+		{
+			//syslog(Logger::INFO, "check_machine_port_idle result_str=%s",result_str.c_str());
+
+			ret_root = cJSON_Parse(result_str.c_str());
+			if(ret_root == NULL)
+			{
+				syslog(Logger::ERROR, "cJSON_Parse error");	
+				goto end;
+			}
+
+			ret_item = cJSON_GetObjectItem(ret_root, "result");
+			if(ret_item == NULL || ret_item->valuestring == NULL)
+			{
+				syslog(Logger::ERROR, "get result error");
+				goto end;
+			}
+			result = ret_item->valuestring;
+
+			if(result == "succeed")
+			{
+				ret = true;
+				break;
+			}
+			else if(result == "error")
+			{
+				ret = false;
+				break;
+			}
+		}
+	}
+
+end:
+	if(ret_root!=NULL)
+		cJSON_Delete(ret_root);
+	if(root!=NULL)
+		cJSON_Delete(root);
+	if(cjson!=NULL)
+		free(cjson);
+	
+	return ret;
 }
 

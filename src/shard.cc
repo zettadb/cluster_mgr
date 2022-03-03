@@ -1869,6 +1869,22 @@ int MetadataShard::delete_cluster_from_metadata(std::string & cluster_name)
 		cur_master->free_mysql_result();
 	}
 
+	//remove cluster_backups
+	str_sql = "delete from cluster_backups where cluster_id=" + cluster_id;
+	cur_master->send_stmt(SQLCOM_DELETE, str_sql.c_str(), str_sql.length(), stmt_retries);
+
+	//remove cluster_shard_backup_restore_log
+	str_sql = "delete from cluster_shard_backup_restore_log where cluster_id=" + cluster_id;
+	cur_master->send_stmt(SQLCOM_DELETE, str_sql.c_str(), str_sql.length(), stmt_retries);
+
+	//drop table commit_log_cluster_name
+	str_sql = "drop table commit_log_" + cluster_name;
+	cur_master->send_stmt(SQLCOM_DROP_TABLE, str_sql.c_str(), str_sql.length(), stmt_retries);
+
+	//drop table ddl_ops_log_cluster_name
+	str_sql = "drop table ddl_ops_log_" + cluster_name;
+	cur_master->send_stmt(SQLCOM_DROP_TABLE, str_sql.c_str(), str_sql.length(), stmt_retries);
+
 	//remove comp_nodes
 	str_sql = "delete from comp_nodes where db_cluster_id=" + cluster_id;
 	cur_master->send_stmt(SQLCOM_DELETE, str_sql.c_str(), str_sql.length(), stmt_retries);
@@ -1891,14 +1907,6 @@ int MetadataShard::delete_cluster_from_metadata(std::string & cluster_name)
 	//remove db_clusters
 	str_sql = "delete from db_clusters where id=" + cluster_id;
 	cur_master->send_stmt(SQLCOM_DELETE, str_sql.c_str(), str_sql.length(), stmt_retries);
-
-	//drop table commit_log_cluster_name
-	str_sql = "drop table commit_log_" + cluster_name;
-	cur_master->send_stmt(SQLCOM_DROP_TABLE, str_sql.c_str(), str_sql.length(), stmt_retries);
-
-	//drop table ddl_ops_log_cluster_name
-	str_sql = "drop table ddl_ops_log_" + cluster_name;
-	cur_master->send_stmt(SQLCOM_DROP_TABLE, str_sql.c_str(), str_sql.length(), stmt_retries);
 
 	return ret;
 }
@@ -1954,6 +1962,10 @@ int MetadataShard::delete_cluster_shard_from_metadata(std::string & cluster_name
 
 	if(shard_id.length()==0)
 		return 1;
+
+	//remove cluster_shard_backup_restore_log
+	str_sql = "delete from cluster_shard_backup_restore_log where shard_id=" + shard_id;
+	cur_master->send_stmt(SQLCOM_DELETE, str_sql.c_str(), str_sql.length(), stmt_retries);
 
 	//remove ddl_ops_log_cluster_name
 	str_sql = "delete from ddl_ops_log_" + cluster_name + " where target_shard_id=" + shard_id;
@@ -2021,6 +2033,11 @@ int MetadataShard::delete_cluster_shard_node_from_metadata(std::string &cluster_
 
 	if(shard_id.length()==0)
 		return 1;
+
+	//remove cluster_shard_backup_restore_log
+	str_sql = "delete from cluster_shard_backup_restore_log where shard_node_id=(select id from shard_nodes where hostaddr='";
+	str_sql += ip_port.first + "' and port=" + std::to_string(ip_port.second) + ")";
+	cur_master->send_stmt(SQLCOM_DELETE, str_sql.c_str(), str_sql.length(), stmt_retries);
 
 	//remove shard_nodes
 	str_sql = "delete from shard_nodes where hostaddr='" + ip_port.first + "' and port=" + std::to_string(ip_port.second);
@@ -2289,6 +2306,43 @@ int MetadataShard::update_instance_status(Tpye_Ip_Port &ip_port, std::string &st
 }
 
 /*
+  get_backup_storage from metadata table
+  @retval 0 succeed;
+  		  1 fail;
+*/
+int MetadataShard::get_backup_storage(std::string &backup_storage)
+{
+
+	if(cur_master == NULL)
+		return 1;
+
+	int ret = 1;
+	std::string cluster_id;
+	std::string shard_id;
+
+	//get cluster_id
+	std::string str_sql = "select conn_str from backup_storage where id=1";
+	ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+		ret = 1;
+		if ((row = mysql_fetch_row(result)))
+		{
+			if(row[0] != NULL)
+			{
+				backup_storage = row[0];
+				ret = 0;
+			}
+		}
+		cur_master->free_mysql_result();
+	}
+
+	return ret;
+}
+
+/*
   add shard nodes to metadata table
   @retval 0 succeed;
   		  1 fail;
@@ -2362,19 +2416,260 @@ int MetadataShard::add_shard_nodes(std::string &cluster_name, std::string &shard
 }
 
 /*
-  get cluster_backups from metadata table 
+  get roll_info from metadata table 
   @retval 0 succeed;
   		  1 fail;
 */
-int MetadataShard::get_backup_info_from_metadata(std::string &cluster_name, std::string &timestamp, Tpye_cluster_info &cluster_info)
+int MetadataShard::get_roll_info_from_metadata(std::string &job_id, std::vector<std::string> &vec_roll_info)
 {
 	Scopped_mutex sm(mtx);
 
 	if(cur_master == NULL)
 		return 1;
 
-	std::string str_sql  = "select ha_mode,shards,nodes,comps,max_storage_size,max_connections,cpu_cores,innodb_size from cluster_backups";
-	str_sql += " where cluster_name='" + cluster_name + "' and when_created<='" + timestamp + "' order by when_created desc";
+	int ret;
+	std::string str_sql;
+
+	str_sql = "select roll_info from cluster_roll_back_record where job_id='" + job_id + "'";
+	ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+
+		while ((row = mysql_fetch_row(result)))
+		{
+			vec_roll_info.emplace_back(row[0]);
+		}
+		cur_master->free_mysql_result();
+	}
+
+	return ret;
+}
+
+/*
+  get ongoing job_id from metadata table 
+  @retval 0 succeed;
+  		  1 fail;
+*/
+int MetadataShard::get_ongoing_job_id_from_metadata(std::vector<std::string> &vec_job_id)
+{
+	Scopped_mutex sm(mtx);
+
+	if(cur_master == NULL)
+		return 1;
+
+	int ret;
+	std::string str_sql;
+
+	str_sql = "select job_id from cluster_general_job_log where status='ongoing'";
+	ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+
+		while ((row = mysql_fetch_row(result)))
+		{
+			vec_job_id.emplace_back(row[0]);
+		}
+		cur_master->free_mysql_result();
+	}
+
+	return ret;
+}
+
+/*
+  get ongoing job_json from metadata table 
+  @retval 0 succeed;
+  		  1 fail;
+*/
+int MetadataShard::get_ongoing_job_json_from_metadata(std::vector<std::string> &vec_job_json)
+{
+	Scopped_mutex sm(mtx);
+
+	if(cur_master == NULL)
+		return 1;
+
+	int ret;
+	std::string str_sql;
+
+	str_sql = "select memo from cluster_general_job_log where status='ongoing'";
+	ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+
+		while ((row = mysql_fetch_row(result)))
+		{
+			vec_job_json.emplace_back(row[0]);
+		}
+		cur_master->free_mysql_result();
+	}
+
+	return ret;
+}
+
+/*
+  get cluster_backups from metadata table 
+  @retval 0 succeed;
+  		  1 fail;
+*/
+int MetadataShard::get_backup_info_from_metadata(std::string &cluster_name, std::string &timestamp, std::vector<std::string> &vec_shard)
+{
+	Scopped_mutex sm(mtx);
+
+	if(cur_master == NULL)
+		return 1;
+
+	int ret;
+	std::string str_sql;
+	std::string cluster_id;
+
+	//get cluster_id
+	str_sql = "select id from db_clusters where name='" + cluster_name + "'";
+	ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+		if ((row = mysql_fetch_row(result)))
+		{
+			if(row[0] != NULL)
+				cluster_id = row[0];
+		}
+		cur_master->free_mysql_result();
+	}
+
+	if(cluster_id.length()==0)
+		return 1;
+
+	str_sql = "select name from cluster_backups where cluster_id=" + cluster_id;
+	str_sql += " and end_ts<='" + timestamp + "' order by end_ts desc limit 1";
+	ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+
+		if ((row = mysql_fetch_row(result)))
+		{
+			const char *cStart, *cEnd;
+			std::string shard_name;
+
+			cStart = row[0];
+			while(*cStart!='\0')
+			{
+				cEnd = strchr(cStart, ';');
+				if(cEnd == NULL)
+				{
+					shard_name = std::string(cStart, strlen(cStart));
+					if(shard_name.length())
+						vec_shard.emplace_back(shard_name);
+					break;
+				}
+				else
+				{
+					shard_name = std::string(cStart, cEnd-cStart);
+					if(shard_name.length())
+						vec_shard.emplace_back(shard_name);
+					cStart = cEnd+1;
+				}
+			}
+
+		}
+		cur_master->free_mysql_result();
+	}
+
+	if(vec_shard.size()==0)
+		return 1;
+
+	return 0;
+}
+
+/*
+  get cluster_info from metadata table 
+  @retval 0 succeed;
+  		  1 fail;
+*/
+int MetadataShard::get_cluster_info_from_metadata(std::string &cluster_name, std::string &json_buf)
+{
+	Scopped_mutex sm(mtx);
+
+	if(cur_master == NULL)
+		return 1;
+
+	int ret;
+	std::string str_sql;
+
+	str_sql = "select memo from db_clusters where name='" + cluster_name + "'";
+	ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+		if ((row = mysql_fetch_row(result)))
+		{
+			if(row[0] != NULL)
+				json_buf = row[0];
+		}
+		cur_master->free_mysql_result();
+	}
+
+	if(json_buf.length()==0)
+		return 1;
+
+	return 0;
+}
+
+/*
+  get prometheus_info from metadata table 
+  @retval 0 succeed;
+  		  1 fail;
+*/
+int MetadataShard::get_prometheus_info_from_metadata(std::vector<std::string> &vec_machine)
+{
+	Scopped_mutex sm(mtx);
+
+	if(cur_master == NULL)
+		return 1;
+
+	int ret;
+	std::string str_sql;
+
+	str_sql = "select hostaddr from server_nodes";
+	ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+		while ((row = mysql_fetch_row(result)))
+		{
+			if(strcmp(row[0], "pseudo_server_useless") == 0)
+				continue;
+
+			vec_machine.emplace_back(row[0]);
+		}
+		cur_master->free_mysql_result();
+	}
+
+	return 0;
+}
+
+/*
+  check machine hostaddr from metadata table 
+  @retval 0 succeed;
+  		  1 fail;
+*/
+int MetadataShard::check_machine_hostaddr(std::string &hostaddr)
+{
+	Scopped_mutex sm(mtx);
+
+	if(cur_master == NULL)
+		return 1;
+
+	std::string str_sql = "select id from server_nodes where hostaddr='" + hostaddr + "'";
 	int ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
 	if (ret==0)
 	{
@@ -2384,14 +2679,6 @@ int MetadataShard::get_backup_info_from_metadata(std::string &cluster_name, std:
 		ret = 1;
 		if ((row = mysql_fetch_row(result)))
 		{
-			std::get<0>(cluster_info) = row[0];
-			std::get<1>(cluster_info) = atoi(row[1]);
-			std::get<2>(cluster_info) = atoi(row[2]);
-			std::get<3>(cluster_info) = atoi(row[3]);
-			std::get<4>(cluster_info) = atoi(row[4]);
-			std::get<5>(cluster_info) = atoi(row[5]);
-			std::get<6>(cluster_info) = atoi(row[6]);
-			std::get<7>(cluster_info) = atoi(row[7]);
 			ret = 0;
 		}
 		cur_master->free_mysql_result();
@@ -2401,18 +2688,51 @@ int MetadataShard::get_backup_info_from_metadata(std::string &cluster_name, std:
 }
 
 /*
-  check machine hostaddr from metadata table 
-  @retval true succeed;
-  		  false fail;
+  check cluster name from metadata table 
+  @retval 0 succeed;
+  		  1 fail;
 */
-bool MetadataShard::check_machine_hostaddr(std::string &hostaddr)
+int MetadataShard::check_cluster_name(std::string &cluster_name)
 {
 	Scopped_mutex sm(mtx);
 
 	if(cur_master == NULL)
-		return false;
+		return 1;
 
-	std::string str_sql  = "select hostaddr from server_nodes where hostaddr='" + hostaddr + "'";
+	std::string str_sql = "select id from db_clusters where name='" + cluster_name + "'";
+	int ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+
+		ret = 1;
+		if ((row = mysql_fetch_row(result)))
+		{
+			ret = 0;
+		}
+		cur_master->free_mysql_result();
+	}
+
+	return ret;
+}
+
+/*
+  check cluster shard name from metadata table 
+  @retval 0 succeed;
+  		  1 fail;
+*/
+int MetadataShard::check_cluster_shard_name(std::string &cluster_name, std::string &shard_name)
+{
+	Scopped_mutex sm(mtx);
+
+	if(cur_master == NULL)
+		return 1;
+
+	std::string cluster_id;
+
+	//get cluster_id
+	std::string str_sql = "select id from db_clusters where name='" + cluster_name + "'";
 	int ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
 	if (ret==0)
 	{
@@ -2421,13 +2741,266 @@ bool MetadataShard::check_machine_hostaddr(std::string &hostaddr)
 
 		if ((row = mysql_fetch_row(result)))
 		{
-			if(hostaddr == row[0])
-				ret = 1;
+			if(row[0] != NULL)
+				cluster_id = row[0];
 		}
 		cur_master->free_mysql_result();
 	}
 
-	return (ret == 1);
+	if(cluster_id.length()==0)
+		return 1;
+
+	str_sql = "select id from shards where name='" + shard_name + "' and db_cluster_id=" + cluster_id;
+	ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+
+		ret = 1;
+		if ((row = mysql_fetch_row(result)))
+		{
+			ret = 0;
+		}
+		cur_master->free_mysql_result();
+	}
+
+	return ret;
+}
+
+/*
+  check cluster comp name from metadata table 
+  @retval 0 succeed;
+  		  1 fail;
+*/
+int MetadataShard::check_cluster_comp_name(std::string &cluster_name, std::string &comp_name)
+{
+	Scopped_mutex sm(mtx);
+
+	if(cur_master == NULL)
+		return 1;
+
+	std::string cluster_id;
+
+	//get cluster_id
+	std::string str_sql = "select id from db_clusters where name='" + cluster_name + "'";
+	int ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+
+		if ((row = mysql_fetch_row(result)))
+		{
+			if(row[0] != NULL)
+				cluster_id = row[0];
+		}
+		cur_master->free_mysql_result();
+	}
+
+	if(cluster_id.length()==0)
+		return 1;
+
+	str_sql = "select id from comp_nodes where name='" + comp_name + "' and db_cluster_id=" + cluster_id;
+	ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+
+		ret = 1;
+		if ((row = mysql_fetch_row(result)))
+		{
+			ret = 0;
+		}
+		cur_master->free_mysql_result();
+	}
+
+	return ret;
+}
+
+/*
+  check cluster cluster_shard_more from metadata table 
+  @retval 0 succeed;
+  		  1 fail;
+*/
+int MetadataShard::check_cluster_shard_more(std::string &cluster_name)
+{
+	Scopped_mutex sm(mtx);
+
+	if(cur_master == NULL)
+		return 1;
+
+	std::string cluster_id;
+
+	//get cluster_id
+	std::string str_sql = "select id from db_clusters where name='" + cluster_name + "'";
+	int ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+
+		if ((row = mysql_fetch_row(result)))
+		{
+			if(row[0] != NULL)
+				cluster_id = row[0];
+		}
+		cur_master->free_mysql_result();
+	}
+
+	if(cluster_id.length()==0)
+		return 1;
+
+	str_sql = "select count(*) from shards where db_cluster_id=" + cluster_id;
+	ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+
+		ret = 1;
+		if ((row = mysql_fetch_row(result)))
+		{
+			if(row[0] != NULL)
+			{
+				if(atoi(row[0]) > 1)
+					ret = 0;
+			}
+		}
+		cur_master->free_mysql_result();
+	}
+
+	return ret;
+}
+
+/*
+  check cluster cluster_shard_node_more from metadata table 
+  @retval 0 succeed;
+  		  1 fail;
+*/
+int MetadataShard::check_cluster_shard_node_more(std::string &cluster_name, std::string &shard_name)
+{
+	Scopped_mutex sm(mtx);
+
+	if(cur_master == NULL)
+		return 1;
+
+	std::string cluster_id;
+	std::string shard_id;
+
+	//get cluster_id
+	std::string str_sql = "select id from db_clusters where name='" + cluster_name + "'";
+	int ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+
+		if ((row = mysql_fetch_row(result)))
+		{
+			if(row[0] != NULL)
+				cluster_id = row[0];
+		}
+		cur_master->free_mysql_result();
+	}
+
+	if(cluster_id.length()==0)
+		return 1;
+
+	//get shard_id
+	str_sql = "select id from shards where db_cluster_id=" + cluster_id + " and name='" + shard_name + "'";
+	ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+		if ((row = mysql_fetch_row(result)))
+		{
+			if(row[0] != NULL)
+				shard_id = row[0];
+		}
+		cur_master->free_mysql_result();
+	}
+
+	if(shard_id.length()==0)
+		return 1;
+
+	str_sql = "select count(*) from shard_nodes where shard_id=" + shard_id + " and db_cluster_id=" + cluster_id;
+	ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+
+		ret = 1;
+		if ((row = mysql_fetch_row(result)))
+		{
+			if(row[0] != NULL)
+			{
+				if(atoi(row[0]) > 1)
+					ret = 0;
+			}
+		}
+		cur_master->free_mysql_result();
+	}
+
+	return ret;
+}
+
+/*
+  check cluster cluster_comp_more from metadata table 
+  @retval 0 succeed;
+  		  1 fail;
+*/
+int MetadataShard::check_cluster_comp_more(std::string &cluster_name)
+{
+	Scopped_mutex sm(mtx);
+
+	if(cur_master == NULL)
+		return 1;
+
+	std::string cluster_id;
+
+	//get cluster_id
+	std::string str_sql = "select id from db_clusters where name='" + cluster_name + "'";
+	int ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+
+		if ((row = mysql_fetch_row(result)))
+		{
+			if(row[0] != NULL)
+				cluster_id = row[0];
+		}
+		cur_master->free_mysql_result();
+	}
+
+	if(cluster_id.length()==0)
+		return 1;
+
+	str_sql = "select count(*) from comp_nodes where db_cluster_id=" + cluster_id;
+	ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+
+		ret = 1;
+		if ((row = mysql_fetch_row(result)))
+		{
+			if(row[0] != NULL)
+			{
+				if(atoi(row[0]) > 1)
+					ret = 0;
+			}
+		}
+		cur_master->free_mysql_result();
+	}
+
+	return ret;
 }
 
 /*

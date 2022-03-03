@@ -14,6 +14,7 @@
 #include <pthread.h>
 #include <mutex>
 #include <map>
+#include <set>
 #include <vector>
 #include <string>
 #include <tuple>
@@ -27,6 +28,7 @@ public:
 	std::string rack_id;
 	int total_mem;
 	int total_cpu_cores;
+	int nodemgr_port;
 	//datadir_paths, logdir_paths, wal_log_dir_paths, comp_datadir_paths
 	std::vector<std::string> vec_paths; 
 	std::vector<std::vector<Tpye_Path_Used_Free>> vec_vec_path_used_free;
@@ -66,8 +68,9 @@ public:
 	bool update_machine(std::string &ip, std::vector<std::string> &vec_paths, Tpye_string3 &t_string3, std::string &info);
 	bool delete_machine(std::string &ip, std::string &info);
 	bool update_machines_info();
-	bool get_storage_nodes(int nodes, std::vector<Tpye_Ip_Port_Paths> &vec_ip_port_paths);
-	bool get_computer_nodes(int nodes, std::vector<Tpye_Ip_Port_Paths> &vec_ip_port_paths);
+	bool get_storage_nodes(int nodes, std::vector<Tpye_Ip_Port_Paths> &vec_ip_port_paths, std::set<std::string> &set_machine);
+	bool get_computer_nodes(int nodes, std::vector<Tpye_Ip_Port_Paths> &vec_ip_port_paths, std::set<std::string> &set_machine);
+	bool check_machine_port_idle(std::string &ip, std::vector<int> &vec_port);
 };
 
 #endif // !NODE_INFO_H

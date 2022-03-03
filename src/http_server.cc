@@ -29,8 +29,18 @@
 static const char *lpHttpHtmlOk = "HTTP/1.0 200 OK\r\nContent-Type: text/html\r\nContent-Length: ";
 static const char *lpHttpBinOk = "HTTP/1.0 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ";
 static const char *lpHttpJspOk = "HTTP/1.0 200 OK\r\napplication/javascript\r\nContent-Length: ";
+static const char *lpHttpJsonOk = "HTTP/1.0 200 OK\r\napplication/json\r\nContent-Length: ";
 static const char *lpHttpError = "HTTP/1.0 400 Bad Request\r\n";
 static const char *lpReturnOk = "{\"result\":\"accept\"}";
+
+static const char *lpHttpOPTIONS = "HTTP/1.0 200 OK\r\nAllow: POST, GET, OPTIONS\r\nContent-Length: 0\r\n\
+Content-Type: text/html; charset=UTF-8\r\nConnection: Keep-Alive\r\nKeep-Alive: timeout=5,max=100\r\nDate: %s\r\n\
+Access-Control-Max-Age: 86400\r\n\
+Access-Control-Expose-Headers: *\r\n\
+Access-Control-Allow-Origin: *\r\n\
+Access-Control-Allow-Headers: *\r\n\
+Access-Control-Allow-Credentials: true\r\n\
+Access-Control-Allow-Methods: POST, GET, OPTIONS\r\n\r\n";
 
 static const char *lpHttpRangeOk = "HTTP/1.0 206 Partial Content\r\n\
 Content-Type: text/plain\r\n\
@@ -117,6 +127,13 @@ void Http_server::join_all()
 	}
 }
 
+void Http_server::GetDateTime(char* szDateTime)
+{
+	time_t now = time(NULL);
+	struct tm* ptr = gmtime(&now);
+	strftime(szDateTime, 100, "%a, %d %b %Y %H:%M:%S GMT", ptr);
+}
+
 bool Http_server::Get_http_path(const char* buf, std::string &path)
 {
 	char *cStart, *cEnd;
@@ -171,8 +188,10 @@ Http_server::Http_type Http_server::Get_http_type(const char* buf)
 {
 	if(strncmp(buf, "GET", 3) == 0)
 		return HTTP_GET;
-	else if(strncmp(buf, "POST", 3) == 0)
+	else if(strncmp(buf, "POST", 4) == 0)
 		return HTTP_POST;
+	else if(strncmp(buf, "OPTIONS", 7) == 0)
+		return HTTP_OPTIONS;
 
 	return HTTP_NONE;
 }
@@ -285,6 +304,15 @@ void Http_server::Http_server_handle(int socket)
 				Http_server_handle_post_file(socket, http_buf, ret);
 			else
 				send(socket, lpHttpError, strlen(lpHttpError), 0);
+		}
+		else if(type == HTTP_OPTIONS)
+		{
+			syslog(Logger::INFO, "type:HTTP_OPTIONS start");
+			char datetime[100];
+			GetDateTime(datetime);
+			int n = snprintf(http_buf, BUFSIZE, lpHttpOPTIONS, datetime);
+			send(socket, http_buf, n, 0);
+			syslog(Logger::INFO, "type:HTTP_OPTIONS end");
 		}
 	}
 
@@ -514,7 +542,7 @@ void Http_server::Http_server_handle_post_para(int &socket, char* buf, int len)
 	
 	if(ret)
 	{
-		int n = snprintf(buf, BUFSIZE, "%s%lu\r\n\r\n", lpHttpJspOk, str_ret.length());
+		int n = snprintf(buf, BUFSIZE, "%s%lu\r\n\r\n", lpHttpHtmlOk, str_ret.length());
 		send(socket, buf, n, 0);
 		send(socket, str_ret.c_str(), str_ret.length(), 0);
 	}
@@ -522,7 +550,7 @@ void Http_server::Http_server_handle_post_para(int &socket, char* buf, int len)
 	{
 		Job::get_instance()->add_job(para);
 
-		int n = snprintf(buf, BUFSIZE, "%s%lu\r\n\r\n%s", lpHttpJspOk, strlen(lpReturnOk), lpReturnOk);
+		int n = snprintf(buf, BUFSIZE, "%s%lu\r\n\r\n%s", lpHttpHtmlOk, strlen(lpReturnOk), lpReturnOk);
 		send(socket, buf, n, 0);
 	}
 }
@@ -680,7 +708,7 @@ end:
 	//syslog(Logger::INFO, "Http_server_handle_post_file ret=%d", ret);
 	if(ret)
 	{
-		int n = snprintf(buf, BUFSIZE, "%s%lu\r\n\r\n%s", lpHttpJspOk, strlen(lpReturnOk), lpReturnOk);
+		int n = snprintf(buf, BUFSIZE, "%s%lu\r\n\r\n%s", lpHttpHtmlOk, strlen(lpReturnOk), lpReturnOk);
 		send(socket, buf, n, 0);
 	}
 	else
