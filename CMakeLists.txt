@@ -48,6 +48,7 @@ target_link_libraries(cluster_mgr
   mariadb 
   pthread 
   pq 
+  tcmalloc
   libssl.a 
   libcrypto.a 
   dl 
