@@ -4837,7 +4837,7 @@ bool Job::job_backup_shard(std::string &cluster_name, std::string &shard_name, s
 
 	///////////////////////////////////////////////////////////////////////////////
 	// backup shard
-	syslog(Logger::INFO, "backup %s working", std::get<0>(shard_id_ip_port_id));
+	syslog(Logger::INFO, "backup %s working", std::get<0>(shard_id_ip_port_id).c_str());
 	if(!job_backup_shard_node(cluster_name, cluster_id, shard_id_ip_port_id))
 	{
 		syslog(Logger::ERROR, "job_backup_shard_node error");
