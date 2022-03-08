@@ -29,12 +29,12 @@ JOB_GET_STATUS,
 JOB_GET_INSTANCES,
 JOB_GET_META,
 JOB_GET_META_MODE,
-JOB_GET_CLUSTER,
-JOB_GET_STORAGE,
-JOB_GET_COMPUTER,
+JOB_GET_CLUSTER_SUMMARY,
+JOB_GET_CLUSTER_DETAIL,
 JOB_CHECK_TIMESTAMP,
 JOB_GET_VARIABLE,
 JOB_SET_VARIABLE,
+JOB_MACHINE_SUMMARY, 
 JOB_CREATE_MACHINE, 
 JOB_UPDATE_MACHINE, 
 JOB_DELETE_MACHINE, 
@@ -116,6 +116,7 @@ public:
 	bool job_system_cmd(std::string &cmd);
 	bool job_save_file(std::string &path, char* buf);
 	bool job_read_file(std::string &path, std::string &str);
+	bool job_machine_summary(cJSON *root, std::string &str_ret);
 	void job_create_machine(cJSON *root);
 	void job_update_machine(cJSON *root);
 	void job_delete_machine(cJSON *root);

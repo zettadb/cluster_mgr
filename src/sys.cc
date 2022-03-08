@@ -474,13 +474,13 @@ bool System::get_cluster_info_from_metadata(std::string &cluster_name, std::stri
 	return true;
 }
 
-bool System::get_prometheus_info_from_metadata(std::vector<std::string> &vec_machine)
+bool System::get_machine_info_from_metadata(std::vector<std::string> &vec_machine)
 {
 	Scopped_mutex sm(mtx);
 
-	if(meta_shard.get_prometheus_info_from_metadata(vec_machine))
+	if(meta_shard.get_machine_info_from_metadata(vec_machine))
 	{
-		//syslog(Logger::ERROR, "get_prometheus_info_from_metadata error");
+		//syslog(Logger::ERROR, "get_machine_info_from_metadata error");
 		return false;
 	}
 
@@ -1023,8 +1023,7 @@ bool System::get_meta(cJSON *root, std::string &str_ret)
 	cJSON *ret_root;
 	cJSON *ret_item;
 	char *ret_cjson;
-	int node_count=0;
-	ret_root = cJSON_CreateObject();
+	ret_root = cJSON_CreateArray();
 	
 	for(auto &node: meta_shard.get_nodes())
 	{
@@ -1035,13 +1034,15 @@ bool System::get_meta(cJSON *root, std::string &str_ret)
 
 		std::string str;
 		ret_item = cJSON_CreateObject();
-		str = "meta" + std::to_string(node_count++);
-		cJSON_AddItemToObject(ret_root, str.c_str(), ret_item);
+		cJSON_AddItemToArray(ret_root, ret_item);
 		
 		cJSON_AddStringToObject(ret_item, "ip", ip.c_str());
 		cJSON_AddStringToObject(ret_item, "port", std::to_string(port).c_str());
-		cJSON_AddStringToObject(ret_item, "user", user.c_str());
-		cJSON_AddStringToObject(ret_item, "pwd", pwd.c_str());
+
+		if(node->connect_status())
+			cJSON_AddStringToObject(ret_item, "status", "online");
+		else
+			cJSON_AddStringToObject(ret_item, "status", "offline");
 	}
 
 	ret_cjson = cJSON_Print(ret_root);
@@ -1082,26 +1083,122 @@ bool System::get_meta_mode(cJSON *root, std::string &str_ret)
 	return true;
 }
 
-bool System::get_cluster(cJSON *root, std::string &str_ret)
+bool System::get_cluster_summary(cJSON *root, std::string &str_ret)
 {
 	Scopped_mutex sm(mtx);
 
 	cJSON *ret_root;
 	cJSON *ret_item;
 	char *ret_cjson;
-	int node_count=0;
-	ret_root = cJSON_CreateObject();
+	ret_root = cJSON_CreateArray();
 	
 	for (auto &cluster:kl_clusters)
 	{
 		std::string str;
 		ret_item = cJSON_CreateObject();
-		str = "cluster" + std::to_string(node_count++);
-		cJSON_AddItemToObject(ret_root, str.c_str(), ret_item);
+		cJSON_AddItemToArray(ret_root, ret_item);
 		
 		cJSON_AddStringToObject(ret_item, "name", cluster->get_name().c_str());
 		cJSON_AddStringToObject(ret_item, "shards", std::to_string(cluster->storage_shards.size()).c_str());
 		cJSON_AddStringToObject(ret_item, "comps", std::to_string(cluster->computer_nodes.size()).c_str());
+
+		int shard_node_offline = 0;
+		for(auto &shard:cluster->storage_shards)
+			for(auto &node:shard->get_nodes())
+				if(!node->connect_status())
+					shard_node_offline++;
+		cJSON_AddStringToObject(ret_item, "storage_offine", std::to_string(shard_node_offline).c_str());
+
+		int comp_node_offline = 0;
+		for(auto &comp:cluster->computer_nodes)
+			if(!comp->connect_status())
+				comp_node_offline++;
+		cJSON_AddStringToObject(ret_item, "computer_offine", std::to_string(comp_node_offline).c_str());
+	}
+
+	ret_cjson = cJSON_Print(ret_root);
+	str_ret = ret_cjson;
+
+	if(ret_root != NULL)
+		cJSON_Delete(ret_root);
+	if(ret_cjson != NULL)
+		free(ret_cjson);
+
+	return true;
+}
+
+bool System::get_cluster_detail(cJSON *root, std::string &str_ret)
+{
+	Scopped_mutex sm(mtx);
+
+	cJSON *ret_root;
+	cJSON *ret_item;
+	cJSON *item;
+	char *ret_cjson;
+	ret_root = cJSON_CreateArray();
+	
+	std::string cluster_name;
+	item = cJSON_GetObjectItem(root, "cluster_name");
+	if(item == NULL || item->valuestring == NULL)
+	{
+		syslog(Logger::ERROR, "get cluster_name error");
+		return false;
+	}
+	cluster_name = item->valuestring;
+
+	for (auto &cluster:kl_clusters)
+	{
+
+		if(cluster_name != cluster->get_name())
+			continue;
+
+		for(auto &shard:cluster->storage_shards)
+		{
+			for(auto &node:shard->get_nodes())
+			{
+				std::string ip,user,pwd;
+				int port;
+
+				node->get_ip_port(ip, port);
+				node->get_user_pwd(user, pwd);
+
+				std::string str;
+				ret_item = cJSON_CreateObject();
+				cJSON_AddItemToArray(ret_root, ret_item);
+				
+				cJSON_AddStringToObject(ret_item, "shard_name", shard->get_name().c_str());
+				cJSON_AddStringToObject(ret_item, "ip", ip.c_str());
+				cJSON_AddStringToObject(ret_item, "port", std::to_string(port).c_str());
+
+				if(node->connect_status())
+					cJSON_AddStringToObject(ret_item, "status", "online");
+				else
+					cJSON_AddStringToObject(ret_item, "status", "offline");
+			}
+		}
+
+		for(auto &comp:cluster->computer_nodes)
+		{
+			std::string ip,user,pwd;
+			int port;
+
+			comp->get_ip_port(ip, port);
+
+			std::string str;
+			ret_item = cJSON_CreateObject();
+			cJSON_AddItemToArray(ret_root, ret_item);
+			
+			cJSON_AddStringToObject(ret_item, "comp_name", comp->get_name().c_str());
+			cJSON_AddStringToObject(ret_item, "ip", ip.c_str());
+			cJSON_AddStringToObject(ret_item, "port", std::to_string(port).c_str());
+
+			if(comp->connect_status())
+				cJSON_AddStringToObject(ret_item, "status", "online");
+			else
+				cJSON_AddStringToObject(ret_item, "status", "offline");
+		}
+
+		break;
 	}
 
 	ret_cjson = cJSON_Print(ret_root);
@@ -1123,7 +1220,6 @@ bool System::get_storage(cJSON *root, std::string &str_ret)
 	cJSON *ret_item;
 	cJSON *item;
 	char *ret_cjson;
-	int node_count=0;
 
 	std::string cluster_name;
 	item = cJSON_GetObjectItem(root, "cluster_name");
@@ -1134,7 +1230,7 @@ bool System::get_storage(cJSON *root, std::string &str_ret)
 	}
 	cluster_name = item->valuestring;
 
-	ret_root = cJSON_CreateObject();
+	ret_root = cJSON_CreateArray();
 	
 	for (auto &cluster:kl_clusters)
 	{
@@ -1153,13 +1249,15 @@ bool System::get_storage(cJSON *root, std::string &str_ret)
 
 				std::string str;
 				ret_item = cJSON_CreateObject();
-				str = "storage" + std::to_string(node_count++);
-				cJSON_AddItemToObject(ret_root, str.c_str(), ret_item);
+				cJSON_AddItemToArray(ret_root, ret_item);
 				
 				cJSON_AddStringToObject(ret_item, "ip", ip.c_str());
 				cJSON_AddStringToObject(ret_item, "port", std::to_string(port).c_str());
-				cJSON_AddStringToObject(ret_item, "user", user.c_str());
-				cJSON_AddStringToObject(ret_item, "pwd", pwd.c_str());
+
+				if(node->connect_status())
+					cJSON_AddStringToObject(ret_item, "status", "online");
+				else
+					cJSON_AddStringToObject(ret_item, "status", "offline");
 			}
 		}
 
@@ -1185,7 +1283,6 @@ bool System::get_computer(cJSON *root, std::string &str_ret)
 	cJSON *ret_item;
 	cJSON *item;
 	char *ret_cjson;
-	int node_count=0;
 
 	std::string cluster_name;
 	item = cJSON_GetObjectItem(root, "cluster_name");
@@ -1196,7 +1293,7 @@ bool System::get_computer(cJSON *root, std::string &str_ret)
 	}
 	cluster_name = item->valuestring;
 
-	ret_root = cJSON_CreateObject();
+	ret_root = cJSON_CreateArray();
 	
 	for (auto &cluster:kl_clusters)
 	{
@@ -1213,13 +1310,15 @@ bool System::get_computer(cJSON *root, std::string &str_ret)
 
 			std::string str;
 			ret_item = cJSON_CreateObject();
-			str = "computer" + std::to_string(node_count++);
-			cJSON_AddItemToObject(ret_root, str.c_str(), ret_item);
+			cJSON_AddItemToArray(ret_root, ret_item);
 			
 			cJSON_AddStringToObject(ret_item, "ip", ip.c_str());
 			cJSON_AddStringToObject(ret_item, "port", std::to_string(port).c_str());
-			cJSON_AddStringToObject(ret_item, "user", user.c_str());
-			cJSON_AddStringToObject(ret_item, "pwd", pwd.c_str());
+
+			if(comp->connect_status())
+				cJSON_AddStringToObject(ret_item, "status", "online");
+			else
+				cJSON_AddStringToObject(ret_item, "status", "offline");
 		}
 
 		break;

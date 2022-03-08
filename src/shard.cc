@@ -2624,11 +2624,11 @@ int MetadataShard::get_cluster_info_from_metadata(std::string &cluster_name, std
 }
 
 /*
-  get prometheus_info from metadata table 
+  get machine_info from metadata table 
   @retval 0 succeed;
   		  1 fail;
 */
-int MetadataShard::get_prometheus_info_from_metadata(std::vector<std::string> &vec_machine)
+int MetadataShard::get_machine_info_from_metadata(std::vector<std::string> &vec_machine)
 {
 	Scopped_mutex sm(mtx);
 

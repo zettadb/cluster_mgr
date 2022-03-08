@@ -125,6 +125,7 @@ public:
 
 	int send_stmt(int pgres, const char *database, const char *stmt, int nretries = 1);
 	void close_conn() { gpsql_conn.close_conn(); }
+	bool connect_status() { return gpsql_conn.connected; }
 	PGresult *get_result() { return gpsql_conn.result; }
 	void free_pgsql_result() { gpsql_conn.free_pgsql_result(); }
 	bool get_variables(std::string &variable, std::string &value);

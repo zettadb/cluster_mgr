@@ -168,6 +168,7 @@ public:
 	
 	uint64_t get_latest_mgr_pos() const { return latest_mgr_pos; }
 	void close_conn() { mysql_conn.close_conn(); }
+	bool connect_status() { return mysql_conn.connected; }
 };
 
 
@@ -576,7 +577,7 @@ public:
 	int get_ongoing_job_json_from_metadata(std::vector<std::string> &vec_job_json);
 	int get_backup_info_from_metadata(std::string &cluster_name, std::string &timestamp, std::vector<std::string> &vec_shard);
 	int get_cluster_info_from_metadata(std::string &cluster_name, std::string &json_buf);
-	int get_prometheus_info_from_metadata(std::vector<std::string> &vec_machine);
+	int get_machine_info_from_metadata(std::vector<std::string> &vec_machine);
 	int check_machine_hostaddr(std::string &hostaddr);
 	int check_cluster_name(std::string &cluster_name);
 	int check_cluster_shard_name(std::string &cluster_name, std::string &shard_name);

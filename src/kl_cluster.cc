@@ -189,7 +189,22 @@ int KunlunCluster::refresh_storages_to_computers()
 	//get TABLE_SCHEMA from one comp
 	if(computer_nodes.size() == 0)
 		return 0;
-	Computer_node* computer = computer_nodes[0];
+	Computer_node* computer = NULL;
+	
+	for(auto &node:computer_nodes)
+	{
+		if(node->send_stmt(PG_COPYRES_TUPLES, "postgres", "select datname from pg_database", stmt_retries)==0)
+		{
+			computer = node;
+			break;
+		}
+	}
+
+	if(computer == NULL)
+	{
+		syslog(Logger::ERROR, "none of computer node available!");
+		return 1;
+	}
 	
 	//get database
 	ret = computer->send_stmt(PG_COPYRES_TUPLES, "postgres", "select datname from pg_database", stmt_retries);
@@ -350,12 +365,22 @@ int KunlunCluster::refresh_storages_to_computers_metashard(MetadataShard &meta_s
 	//get TABLE_SCHEMA from one comp
 	if(computer_nodes.size() == 0)
 		return 0;
-	Computer_node* computer = computer_nodes[0];
+	Computer_node* computer = NULL;
 	
-	//get database
-	ret = computer->send_stmt(PG_COPYRES_TUPLES, "postgres", "select datname from pg_database", stmt_retries);
-	if(ret)
-		return ret;
+	for(auto &node:computer_nodes)
+	{
+		if(node->send_stmt(PG_COPYRES_TUPLES, "postgres", "select datname from pg_database", stmt_retries)==0)
+		{
+			computer = node;
+			break;
+		}
+	}
+
+	if(computer == NULL)
+	{
+		syslog(Logger::ERROR, "none of computer node available!");
+		return 1;
+	}
 
 	presult = computer->get_result();
 	for(int i=0;i<PQntuples(presult);i++)

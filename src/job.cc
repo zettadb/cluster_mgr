@@ -908,6 +908,57 @@ bool Job::job_read_file(std::string &path, std::string &str)
 	return true;
 }
 
+bool Job::job_machine_summary(cJSON *root, std::string &str_ret)
+{
+	cJSON *ret_root = NULL;
+	char *ret_cjson = NULL;
+	cJSON *item_sub;
+
+	std::vector<std::string> vec_machine;
+
+	if(!System::get_instance()->get_machine_info_from_metadata(vec_machine))
+	{
+		syslog(Logger::ERROR, "get_machine_info_from_metadata error");
+		return false;
+	}
+
+	//create storage shards json
+	ret_root = cJSON_CreateArray();
+	for(auto &machine: vec_machine)
+	{
+		std::string post_url,get_status,result_str;
+		std::string uuid_job_id;
+		get_uuid(uuid_job_id);
+
+		/////////////////////////////////////////////////////////
+		// http post parameter to node
+		post_url = "http://" + machine + ":" + std::to_string(node_mgr_http_port);
+
+		/////////////////////////////////////////////////////////
+		// get status from node 
+		get_status = "{\"ver\":\"" + http_cmd_version + "\",\"job_id\":\"" + uuid_job_id + "\",\"job_type\":\"get_status\"}";
+
+		item_sub = cJSON_CreateObject();
+		cJSON_AddItemToArray(ret_root, item_sub);
+		cJSON_AddStringToObject(item_sub, "ip", machine.c_str());
+
+		if(Http_client::get_instance()->Http_client_post_para(post_url.c_str(), get_status.c_str(), result_str)==0)
+			cJSON_AddStringToObject(item_sub, "status", "online");
+		else
+			cJSON_AddStringToObject(item_sub, "status", "offline");
+	}
+
+	ret_cjson = cJSON_Print(ret_root);
+	str_ret = ret_cjson;
+
+	if(ret_root != NULL)
+		cJSON_Delete(ret_root);
+	if(ret_cjson != NULL)
+		free(ret_cjson);
+
+	return true;
+}
+
 void Job::job_create_machine(cJSON *root)
 {
 	std::string job_id;
@@ -1506,9 +1557,9 @@ bool Job::job_update_prometheus()
 	std::string localhost_str, node_str, pgsql_str, mysql_str;
 	std::string ymlfile_path, yml_buf;
 
-	if(!System::get_instance()->get_prometheus_info_from_metadata(vec_machine))
+	if(!System::get_instance()->get_machine_info_from_metadata(vec_machine))
 	{
-		syslog(Logger::ERROR, "get_prometheus_info_from_metadata error");
+		syslog(Logger::ERROR, "get_machine_info_from_metadata error");
 		return false;
 	}
 
@@ -5719,18 +5770,18 @@ bool Job::get_job_type(char *str, Job_type &job_type)
 		job_type = JOB_GET_META;
 	else if(strcmp(str, "get_meta_mode")==0)
 		job_type = JOB_GET_META_MODE;
-	else if(strcmp(str, "get_cluster")==0)
-		job_type = JOB_GET_CLUSTER;
-	else if(strcmp(str, "get_storage")==0)
-		job_type = JOB_GET_STORAGE;
-	else if(strcmp(str, "get_computer")==0)
-		job_type = JOB_GET_COMPUTER;
+	else if(strcmp(str, "get_cluster_detail")==0)
+		job_type = JOB_GET_CLUSTER_DETAIL;
+	else if(strcmp(str, "get_cluster_summary")==0)
+		job_type = JOB_GET_CLUSTER_SUMMARY;
 	else if(strcmp(str, "check_timestamp")==0)
 		job_type = JOB_CHECK_TIMESTAMP;
 	else if(strcmp(str, "get_variable")==0)
 		job_type = JOB_GET_VARIABLE;
 	else if(strcmp(str, "set_variable")==0)
 		job_type = JOB_SET_VARIABLE;
+	else if(strcmp(str, "machine_summary")==0)
+		job_type = JOB_MACHINE_SUMMARY;
 	else if(strcmp(str, "create_machine")==0)
 		job_type = JOB_CREATE_MACHINE;
 	else if(strcmp(str, "update_machine")==0)
@@ -5823,17 +5874,13 @@ bool Job::job_handle_ahead(const std::string &para, std::string &str_ret)
 	{
 		ret = System::get_instance()->get_meta_mode(root, str_ret);
 	}
-	else if(job_type == JOB_GET_CLUSTER)
+	else if(job_type == JOB_GET_CLUSTER_SUMMARY)
 	{
-		ret = System::get_instance()->get_cluster(root, str_ret);
+		ret = System::get_instance()->get_cluster_summary(root, str_ret);
 	}
-	else if(job_type == JOB_GET_STORAGE)
+	else if(job_type == JOB_GET_CLUSTER_DETAIL)
 	{
-		ret = System::get_instance()->get_storage(root, str_ret);
-	}
-	else if(job_type == JOB_GET_COMPUTER)
-	{
-		ret = System::get_instance()->get_computer(root, str_ret);
+		ret = System::get_instance()->get_cluster_detail(root, str_ret);
 	}
 	else if(job_type == JOB_GET_VARIABLE)
 	{
@@ -5846,6 +5893,10 @@ bool Job::job_handle_ahead(const std::string &para, std::string &str_ret)
 	else if(job_type == JOB_CHECK_TIMESTAMP)
 	{
 		ret = check_timestamp(root, str_ret);
+	}
+	else if(job_type == JOB_MACHINE_SUMMARY)
+	{
+		ret = job_machine_summary(root, str_ret);
 	}
 	else
 	{

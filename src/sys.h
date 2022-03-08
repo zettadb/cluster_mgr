@@ -100,7 +100,7 @@ public:
 	bool get_ongoing_job_json_from_metadata(std::vector<std::string> &vec_job_json);
 	bool get_backup_info_from_metadata(std::string &cluster_name, std::string &timestamp, std::vector<std::string> &vec_shard);
 	bool get_cluster_info_from_metadata(std::string &cluster_name, std::string &json_buf);
-	bool get_prometheus_info_from_metadata(std::vector<std::string> &vec_machine);
+	bool get_machine_info_from_metadata(std::vector<std::string> &vec_machine);
 	bool check_machine_hostaddr(std::string &hostaddr);
 	bool check_cluster_name(std::string &cluster_name);
 	bool check_cluster_shard_name(std::string &cluster_name, std::string &shard_name);
@@ -117,7 +117,8 @@ public:
 	bool get_node_instance(cJSON *root, std::string &str_ret);
 	bool get_meta(cJSON *root, std::string &str_ret);
 	bool get_meta_mode(cJSON *root, std::string &str_ret);
-	bool get_cluster(cJSON *root, std::string &str_ret);
+	bool get_cluster_summary(cJSON *root, std::string &str_ret);
+	bool get_cluster_detail(cJSON *root, std::string &str_ret);
 	bool get_storage(cJSON *root, std::string &str_ret);
 	bool get_computer(cJSON *root, std::string &str_ret);
 	bool get_variable(cJSON *root, std::string &str_ret);

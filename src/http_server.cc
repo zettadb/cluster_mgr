@@ -33,12 +33,12 @@ static const char *lpHttpJsonOk = "HTTP/1.0 200 OK\r\napplication/json\r\nConten
 static const char *lpHttpError = "HTTP/1.0 400 Bad Request\r\n";
 static const char *lpReturnOk = "{\"result\":\"accept\"}";
 
-static const char *lpHttpOPTIONS = "HTTP/1.0 200 OK\r\nAllow: POST, GET, OPTIONS\r\nContent-Length: 0\r\n\
+static const char *lpHttpOPTIONS = "HTTP/1.0 200 OK\r\nAllow: POST, GET, OPTIONS\r\nOrigin: *\r\nContent-Length: 0\r\n\
 Content-Type: text/html; charset=UTF-8\r\nConnection: Keep-Alive\r\nKeep-Alive: timeout=5,max=100\r\nDate: %s\r\n\
 Access-Control-Max-Age: 86400\r\n\
 Access-Control-Expose-Headers: *\r\n\
 Access-Control-Allow-Origin: *\r\n\
-Access-Control-Allow-Headers: *\r\n\
+Access-Control-Allow-Headers: x-requested-with,content-type\r\n\
 Access-Control-Allow-Credentials: true\r\n\
 Access-Control-Allow-Methods: POST, GET, OPTIONS\r\n\r\n";
 
