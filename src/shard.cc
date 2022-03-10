@@ -1446,8 +1446,8 @@ int MetadataShard::refresh_shards(std::vector<KunlunCluster *> &kl_clusters)
 {
 	Scopped_mutex sm(mtx);
 	int ret = cur_master->send_stmt(SQLCOM_SELECT, CONST_STR_PTR_LEN(
-	"select t1.id as shard_id, t1.name, t2.id, hostaddr, port, user_name, passwd, t3.name, t3.id as cluster_id, t3.ha_mode from \
-shards t1, shard_nodes t2, db_clusters t3 where t2.shard_id = t1.id and t3.id=t1.db_cluster_id and t2.status!='inactive' order by t1.id"), stmt_retries);
+	"select t1.id as shard_id, t1.name, t2.id, hostaddr, port, user_name, passwd, t3.name, t3.nick_name, t3.id as cluster_id, t3.ha_mode from "
+	"shards t1, shard_nodes t2, db_clusters t3 where t2.shard_id = t1.id and t3.id=t1.db_cluster_id and t2.status!='inactive' order by t1.id"), stmt_retries);
 
 	if (ret)
 		return ret;
@@ -1467,13 +1467,13 @@ shards t1, shard_nodes t2, db_clusters t3 where t2.shard_id = t1.id and t3.id=t1
 	{
 		uint shardid = strtol(row[0], &endptr, 10);
 		Assert(endptr == NULL || *endptr == '\0');
-		uint cluster_id = strtol(row[8], &endptr, 10);
+		uint cluster_id = strtol(row[9], &endptr, 10);
 		Assert(endptr == NULL || *endptr == '\0');
 
 		uint nodeid = strtol(row[2], &endptr, 10);
 		Assert(endptr == NULL || *endptr == '\0');
 		int port = strtol(row[4], &endptr, 10);
-		Assert(endptr == NULL || *endptr == '\0');\
+		Assert(endptr == NULL || *endptr == '\0');
 
 		KunlunCluster *pcluster = NULL;
 		for (auto &cluster:kl_clusters)
@@ -1487,6 +1487,8 @@ shards t1, shard_nodes t2, db_clusters t3 where t2.shard_id = t1.id and t3.id=t1
 		if (!pcluster)
 		{
 			pcluster = new KunlunCluster(cluster_id, row[7]);
+			if(row[8] != NULL)
+				pcluster->set_nick_name(row[8]);
 			kl_clusters.emplace_back(pcluster);
 			syslog(Logger::INFO, "Added KunlunCluster(%s.%u) into protection.", row[7], cluster_id);
 		}
@@ -1505,13 +1507,13 @@ shards t1, shard_nodes t2, db_clusters t3 where t2.shard_id = t1.id and t3.id=t1
 		{
 			//set ha_mode for maintenance
 			HAVL_mode ha_mode = HA_mgr;
-			if(row[9]!=NULL)
+			if(row[10]!=NULL)
 			{
-				if(strcmp("no_rep", row[9]) == 0)
+				if(strcmp("no_rep", row[10]) == 0)
 					ha_mode = HA_no_rep;
-				else if(strcmp("mgr", row[9]) == 0)
+				else if(strcmp("mgr", row[10]) == 0)
 					ha_mode = HA_mgr;
-				else if(strcmp("rbr", row[9]) == 0)
+				else if(strcmp("rbr", row[10]) == 0)
 					ha_mode = HA_rbr;
 			}
 			
@@ -2700,6 +2702,36 @@ int MetadataShard::check_cluster_name(std::string &cluster_name)
 		return 1;
 
 	std::string str_sql = "select id from db_clusters where name='" + cluster_name + "'";
+	int ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+
+		ret = 1;
+		if ((row = mysql_fetch_row(result)))
+		{
+			ret = 0;
+		}
+		cur_master->free_mysql_result();
+	}
+
+	return ret;
+}
+
+/*
+  check cluster name from metadata table 
+  @retval 0 succeed;
+  		  1 fail;
+*/
+int MetadataShard::check_nick_name(std::string &nick_name)
+{
+	Scopped_mutex sm(mtx);
+
+	if(cur_master == NULL)
+		return 1;
+
+	std::string str_sql = "select id from db_clusters where nick_name='" + nick_name + "'";
 	int ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
 	if (ret==0)
 	{

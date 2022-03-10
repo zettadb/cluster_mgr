@@ -401,11 +401,11 @@ end:
 	return ret;
 }
 
-bool Job::job_update_cluster_info(std::string &cluster_name, char* cjson)
+bool Job::job_update_cluster_info(std::string &cluster_name, std::string &nick_name, char* cjson)
 {
 	std::string str_sql;
 
-	str_sql = "UPDATE db_clusters set memo='" + std::string(cjson) + "' where name='" + cluster_name + "'";
+	str_sql = "UPDATE db_clusters set nick_name='" + nick_name + "',memo='" + std::string(cjson) + "' where name='" + cluster_name + "'";
 	//syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
 
 	if(System::get_instance()->execute_metadate_opertation(SQLCOM_UPDATE, str_sql))
@@ -955,6 +955,69 @@ bool Job::job_machine_summary(cJSON *root, std::string &str_ret)
 		cJSON_Delete(ret_root);
 	if(ret_cjson != NULL)
 		free(ret_cjson);
+
+	return true;
+}
+
+bool Job::job_rename_cluster(cJSON *root, std::string &str_ret)
+{
+	std::string job_result;
+	std::string job_info;
+	std::string cluster_name;
+	std::string nick_name;
+
+	cJSON *ret_root = NULL;
+	char *ret_cjson = NULL;
+	cJSON *item;
+
+	job_result = "failed";
+	item = cJSON_GetObjectItem(root, "cluster_name");
+	if(item == NULL || item->valuestring == NULL)
+	{
+		job_info = "get cluster_name error";
+		goto end;
+	}
+	cluster_name = item->valuestring;
+
+	item = cJSON_GetObjectItem(root, "nick_name");
+	if(item == NULL || item->valuestring == NULL)
+	{
+		job_info = "get nick_name error";
+		goto end;
+	}
+	nick_name = item->valuestring;
+
+	//////////////////////////////////////////////////////////
+	if(System::get_instance()->check_nick_name(nick_name))
+	{
+		job_info = "new nick_name have existed";
+		goto end;
+	}
+
+	//////////////////////////////////////////////////////////
+	if(!System::get_instance()->rename_cluster(cluster_name, nick_name))
+	{
+		job_info = "rename cluster error";
+		goto end;
+	}
+
+	job_result = "done";
+	job_info = "rename cluster succeed";
+
+end:
+	ret_root = cJSON_CreateObject();
+	cJSON_AddStringToObject(ret_root, "result", job_result.c_str());
+	cJSON_AddStringToObject(ret_root, "info", job_info.c_str());
+
+	ret_cjson = cJSON_Print(ret_root);
+	str_ret = ret_cjson;
+
+	if(ret_root != NULL)
+		cJSON_Delete(ret_root);
+	if(ret_cjson != NULL)
+		free(ret_cjson);
+
+	syslog(Logger::INFO, "%s", job_info.c_str());
 
 	return true;
 }
@@ -2871,6 +2934,7 @@ void Job::job_create_cluster(cJSON *root)
 	std::string job_result;
 	std::string job_info;
 	std::string cluster_name;
+	std::string nick_name;
 	cJSON *item;
 	cJSON *item_sub;
 	cJSON *item_machinelist;
@@ -2898,6 +2962,17 @@ void Job::job_create_cluster(cJSON *root)
 	syslog(Logger::INFO, "%s", job_info.c_str());
 	job_insert_operation_record(root, job_result, job_info);
 
+	item = cJSON_GetObjectItem(root, "nick_name");
+	if(item != NULL && item->valuestring != NULL)
+	{
+		nick_name = item->valuestring;
+		if(System::get_instance()->check_nick_name(nick_name))
+		{
+			job_info = "nick_name have existed";
+			goto end;
+		}
+	}
+
 	item = cJSON_GetObjectItem(root, "ha_mode");
 	if(item == NULL || item->valuestring == NULL)
 	{
@@ -2913,9 +2988,9 @@ void Job::job_create_cluster(cJSON *root)
 		goto end;
 	}
 	std::get<1>(cluster_info) = atoi(item->valuestring);
-	if(std::get<1>(cluster_info)<1 || std::get<1>(cluster_info)>10)
+	if(std::get<1>(cluster_info)<1 || std::get<1>(cluster_info)>256)
 	{
-		job_info = "shards error(must in 1-10)";
+		job_info = "shards error(must in 1-256)";
 		goto end;
 	}
 
@@ -2955,9 +3030,9 @@ void Job::job_create_cluster(cJSON *root)
 		goto end;
 	}
 	std::get<3>(cluster_info) = atoi(item->valuestring);
-	if(std::get<3>(cluster_info)<1 || std::get<3>(cluster_info)>10)
+	if(std::get<3>(cluster_info)<1 || std::get<3>(cluster_info)>256)
 	{
-		job_info = "comps error(must in 1-10)";
+		job_info = "comps error(must in 1-256)";
 		goto end;
 	}
 
@@ -2992,9 +3067,9 @@ void Job::job_create_cluster(cJSON *root)
 		goto end;
 	}
 	std::get<7>(cluster_info) = atoi(item->valuestring);
-	if(std::get<7>(cluster_info)<1 || std::get<7>(cluster_info)>16)
+	if(std::get<7>(cluster_info)<1)
 	{
-		job_info = "innodb_size error(must in 1-16)";
+		job_info = "innodb_size error(must > 0)";
 		goto end;
 	}
 
@@ -3032,7 +3107,7 @@ void Job::job_create_cluster(cJSON *root)
 	/////////////////////////////////////////////////////////
 	// update cluster info
 	cjson = cJSON_Print(root);
-	if(!job_update_cluster_info(cluster_name, cjson))
+	if(!job_update_cluster_info(cluster_name, nick_name, cjson))
 	{
 		free(cjson);
 		job_info = "update cluster info error";
@@ -3102,7 +3177,7 @@ bool Job::job_delete_storage(Tpye_Ip_Port &storage)
 	// get status from node 
 	get_status = "{\"ver\":\"" + http_cmd_version + "\",\"job_id\":\"" + uuid_job_id + "\",\"job_type\":\"get_status\"}";
 	
-	retry = 60;
+	retry = 90;
 	while(retry-->0 && !Job::do_exit)
 	{
 		sleep(1);
@@ -5458,6 +5533,7 @@ void Job::job_restore_new_cluster(cJSON *root)
 	std::string job_id;
 	std::string job_result;
 	std::string job_info;
+	std::string nick_name;
 	std::string backup_cluster_name;
 	std::string restore_cluster_name;
 	std::string shard_name,timestamp;
@@ -5498,6 +5574,17 @@ void Job::job_restore_new_cluster(cJSON *root)
 		goto end;
 	}
 	backup_cluster_name = item->valuestring;
+
+	item = cJSON_GetObjectItem(root, "nick_name");
+	if(item != NULL && item->valuestring != NULL)
+	{
+		nick_name = item->valuestring;
+		if(System::get_instance()->check_nick_name(nick_name))
+		{
+			job_info = "nick_name have existed";
+			goto end;
+		}
+	}
 
 	/////////////////////////////////////////////////////////
 	// get machine
@@ -5580,7 +5667,7 @@ void Job::job_restore_new_cluster(cJSON *root)
 	cJSON_AddStringToObject(root, "cpu_cores", std::to_string(std::get<6>(backup_cluster_info)).c_str());
 	cJSON_AddStringToObject(root, "innodb_size", std::to_string(std::get<7>(backup_cluster_info)).c_str());
 	cjson = cJSON_Print(root);
-	if(!job_update_cluster_info(restore_cluster_name, cjson))
+	if(!job_update_cluster_info(restore_cluster_name, nick_name, cjson))
 	{
 		free(cjson);
 		job_info = "update restore cluster info error";
@@ -5796,6 +5883,8 @@ bool Job::get_job_type(char *str, Job_type &job_type)
 		job_type = JOB_MYSQLD_EXPORTER;
 	else if(strcmp(str, "control_instance")==0)
 		job_type = JOB_CONTROL_INSTANCE;
+	else if(strcmp(str, "rename_cluster")==0)
+		job_type = JOB_RENAME_CLUSTER;
 	else if(strcmp(str, "create_cluster")==0)
 		job_type = JOB_CREATE_CLUSTER;
 	else if(strcmp(str, "delete_cluster")==0)
@@ -5897,6 +5986,10 @@ bool Job::job_handle_ahead(const std::string &para, std::string &str_ret)
 	else if(job_type == JOB_MACHINE_SUMMARY)
 	{
 		ret = job_machine_summary(root, str_ret);
+	}
+	else if(job_type == JOB_RENAME_CLUSTER)
+	{
+		ret = job_rename_cluster(root, str_ret);
 	}
 	else
 	{

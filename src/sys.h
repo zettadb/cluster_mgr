@@ -103,13 +103,14 @@ public:
 	bool get_machine_info_from_metadata(std::vector<std::string> &vec_machine);
 	bool check_machine_hostaddr(std::string &hostaddr);
 	bool check_cluster_name(std::string &cluster_name);
+	bool check_nick_name(std::string &nick_name);
+	bool rename_cluster(std::string &cluster_name, std::string &nick_name);
 	bool check_cluster_shard_name(std::string &cluster_name, std::string &shard_name);
 	bool check_cluster_comp_name(std::string &cluster_name, std::string &comp_name);
 	bool check_cluster_shard_more(std::string &cluster_name);
 	bool check_cluster_shard_node_more(std::string &cluster_name, std::string &shard_name);
 	bool check_cluster_comp_more(std::string &cluster_name);
 	bool get_cluster_shard_name(std::string &cluster_name, std::vector<std::string> &vec_shard_name);
-	bool get_cluster_shard_order(std::string &cluster_name, std::string &shard_name, int &order);
 	bool get_meta_info(std::vector<Tpye_Ip_Port_User_Pwd> &meta);
 	bool get_machine_instance_port(Machine* machine);
 	bool update_instance_status(Tpye_Ip_Port &ip_port, std::string &status, int &type);

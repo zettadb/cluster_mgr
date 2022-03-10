@@ -42,6 +42,7 @@ JOB_UPDATE_PROMETHEUS,
 JOB_POSTGRES_EXPORTER, 
 JOB_MYSQLD_EXPORTER, 
 JOB_CONTROL_INSTANCE, 
+JOB_RENAME_CLUSTER, 
 JOB_CREATE_CLUSTER, 
 JOB_DELETE_CLUSTER, 
 JOB_ADD_SHARDS, 
@@ -105,7 +106,7 @@ public:
 	bool update_operation_status(std::string &info);
 	bool get_operation_status(std::string &info);
 	bool job_get_cluster_info(std::string &cluster_name, Tpye_cluster_info &cluster_info);
-	bool job_update_cluster_info(std::string &cluster_name, char* cjson);
+	bool job_update_cluster_info(std::string &cluster_name, std::string &nick_name, char* cjson);
 	bool job_insert_operation_record(cJSON *root, std::string &result, std::string &info);
 	bool job_update_operation_record(std::string &job_id, std::string &result, std::string &info);
 	bool job_insert_roll_back_record(std::string &job_id, char* cjson);
@@ -117,6 +118,7 @@ public:
 	bool job_save_file(std::string &path, char* buf);
 	bool job_read_file(std::string &path, std::string &str);
 	bool job_machine_summary(cJSON *root, std::string &str_ret);
+	bool job_rename_cluster(cJSON *root, std::string &str_ret);
 	void job_create_machine(cJSON *root);
 	void job_update_machine(cJSON *root);
 	void job_delete_machine(cJSON *root);

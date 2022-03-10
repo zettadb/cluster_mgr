@@ -138,6 +138,7 @@ private:
 	mutable pthread_mutex_t mtx;
 	uint id;
 	std::string name;
+	std::string nick_name;
 	
 public:
 
@@ -158,6 +159,18 @@ public:
 	{
 		Scopped_mutex sm(mtx);
 		return name;
+	}
+
+	const std::string &get_nick_name() const
+	{
+		Scopped_mutex sm(mtx);
+		return nick_name;
+	}
+
+	void set_nick_name(const std::string &nick_name_)
+	{
+		Scopped_mutex sm(mtx);
+		nick_name = nick_name_;
 	}
 
 	int refresh_storages_to_computers();

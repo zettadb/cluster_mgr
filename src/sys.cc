@@ -513,6 +513,47 @@ bool System::check_cluster_name(std::string &cluster_name)
 	return true;
 }
 
+bool System::check_nick_name(std::string &nick_name)
+{
+	Scopped_mutex sm(mtx);
+
+	if(meta_shard.check_nick_name(nick_name))
+	{
+		//syslog(Logger::ERROR, "check_nick_name error");
+		return false;
+	}
+
+	return true;
+}
+
+bool System::rename_cluster(std::string &cluster_name, std::string &nick_name)
+{
+	Scopped_mutex sm(mtx);
+
+	std::string str_sql;
+	str_sql = "UPDATE db_clusters set nick_name='" + nick_name + "' where name='" + cluster_name + "'";
+	//syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
+
+	if(meta_shard.execute_metadate_opertation(SQLCOM_UPDATE, str_sql))
+	{
+		//syslog(Logger::ERROR, "rename_cluster error");
+		return false;
+	}
+
+	for (auto &cluster:kl_clusters)
+	{
+		if(cluster_name != cluster->get_name())
+			continue;
+
+		//rename nick name
+		cluster->set_nick_name(nick_name);
+
+		break;
+	}
+
+	return true;
+}
+
 bool System::check_cluster_shard_name(std::string &cluster_name, std::string &shard_name)
 {
 	Scopped_mutex sm(mtx);
@@ -597,32 +638,6 @@ bool System::get_cluster_shard_name(std::string &cluster_name, std::vector<std::
 		break;
 	}
 	return (vec_shard_name.size() > 0);
-}
-
-bool System::get_cluster_shard_order(std::string &cluster_name, std::string &shard_name, int &order)
-{
-	Scopped_mutex sm(mtx);
-
-	//storage shard
-	for (auto &cluster:kl_clusters)
-	{
-		if(cluster_name != cluster->get_name())
-			continue;
-
-		//sort shard by id
-		sort(cluster->storage_shards.begin(), cluster->storage_shards.end(), 
-				[](Shard * a, Shard * b){return a->get_id() < a->get_id();});
-
-		for(order=0; order<cluster->storage_shards.size(); order++)
-		{
-			if(shard_name == cluster->storage_shards[order]->get_name())
-				break;
-		}
-
-		break;
-	}
-	
-	return true;
 }
 
 bool System::get_meta_info(std::vector<Tpye_Ip_Port_User_Pwd> &meta)
@@ -1099,6 +1114,7 @@ bool System::get_cluster_summary(cJSON *root, std::string &str_ret)
 		cJSON_AddItemToArray(ret_root, ret_item);
 		
 		cJSON_AddStringToObject(ret_item, "name", cluster->get_name().c_str());
+		cJSON_AddStringToObject(ret_item, "nick_name", cluster->get_nick_name().c_str());
 		cJSON_AddStringToObject(ret_item, "shards", std::to_string(cluster->storage_shards.size()).c_str());
 		cJSON_AddStringToObject(ret_item, "comps", std::to_string(cluster->computer_nodes.size()).c_str());
 

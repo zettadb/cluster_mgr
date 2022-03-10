@@ -580,6 +580,7 @@ public:
 	int get_machine_info_from_metadata(std::vector<std::string> &vec_machine);
 	int check_machine_hostaddr(std::string &hostaddr);
 	int check_cluster_name(std::string &cluster_name);
+	int check_nick_name(std::string &nick_name);
 	int check_cluster_shard_name(std::string &cluster_name, std::string &shard_name);
 	int check_cluster_comp_name(std::string &cluster_name, std::string &comp_name);
 	int check_cluster_shard_more(std::string &cluster_name);
