@@ -570,7 +570,8 @@ public:
 	int get_storage_instance_port(Machine* machine);
 	int get_computer_instance_port(Machine* machine);
 	int update_instance_status(Tpye_Ip_Port &ip_port, std::string &status, int &type);
-	int get_backup_storage(std::string &backup_storage);
+	int get_backup_storage_string(std::string &name, std::string &storage_id, std::string &backup_storage);
+	int get_backup_storage_list(std::vector<Tpye_string4> &vec_t_string4);
 	int add_shard_nodes(std::string &cluster_name, std::string &shard_name, std::vector<Tpye_Ip_Port_User_Pwd> vec_ip_port_user_pwd);
 	int get_roll_info_from_metadata(std::string &job_id, std::vector<std::string> &vec_roll_info);
 	int get_ongoing_job_id_from_metadata(std::vector<std::string> &vec_job_id);
@@ -578,6 +579,7 @@ public:
 	int get_backup_info_from_metadata(std::string &cluster_name, std::string &timestamp, std::vector<std::string> &vec_shard);
 	int get_cluster_info_from_metadata(std::string &cluster_name, std::string &json_buf);
 	int get_machine_info_from_metadata(std::vector<std::string> &vec_machine);
+	int check_backup_storage_name(std::string &name);
 	int check_machine_hostaddr(std::string &hostaddr);
 	int check_cluster_name(std::string &cluster_name);
 	int check_nick_name(std::string &nick_name);

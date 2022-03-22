@@ -101,6 +101,7 @@ public:
 	bool get_backup_info_from_metadata(std::string &cluster_name, std::string &timestamp, std::vector<std::string> &vec_shard);
 	bool get_cluster_info_from_metadata(std::string &cluster_name, std::string &json_buf);
 	bool get_machine_info_from_metadata(std::vector<std::string> &vec_machine);
+	bool check_backup_storage_name(std::string &name);
 	bool check_machine_hostaddr(std::string &hostaddr);
 	bool check_cluster_name(std::string &cluster_name);
 	bool check_nick_name(std::string &nick_name);
@@ -114,7 +115,8 @@ public:
 	bool get_meta_info(std::vector<Tpye_Ip_Port_User_Pwd> &meta);
 	bool get_machine_instance_port(Machine* machine);
 	bool update_instance_status(Tpye_Ip_Port &ip_port, std::string &status, int &type);
-	bool get_backup_storage(std::string &backup_storage);
+	bool get_backup_storage_string(std::string &name, std::string &storage_id, std::string &backup_storage);
+	bool get_backup_storage_list(cJSON *root, std::string &str_ret);
 	bool get_node_instance(cJSON *root, std::string &str_ret);
 	bool get_meta(cJSON *root, std::string &str_ret);
 	bool get_meta_mode(cJSON *root, std::string &str_ret);
@@ -134,10 +136,11 @@ public:
 	bool stop_cluster_shard(std::string &cluster_name, std::string &shard_name);
 	bool stop_cluster_shard_node(std::string &cluster_name, std::string &shard_name, Tpye_Ip_Port &ip_port);
 	bool stop_cluster_comp(std::string &cluster_name, std::string &comp_name);
-	bool get_shard_info_for_backup(std::string &cluster_name, int &cluster_id, std::vector<Tpye_Shard_Id_Ip_Port_Id> &vec_shard_id_ip_port_id);
-	bool get_node_info_for_backup(std::string &cluster_name, std::string &shard_name, int &cluster_id, Tpye_Shard_Id_Ip_Port_Id &shard_id_ip_port_id);
+	bool get_shard_info_for_backup(std::string &cluster_name, std::string &cluster_id, std::vector<Tpye_Shard_Id_Ip_Port_Id> &vec_shard_id_ip_port_id);
+	bool get_node_info_for_backup(std::string &cluster_name, std::string &shard_name, std::string &cluster_id, Tpye_Shard_Id_Ip_Port_Id &shard_id_ip_port_id);
 	bool get_shard_ip_port_restore(std::string &cluster_name, std::vector<std::vector<Tpye_Ip_Port>> &vec_vec_ip_port);
 	bool get_comps_ip_port_restore(std::string &cluster_name, std::vector<Tpye_Ip_Port> &vec_ip_port);
+	bool get_shard_map_for_restore(std::string &backup_cluster_name, std::string &restore_cluster_name, std::string &shard_map);
 	bool get_cluster_shards_nodes_comps(std::string &cluster_name, int &shards, int &nodes, int &comps);
 	bool get_cluster_mgr_mode(std::string &cluster_name);
 	bool clear_cluster_shard_master(std::string &cluster_name);

@@ -2308,22 +2308,21 @@ int MetadataShard::update_instance_status(Tpye_Ip_Port &ip_port, std::string &st
 }
 
 /*
-  get_backup_storage from metadata table
+  get_backup_storage_string from metadata table
   @retval 0 succeed;
   		  1 fail;
 */
-int MetadataShard::get_backup_storage(std::string &backup_storage)
+int MetadataShard::get_backup_storage_string(std::string &name, std::string &storage_id, std::string &backup_storage)
 {
+	Scopped_mutex sm(mtx);
 
 	if(cur_master == NULL)
 		return 1;
 
 	int ret = 1;
-	std::string cluster_id;
-	std::string shard_id;
 
-	//get cluster_id
-	std::string str_sql = "select conn_str from backup_storage where id=1";
+	//get backup_storage from first record, but no name
+	std::string str_sql = "select id,conn_str from backup_storage";
 	ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
 	if (ret==0)
 	{
@@ -2332,11 +2331,46 @@ int MetadataShard::get_backup_storage(std::string &backup_storage)
 		ret = 1;
 		if ((row = mysql_fetch_row(result)))
 		{
-			if(row[0] != NULL)
-			{
-				backup_storage = row[0];
-				ret = 0;
-			}
+			storage_id = row[0];
+			backup_storage = row[1];
+			ret = 0;
+		}
+		cur_master->free_mysql_result();
+	}
+
+	return ret;
+}
+
+/*
+  get_backup_storage_list from metadata table
+  @retval 0 succeed;
+  		  1 fail;
+*/
+int MetadataShard::get_backup_storage_list(std::vector<Tpye_string4> &vec_t_string4)
+{
+	Scopped_mutex sm(mtx);
+
+	if(cur_master == NULL)
+		return 1;
+
+	int ret = 1;
+
+	//get cluster_id
+	std::string str_sql = "select name,stype,hostaddr,port from backup_storage";
+	ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+
+		while ((row = mysql_fetch_row(result)))
+		{
+			Tpye_string4 t_string4;
+			std::get<0>(t_string4) = row[0];
+			std::get<1>(t_string4) = row[1];
+			std::get<2>(t_string4) = row[2];
+			std::get<3>(t_string4) = row[3];
+			vec_t_string4.emplace_back(t_string4);
 		}
 		cur_master->free_mysql_result();
 	}
@@ -2657,6 +2691,36 @@ int MetadataShard::get_machine_info_from_metadata(std::vector<std::string> &vec_
 	}
 
 	return 0;
+}
+
+/*
+  check backup storage name from metadata table 
+  @retval 0 succeed;
+  		  1 fail;
+*/
+int MetadataShard::check_backup_storage_name(std::string &name)
+{
+	Scopped_mutex sm(mtx);
+
+	if(cur_master == NULL)
+		return 1;
+
+	std::string str_sql = "select id from backup_storage where name='" + name + "'";
+	int ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+
+		ret = 1;
+		if ((row = mysql_fetch_row(result)))
+		{
+			ret = 0;
+		}
+		cur_master->free_mysql_result();
+	}
+
+	return ret;
 }
 
 /*

@@ -1022,6 +1022,278 @@ end:
 	return true;
 }
 
+bool Job::job_create_backup_storage(cJSON *root, std::string &str_ret)
+{
+	std::string job_result;
+	std::string job_info;
+	std::string name,stype,hostaddr,port,conn_str;
+	std::string str_sql;
+
+	cJSON *ret_root = NULL;
+	char *ret_cjson = NULL;
+	cJSON *item;
+
+	job_result = "failed";
+	item = cJSON_GetObjectItem(root, "name");
+	if(item == NULL || item->valuestring == NULL)
+	{
+		job_info = "get name error";
+		goto end;
+	}
+	name = item->valuestring;
+
+	item = cJSON_GetObjectItem(root, "stype");
+	if(item == NULL || item->valuestring == NULL)
+	{
+		job_info = "get stype error";
+		goto end;
+	}
+	stype = item->valuestring;
+
+	item = cJSON_GetObjectItem(root, "hostaddr");
+	if(item == NULL || item->valuestring == NULL)
+	{
+		job_info = "get hostaddr error";
+		goto end;
+	}
+	hostaddr = item->valuestring;
+
+	item = cJSON_GetObjectItem(root, "port");
+	if(item == NULL || item->valuestring == NULL)
+	{
+		job_info = "get port error";
+		goto end;
+	}
+	port = item->valuestring;
+
+	/////////////////////////////////////////////////////////
+	if(System::get_instance()->check_backup_storage_name(name))
+	{
+		job_info = "backup storage name have existed";
+		goto end;
+	}
+
+	/////////////////////////////////////////////////////////
+	if(stype == "HDFS")
+	{
+		conn_str = "hdfs://" + hostaddr + ":" + port;
+	}
+	else
+	{
+		job_info = "stype isn't support";
+		goto end;
+	}
+
+	str_sql = "insert into backup_storage(name,stype,conn_str,hostaddr,port) value('";
+	str_sql += name + "','" + stype + "','" + conn_str + "','" + hostaddr + "'," + port + ")";
+	//syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
+
+	if(System::get_instance()->execute_metadate_opertation(SQLCOM_INSERT, str_sql))
+	{
+		job_info = "job_create_backup_storage error";
+		goto end;
+	}
+
+	job_result = "done";
+	job_info = "create backup storage succeed";
+
+end:
+	ret_root = cJSON_CreateObject();
+	cJSON_AddStringToObject(ret_root, "result", job_result.c_str());
+	cJSON_AddStringToObject(ret_root, "info", job_info.c_str());
+
+	ret_cjson = cJSON_Print(ret_root);
+	str_ret = ret_cjson;
+
+	if(ret_root != NULL)
+		cJSON_Delete(ret_root);
+	if(ret_cjson != NULL)
+		free(ret_cjson);
+
+	syslog(Logger::INFO, "%s", job_info.c_str());
+
+	return true;
+}
+
+bool Job::job_update_backup_storage(cJSON *root, std::string &str_ret)
+{
+	std::string job_result;
+	std::string job_info;
+	std::string name,stype,hostaddr,port,conn_str;
+	std::string str_sql;
+
+	cJSON *ret_root = NULL;
+	char *ret_cjson = NULL;
+	cJSON *item;
+
+	job_result = "failed";
+	item = cJSON_GetObjectItem(root, "name");
+	if(item == NULL || item->valuestring == NULL)
+	{
+		job_info = "get name error";
+		goto end;
+	}
+	name = item->valuestring;
+
+	item = cJSON_GetObjectItem(root, "stype");
+	if(item == NULL || item->valuestring == NULL)
+	{
+		job_info = "get stype error";
+		goto end;
+	}
+	stype = item->valuestring;
+
+	item = cJSON_GetObjectItem(root, "hostaddr");
+	if(item == NULL || item->valuestring == NULL)
+	{
+		job_info = "get hostaddr error";
+		goto end;
+	}
+	hostaddr = item->valuestring;
+
+	item = cJSON_GetObjectItem(root, "port");
+	if(item == NULL || item->valuestring == NULL)
+	{
+		job_info = "get port error";
+		goto end;
+	}
+	port = item->valuestring;
+
+	/////////////////////////////////////////////////////////
+	if(!System::get_instance()->check_backup_storage_name(name))
+	{
+		job_info = "backup storage name no existed";
+		goto end;
+	}
+
+	/////////////////////////////////////////////////////////
+	if(stype == "HDFS")
+	{
+		conn_str = "hdfs://" + hostaddr + ":" + port;
+	}
+	else
+	{
+		job_info = "stype isn't support";
+		goto end;
+	}
+
+	str_sql = "update backup_storage set stype='" + stype + "',conn_str='" + conn_str + "',hostaddr='" + hostaddr;
+	str_sql += "',port=" + port + " where name='" + name + "'";
+	//syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
+
+	if(System::get_instance()->execute_metadate_opertation(SQLCOM_UPDATE, str_sql))
+	{
+		job_info = "job_update_backup_storage error";
+		goto end;
+	}
+
+	job_result = "done";
+	job_info = "update backup storage succeed";
+
+end:
+	ret_root = cJSON_CreateObject();
+	cJSON_AddStringToObject(ret_root, "result", job_result.c_str());
+	cJSON_AddStringToObject(ret_root, "info", job_info.c_str());
+
+	ret_cjson = cJSON_Print(ret_root);
+	str_ret = ret_cjson;
+
+	if(ret_root != NULL)
+		cJSON_Delete(ret_root);
+	if(ret_cjson != NULL)
+		free(ret_cjson);
+
+	syslog(Logger::INFO, "%s", job_info.c_str());
+
+	return true;
+}
+
+bool Job::job_delete_backup_storage(cJSON *root, std::string &str_ret)
+{
+	std::string job_result;
+	std::string job_info;
+	std::string name;
+	std::string str_sql;
+
+	cJSON *ret_root = NULL;
+	char *ret_cjson = NULL;
+	cJSON *item;
+
+	job_result = "failed";
+	item = cJSON_GetObjectItem(root, "name");
+	if(item == NULL || item->valuestring == NULL)
+	{
+		job_info = "get name error";
+		goto end;
+	}
+	name = item->valuestring;
+
+	/////////////////////////////////////////////////////////
+	if(!System::get_instance()->check_backup_storage_name(name))
+	{
+		job_info = "backup storage name no existed";
+		goto end;
+	}
+
+	/////////////////////////////////////////////////////////
+	//must delete cluster_shard_backup_restore_log
+	if(!System::get_instance()->get_backup_storage_string(name, storage_id, backup_storage))
+	{
+		job_info = "get_backup_storage_string error";
+		goto end;
+	}
+
+	str_sql = "delete from cluster_shard_backup_restore_log where storage_id=" + storage_id;
+	//syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
+
+	if(System::get_instance()->execute_metadate_opertation(SQLCOM_DELETE, str_sql))
+	{
+		job_info = "job_delete_backup_storage error";
+		//goto end;
+	}
+
+	/////////////////////////////////////////////////////////
+	//must delete cluster_backups 
+	str_sql = "delete from cluster_backups where storage_id=" + storage_id;
+	//syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
+
+	if(System::get_instance()->execute_metadate_opertation(SQLCOM_DELETE, str_sql))
+	{
+		job_info = "job_delete_backup_storage error";
+		//goto end;
+	}
+
+	/////////////////////////////////////////////////////////
+	str_sql = "delete from backup_storage where name='" + name + "'";
+	//syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
+
+	if(System::get_instance()->execute_metadate_opertation(SQLCOM_DELETE, str_sql))
+	{
+		job_info = "job_delete_backup_storage error";
+		goto end;
+	}
+
+	job_result = "done";
+	job_info = "delete backup storage succeed";
+
+end:
+	ret_root = cJSON_CreateObject();
+	cJSON_AddStringToObject(ret_root, "result", job_result.c_str());
+	cJSON_AddStringToObject(ret_root, "info", job_info.c_str());
+
+	ret_cjson = cJSON_Print(ret_root);
+	str_ret = ret_cjson;
+
+	if(ret_root != NULL)
+		cJSON_Delete(ret_root);
+	if(ret_cjson != NULL)
+		free(ret_cjson);
+
+	syslog(Logger::INFO, "%s", job_info.c_str());
+
+	return true;
+}
+
 void Job::job_create_machine(cJSON *root)
 {
 	std::string job_id;
@@ -2963,7 +3235,7 @@ void Job::job_create_cluster(cJSON *root)
 	job_insert_operation_record(root, job_result, job_info);
 
 	item = cJSON_GetObjectItem(root, "nick_name");
-	if(item != NULL && item->valuestring != NULL)
+	if(item != NULL && item->valuestring != NULL && strlen(item->valuestring) > 0)
 	{
 		nick_name = item->valuestring;
 		if(System::get_instance()->check_nick_name(nick_name))
@@ -4307,7 +4579,7 @@ void Job::job_add_nodes(cJSON *root)
 	std::string job_id;
 	std::string job_result;
 	std::string job_info;
-	std::string cluster_name, shard_name, restore_shard_name, datatime;
+	std::string cluster_name, shard_name, backup_storage, datatime;
 	int nodes = 0;
 	bool all_shard = false;
 	cJSON *item;
@@ -4404,9 +4676,9 @@ void Job::job_add_nodes(cJSON *root)
 		vec_shard_name.emplace_back(shard_name);
 	}
 
-	if(!System::get_instance()->get_backup_storage(backup_storage))
+	if(!System::get_instance()->get_backup_storage_string(backup_storage , storage_id, backup_storage))
 	{
-		job_info = "get_backup_storage error";
+		job_info = "get_backup_storage_string error";
 		goto end;
 	}
 
@@ -4778,7 +5050,7 @@ end:
 	System::get_instance()->set_cluster_mgr_working(true);
 }
 
-bool Job::job_backup_shard_node(std::string &cluster_name, int &cluster_id, Tpye_Shard_Id_Ip_Port_Id &shard_id_ip_port_id)
+bool Job::job_backup_shard_node(std::string &cluster_name, std::string &cluster_id, Tpye_Shard_Id_Ip_Port_Id &shard_id_ip_port_id)
 {
 	cJSON *root = NULL;
 	char *cjson = NULL;
@@ -4831,8 +5103,8 @@ bool Job::job_backup_shard_node(std::string &cluster_name, int &cluster_id, Tpye
 	///////////////////////////////////////////////////////////////////////////////
 	// insert metadata table
 	get_datatime(start_time);
-	str_sql = "INSERT INTO cluster_shard_backup_restore_log(storage_id,cluster_id,shard_id,shard_node_id,optype,status,when_started) VALUES(1,";
-	str_sql += std::to_string(cluster_id) + "," + std::to_string(std::get<1>(shard_id_ip_port_id)) + "," + std::to_string(std::get<4>(shard_id_ip_port_id));
+	str_sql = "INSERT INTO cluster_shard_backup_restore_log(storage_id,cluster_id,shard_id,shard_node_id,optype,status,when_started) VALUES(";
+	str_sql += storage_id + "," + cluster_id + "," + std::to_string(std::get<1>(shard_id_ip_port_id)) + "," + std::to_string(std::get<4>(shard_id_ip_port_id));
 	str_sql += ",'backup','ongoing','" + start_time + "')";
 	syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
 
@@ -4900,7 +5172,7 @@ bool Job::job_backup_shard_node(std::string &cluster_name, int &cluster_id, Tpye
 				// update metadata table
 				get_datatime(end_time);
 				str_sql = "UPDATE cluster_shard_backup_restore_log set status='done',shard_backup_path='" + info;
-				str_sql += "',when_ended='" + end_time + "' where when_started='" + start_time + "' and cluster_id=" + std::to_string(cluster_id);
+				str_sql += "',when_ended='" + end_time + "' where when_started='" + start_time + "' and cluster_id=" + cluster_id;
 				syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
 
 				if(System::get_instance()->execute_metadate_opertation(SQLCOM_INSERT, str_sql))
@@ -4934,7 +5206,7 @@ end:
 		///////////////////////////////////////////////////////////////////////////////
 		// update metadata table
 		get_datatime(end_time);
-		str_sql = "UPDATE cluster_shard_backup_restore_log set status='failed' where when_started='" + start_time + "' and cluster_id=" + std::to_string(cluster_id);
+		str_sql = "UPDATE cluster_shard_backup_restore_log set status='failed' where when_started='" + start_time + "' and cluster_id=" + cluster_id;
 		syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
 
 		if(System::get_instance()->execute_metadate_opertation(SQLCOM_INSERT, str_sql))
@@ -4948,8 +5220,7 @@ end:
 
 bool Job::job_backup_shard(std::string &cluster_name, std::string &shard_name, std::string &datatime)
 {
-	std::string str_sql,start_time;
-	int cluster_id;
+	std::string str_sql,start_time,cluster_id;
 	Tpye_Shard_Id_Ip_Port_Id shard_id_ip_port_id;
 	get_datatime(start_time);
 
@@ -4970,28 +5241,16 @@ bool Job::job_backup_shard(std::string &cluster_name, std::string &shard_name, s
 		return false;
 	}
 
-
 	///////////////////////////////////////////////////////////////////////////////
-	// insert metadata table
+	// get finish datatime
 	get_datatime(datatime);
-/*	
-	str_sql = "INSERT INTO cluster_backups(storage_id,cluster_id,backup_type,has_comp_node_dump,start_ts,end_ts,name) VALUES(1,"
-				+ std::to_string(cluster_id) + ",'storage_shards',0,'" + start_time + "','" + datatime + "','" + shard_name + "')";
-	syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
 
-	if(System::get_instance()->execute_metadate_opertation(SQLCOM_INSERT, str_sql))
-	{
-		syslog(Logger::ERROR, "insert cluster_backups error");
-		return false;
-	}
-*/
 	return true;
 }
 
 bool Job::job_backup_cluster(std::string &cluster_name, std::string &datatime)
 {
-	std::string str_sql,start_time,shard_names;
-	int cluster_id;
+	std::string str_sql,start_time,shard_names,cluster_id;
 	std::vector<Tpye_Shard_Id_Ip_Port_Id> vec_shard_id_ip_port_id;
 	get_datatime(start_time);
 
@@ -5021,8 +5280,8 @@ bool Job::job_backup_cluster(std::string &cluster_name, std::string &datatime)
 	///////////////////////////////////////////////////////////////////////////////
 	// insert metadata table
 	get_datatime(datatime);
-	str_sql = "INSERT INTO cluster_backups(storage_id,cluster_id,backup_type,has_comp_node_dump,start_ts,end_ts,name) VALUES(1,"
-				+ std::to_string(cluster_id) + ",'storage_shards',0,'" + start_time + "','" + datatime + "','" + shard_names + "')";
+	str_sql = "INSERT INTO cluster_backups(storage_id,cluster_id,backup_type,has_comp_node_dump,start_ts,end_ts,name) VALUES(";
+	str_sql += storage_id + "," + cluster_id + ",'storage_shards',0,'" + start_time + "','" + datatime + "','" + shard_names + "')";
 	syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
 
 	if(System::get_instance()->execute_metadate_opertation(SQLCOM_INSERT, str_sql))
@@ -5042,8 +5301,7 @@ void Job::job_backup_cluster(cJSON *root)
 	std::string job_result;
 	std::string job_info;
 	std::string backup_cluster_name;
-	std::string datatime;
-	int shards_id = 0;
+	std::string backup_storage, datatime;
 	cJSON *item;
 
 	std::vector<Tpye_Ip_Port> vec_ip_port;
@@ -5077,9 +5335,9 @@ void Job::job_backup_cluster(cJSON *root)
 		goto end;
 	}
 
-	if(!System::get_instance()->get_backup_storage(backup_storage))
+	if(!System::get_instance()->get_backup_storage_string(backup_storage, storage_id, backup_storage))
 	{
-		job_info = "get_backup_storage error";
+		job_info = "get_backup_storage_string error";
 		goto end;
 	}
 
@@ -5229,7 +5487,7 @@ bool Job::job_restore_storage(std::string &cluster_name, std::string &shard_name
 	return ret;
 }
 
-bool Job::job_restore_computer(std::string &cluster_name, Tpye_Ip_Port &ip_port)
+bool Job::job_restore_computer(std::string &cluster_name, std::string &shard_map, Tpye_Ip_Port &ip_port)
 {
 	cJSON *root = NULL;
 	char *cjson = NULL;
@@ -5250,6 +5508,7 @@ bool Job::job_restore_computer(std::string &cluster_name, Tpye_Ip_Port &ip_port)
 	cJSON_AddStringToObject(root, "cluster_name", cluster_name.c_str());
 	strtmp = "pgx:pgx_pwd@\\(" + meta_svr_ip + ":" + std::to_string(meta_svr_port) + "\\)/mysql";
 	cJSON_AddStringToObject(root, "meta_str", strtmp.c_str());
+	cJSON_AddStringToObject(root, "shard_map", shard_map.c_str());
 
 	/////////////////////////////////////////////////////////
 	// send json parameter to node
@@ -5359,7 +5618,7 @@ void Job::job_restore_cluster(cJSON *root)
 	std::string job_info;
 	std::string backup_cluster_name;
 	std::string restore_cluster_name;
-	std::string shard_name,timestamp;
+	std::string shard_map,backup_storage,timestamp;
 	int shards_id = 0;
 	int shards;
 	int retry;
@@ -5421,9 +5680,9 @@ void Job::job_restore_cluster(cJSON *root)
 		goto end;
 	}
 
-	if(!System::get_instance()->get_backup_storage(backup_storage))
+	if(!System::get_instance()->get_backup_storage_string(backup_storage, storage_id, backup_storage))
 	{
-		job_info = "get_backup_storage error";
+		job_info = "get_backup_storage_string error";
 		goto end;
 	}
 
@@ -5483,11 +5742,18 @@ void Job::job_restore_cluster(cJSON *root)
 	}
 
 	///////////////////////////////////////////////////////////////////////////////
+	// get shard map
+	if(!System::get_instance()->get_shard_map_for_restore(backup_cluster_name, restore_cluster_name, shard_map))
+	{
+		job_info = "get_shard_map_for_restore error";
+		goto end;
+	}
+
 	// restore every computer
 	for(auto &ip_port: vec_computer_ip_port)
 	{
 		syslog(Logger::INFO, "restore computer node working");
-		if(!job_restore_computer(backup_cluster_name, ip_port))
+		if(!job_restore_computer(backup_cluster_name, shard_map, ip_port))
 		{
 			job_info = "job_restore_computer error";
 			goto end;
@@ -5536,7 +5802,7 @@ void Job::job_restore_new_cluster(cJSON *root)
 	std::string nick_name;
 	std::string backup_cluster_name;
 	std::string restore_cluster_name;
-	std::string shard_name,timestamp;
+	std::string shard_map,backup_storage,timestamp;
 	int shards_id = 0;
 	int retry;
 	cJSON *item;
@@ -5576,7 +5842,7 @@ void Job::job_restore_new_cluster(cJSON *root)
 	backup_cluster_name = item->valuestring;
 
 	item = cJSON_GetObjectItem(root, "nick_name");
-	if(item != NULL && item->valuestring != NULL)
+	if(item != NULL && item->valuestring != NULL && strlen(item->valuestring) > 0)
 	{
 		nick_name = item->valuestring;
 		if(System::get_instance()->check_nick_name(nick_name))
@@ -5622,9 +5888,9 @@ void Job::job_restore_new_cluster(cJSON *root)
 		goto end;
 	}
 
-	if(!System::get_instance()->get_backup_storage(backup_storage))
+	if(!System::get_instance()->get_backup_storage_string(backup_storage, storage_id, backup_storage))
 	{
-		job_info = "get_backup_storage error";
+		job_info = "get_backup_storage_string error";
 		goto end;
 	}
 
@@ -5725,11 +5991,18 @@ void Job::job_restore_new_cluster(cJSON *root)
 	}
 
 	///////////////////////////////////////////////////////////////////////////////
+	// get shard map
+	if(!System::get_instance()->get_shard_map_for_restore(backup_cluster_name, restore_cluster_name, shard_map))
+	{
+		job_info = "get_shard_map_for_restore error";
+		goto end;
+	}
+
 	// restore every computer
 	for(auto &ip_port: vec_computer_ip_port)
 	{
 		syslog(Logger::INFO, "restore computer node working");
-		if(!job_restore_computer(backup_cluster_name, ip_port))
+		if(!job_restore_computer(backup_cluster_name, shard_map, ip_port))
 		{
 			job_info = "job_restore_computer error";
 			goto end;
@@ -5907,6 +6180,14 @@ bool Job::get_job_type(char *str, Job_type &job_type)
 		job_type = JOB_RESTORE_CLUSTER;
 	else if(strcmp(str, "restore_new_cluster")==0)
 		job_type = JOB_RESTORE_NEW_CLUSTER;
+	else if(strcmp(str, "create_backup_storage")==0)
+		job_type = JOB_CREATE_BACKUP_STORAGE;
+	else if(strcmp(str, "update_backup_storage")==0)
+		job_type = JOB_UPDATE_BACKUP_STORAGE;
+	else if(strcmp(str, "delete_backup_storage")==0)
+		job_type = JOB_DELETE_BACKUP_STORAGE;
+	else if(strcmp(str, "get_backup_storage")==0)
+		job_type = JOB_GET_BACKUP_STORAGE;
 	else
 	{
 		job_type = JOB_NONE;
@@ -5990,6 +6271,22 @@ bool Job::job_handle_ahead(const std::string &para, std::string &str_ret)
 	else if(job_type == JOB_RENAME_CLUSTER)
 	{
 		ret = job_rename_cluster(root, str_ret);
+	}
+	else if(job_type == JOB_CREATE_BACKUP_STORAGE)
+	{
+		ret = job_create_backup_storage(root, str_ret);
+	}
+	else if(job_type == JOB_UPDATE_BACKUP_STORAGE)
+	{
+		ret = job_update_backup_storage(root, str_ret);
+	}
+	else if(job_type == JOB_DELETE_BACKUP_STORAGE)
+	{
+		ret = job_delete_backup_storage(root, str_ret);
+	}
+	else if(job_type == JOB_GET_BACKUP_STORAGE)
+	{
+		ret = System::get_instance()->get_backup_storage_list(root, str_ret);
 	}
 	else
 	{

@@ -20,7 +20,7 @@
 #include <unistd.h>
 #include <iostream>
 
-#define BUFSIZE 4096		//4K
+#define BUFSIZE 8192		//8K
 #define HTTP_DEFAULT_PORT 	80
 
 #define HTTP_GET_STR "GET /%s HTTP/1.0\r\n\
@@ -35,7 +35,7 @@ Range: bytes=%s\r\n\r\n"
 #define HTTP_POST_PARA_STR "POST /%s HTTP/1.0\r\n\
 HOST: %s:%d\r\n\
 Accept: */*\r\n\
-Content-Type:application/x-www-form-urlencoded\r\n\
+Content-Type: application/json\r\n\
 Content-Length: %ld\r\n\r\n\
 %s"
 

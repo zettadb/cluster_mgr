@@ -487,6 +487,19 @@ bool System::get_machine_info_from_metadata(std::vector<std::string> &vec_machin
 	return true;
 }
 
+bool System::check_backup_storage_name(std::string &name)
+{
+	Scopped_mutex sm(mtx);
+
+	if(meta_shard.check_backup_storage_name(name))
+	{
+		//syslog(Logger::ERROR, "check_backup_storage error");
+		return false;
+	}
+
+	return true;
+}
+
 bool System::check_machine_hostaddr(std::string &hostaddr)
 {
 	Scopped_mutex sm(mtx);
@@ -700,15 +713,49 @@ bool System::update_instance_status(Tpye_Ip_Port &ip_port, std::string &status, 
 	return true;
 }
 
-bool System::get_backup_storage(std::string &backup_storage)
+bool System::get_backup_storage_string(std::string &name, std::string &storage_id, std::string &backup_storage)
 {
 	Scopped_mutex sm(mtx);
 
-	if(meta_shard.get_backup_storage(backup_storage))
+	if(meta_shard.get_backup_storage_string(name, storage_id, backup_storage))
 	{
-		//syslog(Logger::ERROR, "get_backup_storage error");
+		//syslog(Logger::ERROR, "get_backup_storage_string error");
 		return false;
 	}
+
+	return true;
+}
+
+bool System::get_backup_storage_list(cJSON *root, std::string &str_ret)
+{
+	Scopped_mutex sm(mtx);
+
+	cJSON *ret_root;
+	cJSON *ret_item;
+	char *ret_cjson;
+
+	std::vector<Tpye_string4> vec_t_string4;
+	meta_shard.get_backup_storage_list(vec_t_string4);
+
+	ret_root = cJSON_CreateArray();
+	for(auto &t_string4:vec_t_string4)
+	{
+		ret_item = cJSON_CreateObject();
+		cJSON_AddItemToArray(ret_root, ret_item);
+		
+		cJSON_AddStringToObject(ret_item, "name", std::get<0>(t_string4).c_str());
+		cJSON_AddStringToObject(ret_item, "stype", std::get<1>(t_string4).c_str());
+		cJSON_AddStringToObject(ret_item, "hostaddr", std::get<2>(t_string4).c_str());
+		cJSON_AddStringToObject(ret_item, "port", std::get<3>(t_string4).c_str());
+	}
+
+	ret_cjson = cJSON_Print(ret_root);
+	str_ret = ret_cjson;
+
+	if(ret_root != NULL)
+		cJSON_Delete(ret_root);
+	if(ret_cjson != NULL)
+		free(ret_cjson);
 
 	return true;
 }
@@ -1905,7 +1952,7 @@ bool System::stop_cluster_comp(std::string &cluster_name, std::string &comp_name
 	return true;
 }
 
-bool System::get_shard_info_for_backup(std::string &cluster_name, int &cluster_id, std::vector<Tpye_Shard_Id_Ip_Port_Id> &vec_shard_id_ip_port_id)
+bool System::get_shard_info_for_backup(std::string &cluster_name, std::string &cluster_id, std::vector<Tpye_Shard_Id_Ip_Port_Id> &vec_shard_id_ip_port_id)
 {
 	Scopped_mutex sm(mtx);
 
@@ -1917,11 +1964,11 @@ bool System::get_shard_info_for_backup(std::string &cluster_name, int &cluster_i
 		if(cluster_name != cluster->get_name())
 			continue;
 
-		cluster_id = cluster->get_id();
+		cluster_id = std::to_string(cluster->get_id());
 
 		//sort shard by id
 		sort(cluster->storage_shards.begin(), cluster->storage_shards.end(), 
-				[](Shard * a, Shard * b){return a->get_id() < a->get_id();});
+				[](Shard * a, Shard * b){return a->get_id() < b->get_id();});
 
 		//get a no master node for backup in every shard
 		for (auto &shard:cluster->storage_shards)
@@ -1960,7 +2007,7 @@ bool System::get_shard_info_for_backup(std::string &cluster_name, int &cluster_i
 	return (vec_shard_id_ip_port_id.size() > 0);
 }
 
-bool System::get_node_info_for_backup(std::string &cluster_name, std::string &shard_name, int &cluster_id, Tpye_Shard_Id_Ip_Port_Id &shard_id_ip_port_id)
+bool System::get_node_info_for_backup(std::string &cluster_name, std::string &shard_name, std::string &cluster_id, Tpye_Shard_Id_Ip_Port_Id &shard_id_ip_port_id)
 {
 	Scopped_mutex sm(mtx);
 
@@ -2031,7 +2078,7 @@ bool System::get_shard_ip_port_restore(std::string &cluster_name, std::vector<st
 
 		//sort shard by id
 		sort(cluster->storage_shards.begin(), cluster->storage_shards.end(), 
-				[](Shard * a, Shard * b){return a->get_id() < a->get_id();});
+				[](Shard * a, Shard * b){return a->get_id() < b->get_id();});
 
 		//get every node for restore in every shard
 		for (auto &shard:cluster->storage_shards)
@@ -2075,6 +2122,52 @@ bool System::get_comps_ip_port_restore(std::string &cluster_name, std::vector<Tp
 	}
 
 	return (vec_ip_port.size() > 0);
+}
+bool System::get_shard_map_for_restore(std::string &backup_cluster_name, std::string &restore_cluster_name, std::string &shard_map)
+{
+	Scopped_mutex sm(mtx);
+
+	std::vector<std::string> vec_backup_shard;
+	std::vector<std::string> vec_restore_shard;
+
+	for (auto &cluster:kl_clusters)
+	{
+		if(backup_cluster_name == cluster->get_name())
+		{
+			//sort shard by id
+			sort(cluster->storage_shards.begin(), cluster->storage_shards.end(), 
+					[](Shard * a, Shard * b){return a->get_id() < b->get_id();});
+
+			//get every shard
+			for (auto &shard:cluster->storage_shards)
+				vec_backup_shard.emplace_back(std::to_string(shard->get_id()));
+		}
+		else if(restore_cluster_name == cluster->get_name())
+		{
+			//sort shard by id
+			sort(cluster->storage_shards.begin(), cluster->storage_shards.end(), 
+					[](Shard * a, Shard * b){return a->get_id() < b->get_id();});
+
+			//get every shard
+			for (auto &shard:cluster->storage_shards)
+				vec_restore_shard.emplace_back(std::to_string(shard->get_id()));
+		}
+	}
+
+	if(vec_backup_shard.size() == 0 || vec_restore_shard.size() == 0 ||
+		vec_backup_shard.size() != vec_restore_shard.size())
+		return false;
+
+	shard_map = "{";
+	for(int i=0; i<vec_backup_shard.size(); i++)
+	{
+		if(i>0)
+			shard_map += ",";
+		shard_map += vec_backup_shard[i] + ":" + vec_restore_shard[i];
+	}
+	shard_map += "}";
+
+	return true;
 }
 
 bool System::get_cluster_shards_nodes_comps(std::string &cluster_name, int &shards, int &nodes, int &comps)

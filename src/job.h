@@ -34,6 +34,7 @@ JOB_GET_CLUSTER_DETAIL,
 JOB_CHECK_TIMESTAMP,
 JOB_GET_VARIABLE,
 JOB_SET_VARIABLE,
+JOB_RENAME_CLUSTER, 
 JOB_MACHINE_SUMMARY, 
 JOB_CREATE_MACHINE, 
 JOB_UPDATE_MACHINE, 
@@ -42,7 +43,6 @@ JOB_UPDATE_PROMETHEUS,
 JOB_POSTGRES_EXPORTER, 
 JOB_MYSQLD_EXPORTER, 
 JOB_CONTROL_INSTANCE, 
-JOB_RENAME_CLUSTER, 
 JOB_CREATE_CLUSTER, 
 JOB_DELETE_CLUSTER, 
 JOB_ADD_SHARDS, 
@@ -54,6 +54,10 @@ JOB_DELETE_NODE,
 JOB_BACKUP_CLUSTER, 
 JOB_RESTORE_CLUSTER, 
 JOB_RESTORE_NEW_CLUSTER, 
+JOB_CREATE_BACKUP_STORAGE, 
+JOB_UPDATE_BACKUP_STORAGE, 
+JOB_DELETE_BACKUP_STORAGE, 
+JOB_GET_BACKUP_STORAGE, 
 };
 enum File_type {
 FILE_NONE, 
@@ -67,7 +71,7 @@ public:
 	static int do_exit;
 	std::vector<std::string> vec_local_ip;
 	std::string user_name;
-	std::string backup_storage;
+	std::string storage_id,backup_storage;
 
 private:
 	static Job *m_inst;
@@ -119,6 +123,9 @@ public:
 	bool job_read_file(std::string &path, std::string &str);
 	bool job_machine_summary(cJSON *root, std::string &str_ret);
 	bool job_rename_cluster(cJSON *root, std::string &str_ret);
+	bool job_create_backup_storage(cJSON *root, std::string &str_ret);
+	bool job_update_backup_storage(cJSON *root, std::string &str_ret);
+	bool job_delete_backup_storage(cJSON *root, std::string &str_ret);
 	void job_create_machine(cJSON *root);
 	void job_update_machine(cJSON *root);
 	void job_delete_machine(cJSON *root);
@@ -162,12 +169,12 @@ public:
 	bool job_delete_shard_json(std::string &cluster_name, std::string &shard_name, Tpye_Ip_Port &ip_port);
 	void job_delete_node(cJSON *root);
 
-	bool job_backup_shard_node(std::string &cluster_name, int &cluster_id, Tpye_Shard_Id_Ip_Port_Id &shard_id_ip_port_id);
+	bool job_backup_shard_node(std::string &cluster_name, std::string &cluster_id, Tpye_Shard_Id_Ip_Port_Id &shard_id_ip_port_id);
 	bool job_backup_shard(std::string &cluster_name, std::string &shard_name, std::string &datatime);
 	bool job_backup_cluster(std::string &cluster_name, std::string &datatime);
 	void job_backup_cluster(cJSON *root);
 	bool job_restore_storage(std::string &cluster_name, std::string &shard_name, std::string &timestamp, Tpye_Ip_Port &ip_port);
-	bool job_restore_computer(std::string &cluster_name, Tpye_Ip_Port &ip_port);
+	bool job_restore_computer(std::string &cluster_name, std::string &shard_map, Tpye_Ip_Port &ip_port);
 	void job_restore_cluster(cJSON *root);
 	void job_restore_new_cluster(cJSON *root);
 

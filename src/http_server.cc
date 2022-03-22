@@ -24,25 +24,32 @@
 #include <unistd.h>
 #include <iostream>
 
-#define BUFSIZE 4096		//4K
+#define BUFSIZE 8192		//8K
 
-static const char *lpHttpHtmlOk = "HTTP/1.0 200 OK\r\nContent-Type: text/html\r\nContent-Length: ";
-static const char *lpHttpBinOk = "HTTP/1.0 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ";
-static const char *lpHttpJspOk = "HTTP/1.0 200 OK\r\napplication/javascript\r\nContent-Length: ";
-static const char *lpHttpJsonOk = "HTTP/1.0 200 OK\r\napplication/json\r\nContent-Length: ";
-static const char *lpHttpError = "HTTP/1.0 400 Bad Request\r\n";
+static const char *lpHttpHtmlOk = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: ";
+static const char *lpHttpHtmlOkTime = "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\n\
+Access-Control-Max-Age: 3600\r\n\
+Access-Control-Allow-Origin: *\r\n\
+Access-Control-Allow-Headers: *\r\n\
+Access-Control-Allow-Credentials: true\r\n\
+Access-Control-Allow-Methods: POST, GET, OPTIONS\r\n\
+Date: %s\r\nContent-Length: %ld\r\n\r\n%s";
+
+static const char *lpHttpBinOk = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ";
+static const char *lpHttpJspOk = "HTTP/1.1 200 OK\r\napplication/javascript\r\nContent-Length: ";
+static const char *lpHttpJsonOk = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: ";
+static const char *lpHttpError = "HTTP/1.1 400 Bad Request\r\n";
 static const char *lpReturnOk = "{\"result\":\"accept\"}";
 
-static const char *lpHttpOPTIONS = "HTTP/1.0 200 OK\r\nAllow: POST, GET, OPTIONS\r\nOrigin: *\r\nContent-Length: 0\r\n\
-Content-Type: text/html; charset=UTF-8\r\nConnection: Keep-Alive\r\nKeep-Alive: timeout=5,max=100\r\nDate: %s\r\n\
-Access-Control-Max-Age: 86400\r\n\
-Access-Control-Expose-Headers: *\r\n\
+static const char *lpHttpOPTIONS = "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\n\
+Access-Control-Max-Age: 3600\r\n\
 Access-Control-Allow-Origin: *\r\n\
-Access-Control-Allow-Headers: x-requested-with,content-type\r\n\
+Access-Control-Allow-Headers: *\r\n\
 Access-Control-Allow-Credentials: true\r\n\
-Access-Control-Allow-Methods: POST, GET, OPTIONS\r\n\r\n";
+Access-Control-Allow-Methods: POST, GET, OPTIONS\r\n\
+Date: %s\r\nContent-Length: 0\r\n\r\n";
 
-static const char *lpHttpRangeOk = "HTTP/1.0 206 Partial Content\r\n\
+static const char *lpHttpRangeOk = "HTTP/1.1 206 Partial Content\r\n\
 Content-Type: text/plain\r\n\
 Content-Range: bytes %d-%d/%d\r\n\
 Content-Length: %d\r\n\r\n";
@@ -214,6 +221,8 @@ Http_server::Content_type Http_server::Get_http_content_type(const char* buf)
 
 	if(strstr(content_type.c_str(), "application/json") != NULL)
 		return Application_json;
+	else if(strstr(content_type.c_str(), "text/html") != NULL)
+		return Application_json;
 	else if(strstr(content_type.c_str(), "x-www-form-urlencoded") != NULL)
 		return Content_form_urlencoded;
 	else if(strstr(content_type.c_str(), "form-data") != NULL)
@@ -312,7 +321,7 @@ void Http_server::Http_server_handle(int socket)
 			GetDateTime(datetime);
 			int n = snprintf(http_buf, BUFSIZE, lpHttpOPTIONS, datetime);
 			send(socket, http_buf, n, 0);
-			syslog(Logger::INFO, "type:HTTP_OPTIONS end");
+			//syslog(Logger::INFO, "http_buf333=%s", http_buf);
 		}
 	}
 
@@ -540,17 +549,19 @@ void Http_server::Http_server_handle_post_para(int &socket, char* buf, int len)
 	std::string str_ret;
 	bool ret = Job::get_instance()->job_handle_ahead(para, str_ret);
 	
+	char datetime[100];
+	GetDateTime(datetime);
+
 	if(ret)
 	{
-		int n = snprintf(buf, BUFSIZE, "%s%lu\r\n\r\n", lpHttpHtmlOk, str_ret.length());
+		int n = snprintf(buf, BUFSIZE, lpHttpHtmlOkTime, datetime, str_ret.length(), str_ret.c_str());
 		send(socket, buf, n, 0);
-		send(socket, str_ret.c_str(), str_ret.length(), 0);
 	}
 	else
 	{
 		Job::get_instance()->add_job(para);
 
-		int n = snprintf(buf, BUFSIZE, "%s%lu\r\n\r\n%s", lpHttpHtmlOk, strlen(lpReturnOk), lpReturnOk);
+		int n = snprintf(buf, BUFSIZE, lpHttpHtmlOkTime, datetime, strlen(lpReturnOk), lpReturnOk);
 		send(socket, buf, n, 0);
 	}
 }
