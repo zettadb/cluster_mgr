@@ -35,14 +35,11 @@ max_log_file_size = 100
 # log file path and name
 log_file = ./cluster_mgr.log
 
-# meta server group seeds, note: no space in the middle of string
-meta_group_seeds = 127.0.0.1:57301,127.0.0.1:57304,127.0.0.1:57307
+# meta data server listening port 
+meta_port = 6001
 
-# meta ha mode : no_rep, mgr, rbr, only for install meta by http cmd
-meta_ha_mode = mgr
-
-# meta innodb_buffer_pool_size : 64MB or 1GB, only for install meta by http cmd
-meta_innodb_size = 128MB
+# meta data server ip address
+meta_host = 127.0.0.1
 
 # meta data server user account
 meta_user = pgx

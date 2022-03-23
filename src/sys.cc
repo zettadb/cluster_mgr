@@ -56,30 +56,17 @@ System::~System()
   nodes it has in pg_cluster_meta_nodes belong to this shard, although some of
   them could be out of the GR cluster currently.
   @retval: -1: invalid MGR topology; 
-		   -2: invalid meta group seeds
 */
 int System::setup_metadata_shard()
 {
 	Scopped_mutex sm(mtx);
 	int ret = 0;
-	int retry = 0;
 	bool is_master = false;
 	int nrows = 0, master_port = 0;
 	std::string master_ip;
 	Shard_node *sn = meta_shard.get_master();
-
-retry_group_seeds:
 	if (!sn)
 	{
-		if(retry<vec_meta_ip_port.size())
-		{
-			meta_svr_ip = vec_meta_ip_port[retry].first;
-			meta_svr_port = vec_meta_ip_port[retry].second;
-			retry++;
-		}
-		else
-			return -2;
-
 		sn = meta_shard.get_node_by_ip_port(meta_svr_ip, meta_svr_port);
 	}
 	else
@@ -102,34 +89,6 @@ retry_group_seeds:
 				meta_svr_user.c_str(), meta_svr_pwd.c_str());
 
 		meta_shard.add_node(sn);
-
-		// set meta shard HAVL_mode
-		ret = sn->send_stmt(SQLCOM_SELECT, CONST_STR_PTR_LEN("select value from global_configuration where name='meta_ha_mode'"), 3);
-		if (ret == 0)
-		{
-			MYSQL_RES *result = sn->get_result();
-			MYSQL_ROW row;
-			if ((row = mysql_fetch_row(result)))
-			{
-				if(row[0] != NULL)
-				{
-					if(strcmp(row[0],"no_rep") == 0)
-						meta_shard.set_mode(Shard::HAVL_mode::HA_no_rep);
-					else if(strcmp(row[0],"mgr") == 0)
-						meta_shard.set_mode(Shard::HAVL_mode::HA_mgr);
-					else if(strcmp(row[0],"rbr") == 0)
-						meta_shard.set_mode(Shard::HAVL_mode::HA_rbr);
-					syslog(Logger::INFO, "set meta shard HAVL_mode as %s", row[0]);
-				}
-			}
-			sn->free_mysql_result();
-		}
-		else
-		{
-			meta_shard.remove_node(0);
-			sn = NULL;
-			goto retry_group_seeds;
-		}
 	}
 
 	ret = sn->send_stmt(SQLCOM_SELECT, CONST_STR_PTR_LEN(
@@ -193,6 +152,21 @@ retry_group_seeds:
 		sn->get_ip_port(master_ip, master_port);
 		if (meta_shard.set_master(sn))
 		{
+			ret = sn->send_stmt(SQLCOM_SELECT, CONST_STR_PTR_LEN("select count(*) from meta_db_nodes"), 3);
+			if (ret)
+				return ret;
+
+			result = sn->get_result();
+			if ((row = mysql_fetch_row(result)))
+			{
+				if(row[0] != NULL && strcmp(row[0],"1") == 0)
+				{
+					meta_shard.set_mode(Shard::HAVL_mode::HA_no_rep);
+					syslog(Logger::INFO, "set meta shard as HA_no_rep");
+				}
+			}
+			sn->free_mysql_result();
+			
 			syslog(Logger::WARNING,
 		   		"Suppose primary node of shard(%s.%s, %u) to be (%s:%d, %u) since it's out of the meta-shard MGR cluster. It must have latest list of metadata nodes otherwise Kunlun DDC won't be able to work correctly.",
 		   		meta_shard.get_cluster_name().c_str(),
@@ -301,6 +275,17 @@ int System::create_instance(const std::string&cfg_path)
 		goto end;
 	if ((ret = Http_server::get_instance()->start_http_thread()) != 0)
 		goto end;
+	
+	if (m_global_instance->setup_metadata_shard() != 0)
+	{
+		syslog(Logger::ERROR, "setup_metadata_shard fail");
+	}
+	else
+	{
+		System::get_instance()->refresh_shards_from_metadata_server();
+		System::get_instance()->refresh_computers_from_metadata_server();
+		Job::get_instance()->job_roll_back_check();
+	}
 
 end:
 	return ret;
@@ -668,7 +653,7 @@ bool System::get_cluster_shard_name(std::string &cluster_name, std::vector<std::
 	return (vec_shard_name.size() > 0);
 }
 
-bool System::get_meta_info(std::vector<Tpye_Ip_Port_User_Pwd> &vec_meta)
+bool System::get_meta_info(std::vector<Tpye_Ip_Port_User_Pwd> &meta)
 {
 	Scopped_mutex sm(mtx);
 	
@@ -680,29 +665,10 @@ bool System::get_meta_info(std::vector<Tpye_Ip_Port_User_Pwd> &vec_meta)
 		node->get_ip_port(ip, port);
 		node->get_user_pwd(user, pwd);
 
-		vec_meta.emplace_back(std::make_tuple(ip, port, user, pwd));
+		meta.emplace_back(std::make_tuple(ip, port, user, pwd));
 	}
 
-	return (vec_meta.size() > 0);
-}
-
-bool System::get_meta_master(Tpye_Ip_Port_User_Pwd &meta)
-{
-	Scopped_mutex sm(mtx);
-	
-	auto node = meta_shard.get_master();
-	if(node == NULL)
-		return false;
-
-	std::string ip,user,pwd;
-	int port;
-	
-	node->get_ip_port(ip, port);
-	node->get_user_pwd(user, pwd);
-
-	meta = std::make_tuple(ip, port, user, pwd);
-
-	return true;
+	return (meta.size() > 0);
 }
 
 bool System::get_machine_instance_port(Machine* machine)

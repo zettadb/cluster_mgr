@@ -5493,20 +5493,10 @@ bool Job::job_restore_computer(std::string &cluster_name, std::string &shard_map
 	char *cjson = NULL;
 
 	bool ret = false;
-	int retry;
 	std::string strtmp, uuid_job_id;
 	std::string post_url,get_status,result_str;
-	Tpye_Ip_Port_User_Pwd meta_ip_port;
 	get_uuid(uuid_job_id);
-
-	/////////////////////////////////////////////////////////
-	// get master meta
-	if(!System::get_instance()->get_meta_master(meta_ip_port))
-	{
-		syslog(Logger::ERROR, "get_meta_master error");
-		goto end;
-	}
-
+	
 	/////////////////////////////////////////////////////////
 	// create json parameter
 	root = cJSON_CreateObject();
@@ -5516,7 +5506,7 @@ bool Job::job_restore_computer(std::string &cluster_name, std::string &shard_map
 	cJSON_AddStringToObject(root, "ip", ip_port.first.c_str());
 	cJSON_AddNumberToObject(root, "port", ip_port.second);
 	cJSON_AddStringToObject(root, "cluster_name", cluster_name.c_str());
-	strtmp = "pgx:pgx_pwd@\\(" + std::get<0>(meta_ip_port) + ":" + std::to_string(std::get<1>(meta_ip_port)) + "\\)/mysql";
+	strtmp = "pgx:pgx_pwd@\\(" + meta_svr_ip + ":" + std::to_string(meta_svr_port) + "\\)/mysql";
 	cJSON_AddStringToObject(root, "meta_str", strtmp.c_str());
 	cJSON_AddStringToObject(root, "shard_map", shard_map.c_str());
 
@@ -5532,7 +5522,7 @@ bool Job::job_restore_computer(std::string &cluster_name, std::string &shard_map
 	// http post parameter to node
 	post_url = "http://" + ip_port.first + ":" + std::to_string(node_mgr_http_port);
 	
-	retry = 3;
+	int retry = 3;
 	while(retry-->0 && !Job::do_exit)
 	{
 		if(Http_client::get_instance()->Http_client_post_para(post_url.c_str(), cjson, result_str)==0)

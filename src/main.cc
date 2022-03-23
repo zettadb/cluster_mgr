@@ -10,7 +10,6 @@
 #include "sys.h"
 #include "os.h"
 #include "log.h"
-#include "job.h"
 #include "config.h"
 #include "thread_manager.h"
 #include <unistd.h>
@@ -21,8 +20,6 @@ extern int64_t thread_work_interval;
 
 int main(int argc, char **argv)
 {
-	Thread main_thd;
-
 	if (argc != 2)
 	{
 		printf("\nUsage: cluster_mgr /config/file/path/my_cluster_cfg.conf\n");
@@ -47,24 +44,12 @@ int main(int argc, char **argv)
 	
 	if (System::create_instance(argv[1]))
 		return 1;
+	syslog(Logger::INFO,
+		   "Cluster manager started using meta-data shard node (%s:%d).",
+		   meta_svr_ip.c_str(), meta_svr_port);
 
-	// waiting for create meta shard or network connected
-	while(!Thread_manager::do_exit)
-	{
-		if(System::get_instance()->setup_metadata_shard() == 0)
-		{
-			// roll back job because cluster_mgr crash
-			System::get_instance()->refresh_shards_from_metadata_server();
-			System::get_instance()->refresh_computers_from_metadata_server();
-			Job::get_instance()->job_roll_back_check();
-			break;
-		}
-		
-		syslog(Logger::ERROR, "setup_metadata_shard fail, waiting ...");
-		Thread_manager::get_instance()->sleep_wait(&main_thd, thread_work_interval * 3000);
-	}
+	Thread main_thd;
 
-	// cluster refresh and working
 	while (!Thread_manager::do_exit)
 	{
 		if (System::get_instance()->get_cluster_mgr_working() && 
