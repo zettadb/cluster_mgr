@@ -181,10 +181,13 @@ void Configs::define_configs()
 	define_int_config("num_worker_threads", num_worker_threads, 1, 100, 3,
 		"Number of worker threads to create.");
 
-	define_int_config("meta_port", meta_svr_port, 0, 65535, 0,
-		"meta data server listening port");
-	define_str_config("meta_host", meta_svr_ip, "localhost",
-		"meta data server ip address");
+	define_str_config("meta_group_seeds", meta_group_seeds, "",
+		"meta group seeds");
+	define_str_config("meta_ha_mode", meta_ha_mode, "no_rep",
+		"meta ha mode");
+	define_str_config("meta_innodb_size", meta_innodb_size, "no_rep",
+		"meta innodb size");
+	
 	define_str_config("meta_user", meta_svr_user, "",
 		"meta data server user account");
 	define_str_config("meta_pwd", meta_svr_pwd, "",
@@ -447,8 +450,6 @@ int Configs::set_enum_cfg(const std::string &name, const char* val)
 int Configs::check_key_vars_set(std::string &vars)
 {
 	int cnt = 0;
-	if (meta_svr_port == 0) { cnt++; vars = "port"; }
-	if (meta_svr_ip.length() == 0) { cnt++; vars += "; host"; }
 	if (meta_svr_user.length() == 0) { cnt++; vars += "; user"; }
 	if (meta_svr_pwd.length() == 0) { cnt++; vars += "; password"; }
 	if (log_file_path.length() == 0) { cnt++; vars += "; log_file"; }
@@ -468,6 +469,7 @@ public:
   Return 0 on success;
   -9 on log entry format error
   -8 if there are vars that must be assigned a value are not so.
+  -10 meta_group_seeds is invalid 
 */
 int Configs::process_config_file(const std::string &fn)
 {
@@ -533,6 +535,35 @@ int Configs::process_config_file(const std::string &fn)
 			nbad, bad_vars.c_str());
 		return -8;
 	}
+
+	//get meta_ip_port by meta_group_seeds
+	char *cStart, *cEnd;
+	cStart = (char*)meta_group_seeds.c_str();
+	while(*cStart != '\0')
+	{
+		cEnd = strchr(cStart, ':');
+		if(cEnd == NULL)
+			break;
+		
+		meta_svr_ip = std::string(cStart, cEnd - cStart);
+
+		cStart = cEnd+1;
+		cEnd = strchr(cStart, ',');
+		meta_svr_port = atoi(cStart);
+		if(cEnd == NULL)
+			*cStart = '\0';
+		else
+			cStart = cEnd+1;
+
+		vec_meta_ip_port.emplace_back(std::make_pair(meta_svr_ip, meta_svr_port));
+	}
+
+	if (vec_meta_ip_port.size() == 0)
+	{
+		syslog(Logger::ERROR, "meta_group_seeds is invalid : %s",meta_group_seeds.c_str());
+		return -10;
+	}
+
 	return 0;
 }
 
