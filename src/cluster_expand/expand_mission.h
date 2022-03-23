@@ -40,20 +40,22 @@ public:
   virtual bool TearDownMission() override final;
   virtual bool FillRequestBodyStImpl() override final;
   virtual void ReportStatus() override final;
+  bool ArrangeRemoteTaskForRecover();
 
 public:
   std::string get_table_list_str() const;
 
 private:
-  bool MakeDir();
+  std::string MakeDir(std::string nodemgr_address, std::string path_suffix);
   bool DumpTable();
+  bool CompressDumpedFile();
+  bool TransferFile();
   bool LoadTable();
   bool TableCatchUp();
-  bool TransferFile();
 
 private:
   // Will be initialized in setup phase
-  std::string mydumper_tmp_data_dir_;
+  std::string mydumper_tmp_data_dir_suffix_;
   std::string src_shard_node_address_;
   int64_t src_shard_node_port_;
   std::string dst_shard_node_address_;
@@ -65,6 +67,8 @@ private:
   std::string table_list_str_storage_;
   // table_move_jobs id
   std::string related_id_;
+  // tarball name
+  std::string tarball_name_prefix_;
 };
 };     // namespace kunlun
 #endif /*_EXPAND_MISSION_H_*/

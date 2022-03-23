@@ -48,8 +48,20 @@ cluster_mgr_brpc_http_port = 8010
 # log file path and name
 log_file = ../log/sys_cluster_mgr.log
 
+# log file path and name
+cluster_mgr_tmp_data_path = ../data
+
 # NO. of times a SQL statement is resent for execution when MySQL connection broken.
 statement_retries = 3
 
 # Interval in milli-seconds a statement is resent for execution when it fails and we believe MySQL node will be ready in a while.
 statement_retry_interval_ms = 1000
+
+# specify the raft group memeber config, comma seperate formation, must stop with comma
+raft_group_member_init_config = 192.168.0.135:8110:0,
+
+# raft server listen port
+raft_brpc_port = 8110
+
+# Net Interface device name
+dev_interface = eno1

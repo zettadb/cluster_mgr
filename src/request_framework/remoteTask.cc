@@ -8,7 +8,9 @@
 
 static void CallBC(brpc::Controller *cntl, RemoteTask *task) {
   if (!cntl->Failed()) {
-    syslog(Logger::INFO, "CallBC(): response is %s",
+    syslog(Logger::INFO,
+           "General Remote Task CallBC(): task %s response is: %s",
+           task->get_task_spec_info(),
            cntl->response_attachment().to_string().c_str());
 
     // deal the attachment

@@ -32,6 +32,7 @@ public:
     body_json_document_ = *doc;
     status_ = NOT_STARTED;
     request_types_ = kRequestTypeUndefined;
+    init_by_recover_ = false;
   }
   virtual ~ClusterRequest() {}
 
@@ -54,6 +55,9 @@ public:
   // getter & setter
   void set_status(RequestStatus);
   RequestStatus get_status();
+
+  void set_init_by_recover_flag(bool init_by_recover);
+  bool get_init_by_recover_flag();
 
   std::string get_request_unique_id();
   void set_request_unique_id(std::string &);
@@ -81,6 +85,7 @@ private:
   std::string request_unique_id_;
   Json::Value body_json_document_;
   RequestBody request_body_;
+  bool init_by_recover_;
 };
 
 #endif /*_KUNLUN_CLUSTER_MNG_REQUEST_H_*/

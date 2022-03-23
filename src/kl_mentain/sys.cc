@@ -16,12 +16,15 @@
 #include "shard.h"
 #include "sys_config.h"
 #include "thread_manager.h"
+#include "zettalib/tool_func.h"
 #include <utility>
 
 System *System::m_global_instance = NULL;
 extern std::string log_file_path;
 extern int64_t storage_instance_port_start;
 extern int64_t computer_instance_port_start;
+extern std::string dev_interface;
+std::string local_ip;
 
 System::~System() {
   // Http_server::get_instance()->do_exit = 1;
@@ -39,8 +42,8 @@ System::~System() {
   for (auto &i : kl_clusters)
     delete i;
 
-  delete Configs::get_instance();
-  delete Logger::get_instance();
+//  delete Configs::get_instance();
+//  delete Logger::get_instance();
 
   Thread_manager::do_exit = 1;
   Thread_manager::get_instance()->join_all();
@@ -225,15 +228,15 @@ int System::truncate_commit_log_from_metadata_server() {
 */
 int System::create_instance(const std::string &cfg_path) {
   m_global_instance = new System(cfg_path);
-  Configs *cfg = Configs::get_instance();
+//  Configs *cfg = Configs::get_instance();
   int ret = 0;
 
-  if ((ret = Logger::create_instance()))
-    goto end;
-  if ((ret = cfg->process_config_file(cfg_path)))
-    goto end;
-  if ((ret = Logger::get_instance()->init(log_file_path)) != 0)
-    goto end;
+ // if ((ret = Logger::create_instance()))
+ //   goto end;
+ // if ((ret = cfg->process_config_file(cfg_path)))
+ //   goto end;
+ // if ((ret = Logger::get_instance()->init(log_file_path)) != 0)
+ //   goto end;
   if ((ret = m_global_instance->setup_metadata_shard()) != 0)
     goto end;
   if ((ret = m_global_instance->refresh_shards_from_metadata_server()) != 0)

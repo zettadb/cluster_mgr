@@ -32,6 +32,7 @@ public:
   void Emit(google::protobuf::RpcController *, const HttpRequest *,
             HttpResponse *, google::protobuf::Closure *);
 
+  bool RecoverInteruptedJobIfExists();
   ClusterRequest *GenerateRequest(google::protobuf::RpcController *);
   MissionRequest *MissionRequestFactory(Json::Value *);
 
@@ -53,5 +54,7 @@ private:
 };
 
 extern brpc::Server *NewHttpServer();
-
+extern void RecoverInteruptedJobIfExists(kunlun::MysqlConnection *,
+                                         HandleRequestThread *);
+extern void SetInteruptedJobAsFaild(kunlun::MysqlConnection *, const char *);
 #endif /*_CLUSTER_MGR_HTTP_SERVER_H_*/

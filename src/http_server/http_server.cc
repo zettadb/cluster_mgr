@@ -180,7 +180,7 @@ HttpServiceImpl::GenerateRequest(google::protobuf::RpcController *cntl_base) {
     return mission_request;
   }
   if (request_method == brpc::HTTP_METHOD_GET) {
-    // generate fetchRequest
+    // TODO: generate fetchRequest
   }
   return nullptr;
 }
@@ -233,22 +233,22 @@ HttpServiceImpl::GenerateRequestUniqueId(ClusterRequest *inner_request) {
   bzero((void *)sql_buffer, (size_t)4096);
 
   std::string last_insert_id = std::string(query_result[0]["insert_id"]);
-  Json::Value paras = inner_request->get_body_json_document()["paras"];
+  Json::Value job_info = inner_request->get_body_json_document();
   Json::FastWriter writer;
   writer.omitEndingLineFeed();
-  std::string paras_str = writer.write(paras);
+  std::string job_info_str = writer.write(job_info);
 
   std::string related_id = FetchRelatedIdInSameSession(
       meta_cluster_mysql_conn_, inner_request->get_request_body().job_type_str);
-  if(related_id.empty()){
-    syslog(Logger::INFO,"Get empty related_id: %s",getErr());
+  if (related_id.empty()) {
+    syslog(Logger::INFO, "Get empty related_id: %s", getErr());
   }
   query_result.Clean();
   sprintf(
       sql_buffer,
       "update %s.cluster_general_job_log set related_id= '%s',job_info='%s' "
       "where id = %s",
-      KUNLUN_METADATA_DB_NAME, related_id.c_str(), paras_str.c_str(),
+      KUNLUN_METADATA_DB_NAME, related_id.c_str(), job_info_str.c_str(),
       last_insert_id.c_str());
   ret = meta_cluster_mysql_conn_->ExcuteQuery(sql_buffer, &query_result);
   if (ret != 1) {
@@ -266,9 +266,31 @@ HttpServiceImpl::GenerateRequestUniqueId(ClusterRequest *inner_request) {
   return last_insert_id;
 }
 
+// **related id**
+//
+// For every job which recived by cluster_mgr, an unique record exists in
+// kunlun_metadata_db.cluster_general_job_log which related to job itself
+//
+// But different job type may be consist of the different job info. For
+// instance, table_move_job may have the different progressive information
+// which generated during the job dealing procedure.
+//
+// Thus, we employ an new table `kunlun_metadata_db.table_move_job` to
+// store the info mentioned above.
+//
+// From this point of view, we need an extra attribute to associate
+// cluster_general_job_log and the table_move_job, which is implemented by
+// using the cluster_general_job_log.related_id as the logical constrain
+// bettwen two tables above.
+//
+// In the `Table moving` or `cluster expanding` sence, this filed `related_id`
+// is associate with the table_move_kob.id.
+//
+
 std::string
 HttpServiceImpl::FetchRelatedIdInSameSession(kunlun::MysqlConnection *conn,
                                              std::string job_type) {
+
   char sql[2048] = {'\0'};
   kunlun::MysqlResult result;
   std::string related_id = "";
@@ -279,7 +301,8 @@ HttpServiceImpl::FetchRelatedIdInSameSession(kunlun::MysqlConnection *conn,
 
   switch (request_type) {
   case kunlun::kClusterExpandType:
-    sprintf(sql, "insert into kunlun_metadata_db.table_move_jobs set tab_file_format='logical'");
+    sprintf(sql, "insert into kunlun_metadata_db.table_move_jobs set "
+                 "tab_file_format='logical'");
     ret = conn->ExcuteQuery(sql, &result);
     if (ret != 1) {
       setErr("%s", conn->getErr());
@@ -312,6 +335,67 @@ extern std::string meta_svr_pwd;
 
 int64_t cluster_mgr_brpc_http_port;
 
+void SetInteruptedJobAsFaild(kunlun::MysqlConnection *meta_conn,
+                             const char *request_id) {}
+// **Recover Job from startup**
+//
+// When Cluster_mgr start or failover from another instance,there may be exists
+// the interupted job caused by the failover.
+//
+// RecoverInteruptedJobIfExists is used to dealing such scenario.
+// The roughly procedure is designed like described below:
+//
+// 1. We scan the cluster_general_job_log to find the job which status is nether
+// `done` nor `failed`.
+// 2. if job status is `not_starting`, we just abandon this job
+// 3. if job status is `ongoing`, wo recover this job, marke the job as recoverd
+// to identify that needs special task arranging tactic.
+// 4. push the recoved job to the handle_request_thread just like the normal
+// request.
+bool HttpServiceImpl::RecoverInteruptedJobIfExists() {
+
+  char sql_buff[4096] = {'\0'};
+  sprintf(sql_buff, "select * from kunlun_metadata_db.cluster_general_job_log "
+                    "where status <> 'done' and status <> 'failed'");
+  kunlun::MysqlResult result;
+  int ret = meta_cluster_mysql_conn_->ExcuteQuery(sql_buff, &result);
+  if (ret < 0) {
+    setErr("%s",meta_cluster_mysql_conn_->getErr());
+    return false;
+  }
+  for (int i = 0; i < result.GetResultLinesNum(); i++) {
+    std::string status = result[i]["status"];
+    if (status == "not_started") {
+      SetInteruptedJobAsFaild(meta_cluster_mysql_conn_, result[i]["id"]);
+      continue;
+    }
+    // regenerate the job and push to the request_handle_thread
+    std::string request_id = result[i]["id"];
+    std::string job_info = result[i]["job_info"];
+    Json::Value body_json_doc;
+    Json::Reader reader;
+    bool ret = reader.parse(job_info, body_json_doc);
+    if (!ret) {
+      SetInteruptedJobAsFaild(meta_cluster_mysql_conn_, request_id.c_str());
+      syslog(Logger::ERROR, "Recover Interupted Job failed: %s",
+             reader.getFormattedErrorMessages().c_str());
+      continue;
+    }
+    MissionRequest *mission_request = MissionRequestFactory(&body_json_doc);
+    if(mission_request == nullptr){
+      syslog(Logger::ERROR,"recover interupted job %s on startup failed: %s",request_id.c_str(),this->getErr());
+      continue;
+    }
+    mission_request->set_request_unique_id(request_id);
+    // we indicate current job as init_by_recover
+    mission_request->set_init_by_recover_flag(true);
+    //dispatch the job
+    request_handle_thread_->DispatchRequest(mission_request);
+    syslog(Logger::INFO,"dispatch the recovered job %s success",request_id.c_str());
+  }
+  return true;
+}
+
 brpc::Server *NewHttpServer() {
 
   HandleRequestThread *request_handle_thread = new HandleRequestThread();
@@ -340,6 +424,11 @@ brpc::Server *NewHttpServer() {
   service->set_request_handle_thread(request_handle_thread);
   service->set_meta_cluster_mysql_conn(conn);
 
+  ret = service->RecoverInteruptedJobIfExists();
+  if(ret == false){
+    syslog(Logger::ERROR,"Error Happened in recover interupted job func: %s",service->getErr());
+  }
+
   brpc::Server *server = new brpc::Server();
   if (server->AddService(service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
     syslog(Logger::ERROR, "Add service to brpc::Server failed,");
@@ -347,6 +436,7 @@ brpc::Server *NewHttpServer() {
   }
   brpc::ServerOptions *options = new brpc::ServerOptions();
   options->idle_timeout_sec = -1;
+  options->num_threads = 1;
   if (server->Start(cluster_mgr_brpc_http_port, options) != 0) {
     syslog(Logger::ERROR, "http server start failed,");
     return nullptr;

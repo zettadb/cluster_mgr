@@ -9,13 +9,15 @@
 #include "request_framework/requestValueDefine.h"
 #include "zettalib/op_mysql.h"
 
-namespace kunlun
-{
-  extern std::string GenerateNewClusterIdStr(MysqlConnection *);
-  ClusterRequestTypes GetReqTypeEnumByStr(const char *);
-  bool RecognizedRequestType(ClusterRequestTypes);
-  bool RecognizedJobTypeStr(std::string &);
-  bool ValidNetWorkAddr(const char *);
+namespace kunlun {
+extern std::string GenerateNewClusterIdStr(MysqlConnection *);
+ClusterRequestTypes GetReqTypeEnumByStr(const char *);
+bool RecognizedRequestType(ClusterRequestTypes);
+bool RecognizedJobTypeStr(std::string &);
+bool ValidNetWorkAddr(const char *);
+std::string FetchNodemgrTmpDataPath(MysqlConnection *meta, const char *ip);
+int64_t FetchNodeMgrListenPort(MysqlConnection *meta, const char *ip);
+
 } // namespace kunlun
 
 #endif /*_KUNLUN_META_INFO_UTIL_FUNC_H_*/

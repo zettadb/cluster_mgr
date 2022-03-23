@@ -23,6 +23,7 @@ add_subdirectory(src/http_server)
 add_subdirectory(src/request_framework)
 add_subdirectory(src/util_func)
 add_subdirectory(src/cluster_expand)
+add_subdirectory(src/raft_ha)
 add_executable(cluster_mgr src/main.cc)
 target_include_directories(cluster_mgr PUBLIC
   "${PROJECT_BINARY_DIR}"
@@ -32,23 +33,25 @@ target_include_directories(cluster_mgr PUBLIC
   "${PROJECT_SOURCE_DIR}/src/http_server"
   "${PROJECT_SOURCE_DIR}/src/request_framework"
   "${PROJECT_SOURCE_DIR}/src/util_func"
-  "${PROJECT_SOURCE_DIR}/src/cluster_expand")
+  "${PROJECT_SOURCE_DIR}/src/cluster_expand"
+  "${PROJECT_SOURCE_DIR}/src/raft_ha")
 target_link_libraries(cluster_mgr 
   kl_mentain
   http_server 
   request_framework 
   util_func 
   cluster_expand 
+  raft_ha
   libzettalib.a
-  libjsoncpp.a 
+  libbraft.a
   libbrpc.a 
+  libjsoncpp.a 
   libgflags.a 
   libprotobuf.a 
   libleveldb.a 
   mariadb 
   pthread 
   pq 
-  tcmalloc
   libssl.a 
   libcrypto.a 
   dl 

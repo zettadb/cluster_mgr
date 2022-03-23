@@ -76,6 +76,7 @@ class Configs
 	int check_key_vars_set(std::string &vars);
 public:
 	static Configs *get_instance();
+	static Configs *get_instance(const char *);
 	int process_config_file(const std::string &fn);
 	/*
 	  Set config parameter values.

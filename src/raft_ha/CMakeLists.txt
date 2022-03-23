@@ -1,0 +1,6 @@
+add_library(raft_ha OBJECT raft_ha.cc )
+target_include_directories(raft_ha INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_include_directories(raft_ha PUBLIC "${PROJECT_SOURCE_DIR}/src")
+target_include_directories(raft_ha PUBLIC "${PROJECT_SOURCE_DIR}/src/vendor/include")
+target_include_directories(raft_ha PUBLIC "${PROJECT_BINARY_DIR}")
+target_include_directories(raft_ha PUBLIC "${ZETTALIB_INCLUDE_PATH}")

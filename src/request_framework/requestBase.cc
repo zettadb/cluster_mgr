@@ -125,4 +125,12 @@ std::string ClusterRequest::get_request_unique_id()
   return request_unique_id_;
 }
 
+void ClusterRequest::set_init_by_recover_flag(bool init_by_recover){
+  init_by_recover_ = init_by_recover;
+}
+
+bool ClusterRequest::get_init_by_recover_flag(){
+  return init_by_recover_;
+}
+
 bool ClusterRequest::ParseBodyToJson(const std::string &raw_body) { return true; }
