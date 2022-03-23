@@ -32,8 +32,13 @@ int64_t stmt_retries = 3;
 int64_t stmt_retry_interval_ms = 500;
 
 std::string meta_svr_ip;
+std::string meta_group_seeds;
+std::string meta_ha_mode;
+std::string meta_innodb_size;
 std::string meta_svr_user;
 std::string meta_svr_pwd;
+
+std::vector<Tpye_Ip_Port> vec_meta_ip_port;
 
 // not configurable for now
 bool mysql_transmit_compress = false;
