@@ -8,6 +8,7 @@
 #include "bthread/bthread.h"
 #include "butil/iobuf.h"
 #include "cluster_expand/expand_mission.h"
+#include "example_mission/example_mission.h"
 #include "request_framework/missionRequest.h"
 #include "strings.h"
 #include "util_func/error_code.h"
@@ -120,6 +121,9 @@ MissionRequest *HttpServiceImpl::MissionRequestFactory(Json::Value *doc) {
   switch (request_type) {
   case kunlun::kClusterExpandType:
     request = new kunlun::ExpandClusterMission(doc);
+    break;
+  case kunlun::kExampleRequestType:
+    request = new kunlun::ExampleMission(doc);
     break;
     // TODO: Add more above
   default:

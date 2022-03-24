@@ -8,35 +8,33 @@
 #define _NODE_CHANNEL_H_
 
 #include "brpc/channel.h"
-#include "zettalib/op_mysql.h"
-#include "zettalib/errorcup.h"
-#include "zettalib/zthread.h"
 #include "request_framework/requestValueDefine.h"
 #include "util_func/error_code.h"
+#include "zettalib/errorcup.h"
+#include "zettalib/op_mysql.h"
+#include "zettalib/zthread.h"
 #include <map>
 #include <string>
 #include <vector>
 
-typedef struct NodeSpecSt_
-{
+typedef struct NodeSpecSt_ {
   std::string ip = "";
   unsigned int port = 0;
 } NodeSpecSt;
 
 // Not thread-safe yet
-class GlobalNodeChannelManager : public kunlun::ZThread, public kunlun::ErrorCup, public kunlun::GlobalErrorNum
-{
+class GlobalNodeChannelManager : public kunlun::ZThread,
+                                 public kunlun::ErrorCup,
+                                 public kunlun::GlobalErrorNum {
 public:
-  GlobalNodeChannelManager()
-  {
-    mysql_conn_ = nullptr;
-  };
+  GlobalNodeChannelManager() { mysql_conn_ = nullptr; };
   ~GlobalNodeChannelManager();
 
   bool Init();
   brpc::Channel *getNodeChannel(const char *);
   int run();
   kunlun::MysqlConnection *get_meta_conn();
+  const std::map<std::string,brpc::Channel *> &get_nodes_channel_map() const;
 
 private:
   bool initNodeChannelMap();

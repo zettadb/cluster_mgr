@@ -8,10 +8,6 @@
 
 static void CallBC(brpc::Controller *cntl, RemoteTask *task) {
   if (!cntl->Failed()) {
-    syslog(Logger::INFO,
-           "General Remote Task CallBC(): task %s response is: %s",
-           task->get_task_spec_info(),
-           cntl->response_attachment().to_string().c_str());
 
     // deal the attachment
     // store the channel response attachment to the task RESPONSE
@@ -25,6 +21,11 @@ static void CallBC(brpc::Controller *cntl, RemoteTask *task) {
       syslog(Logger::ERROR, "%s, %s", task->get_response()->getErr(),
              task->get_response()->get_err_num_str());
     }
+    syslog(Logger::INFO,
+           "General Remote Task CallBC(): task %s response from %s is: %s",
+           task->get_task_spec_info(),
+           channle_name.c_str(),
+           cntl->response_attachment().to_string().c_str());
     // do the drived call back if defined
     if (task->call_back_ != nullptr) {
       (*(task->call_back_))(task->cb_context_);

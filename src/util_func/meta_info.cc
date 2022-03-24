@@ -38,6 +38,9 @@ constexpr unsigned long long operator"" _hash(char const *p, size_t) {
 ClusterRequestTypes GetReqTypeEnumByStr(const char *type_str) {
   ClusterRequestTypes type_enum = kRequestTypeUndefined;
   switch (hash_(type_str)) {
+  case "example_mission"_hash:
+    type_enum = kExampleRequestType;
+    break;
   case "cluster_create"_hash:
     type_enum = kCreateClusterType;
     break;
@@ -113,8 +116,8 @@ int64_t FetchNodeMgrListenPort(MysqlConnection *meta, const char *ip) {
           ip);
 
   kunlun::MysqlResult result;
-  int ret = meta->ExcuteQuery(sql,&result);
-  if (ret <0){
+  int ret = meta->ExcuteQuery(sql, &result);
+  if (ret < 0) {
     return -1;
   }
   return ::atoi(result[0]["port"]);

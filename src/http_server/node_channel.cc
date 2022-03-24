@@ -5,8 +5,8 @@
    combined with Common Clause Condition 1.0, as detailed in the NOTICE file.
 */
 #include "node_channel.h"
-#include "stdio.h"
 #include "kl_mentain/log.h"
+#include "stdio.h"
 #include "string.h"
 #include "util_func/meta_info.h"
 
@@ -15,60 +15,57 @@ extern int64_t meta_svr_port;
 extern std::string meta_svr_user;
 extern std::string meta_svr_pwd;
 
-GlobalNodeChannelManager::~GlobalNodeChannelManager()
-{
+GlobalNodeChannelManager::~GlobalNodeChannelManager() {
   auto iter = nodes_channel_map_.begin();
-  for (; iter != nodes_channel_map_.end(); iter++)
-  {
+  for (; iter != nodes_channel_map_.end(); iter++) {
     delete (iter->second);
   }
 }
 
-kunlun::MysqlConnection * GlobalNodeChannelManager::get_meta_conn(){
+kunlun::MysqlConnection *GlobalNodeChannelManager::get_meta_conn() {
   return mysql_conn_;
 }
 
-int GlobalNodeChannelManager::run(){
-  while(1){
+int GlobalNodeChannelManager::run() {
+  while (1) {
     reloadFromMeta();
     sleep(1);
   }
   return 0;
 }
 
-void GlobalNodeChannelManager::reloadFromMeta(){
-  return ;
+void GlobalNodeChannelManager::reloadFromMeta() { return; }
+
+const std::map<std::string, brpc::Channel *> &
+GlobalNodeChannelManager::get_nodes_channel_map() const {
+  return nodes_channel_map_;
 }
 
-brpc::Channel *GlobalNodeChannelManager::getNodeChannel(const char *addr)
-{
+brpc::Channel *GlobalNodeChannelManager::getNodeChannel(const char *addr) {
   auto iter = nodes_channel_map_.find(addr);
-  if (iter == nodes_channel_map_.end())
-  {
+  if (iter == nodes_channel_map_.end()) {
     return nullptr;
   }
   return nodes_channel_map_[addr];
 }
 
-bool GlobalNodeChannelManager::initNodeChannelMap()
-{
+bool GlobalNodeChannelManager::initNodeChannelMap() {
   char sql_stmt[1024] = {'\0'};
   sprintf(sql_stmt, "SELECT * FROM `%s`.`server_nodes`",
           KUNLUN_METADATA_DB_NAME);
   kunlun::MysqlResult result;
   int ret = mysql_conn_->ExcuteQuery(sql_stmt, &result);
-  if (ret < 0)
-  {
+  if (ret < 0) {
     setErr("%s", mysql_conn_->getErr());
     return false;
   }
-  for (int i = 0; i < result.GetResultLinesNum(); i++)
-  {
+  for (int i = 0; i < result.GetResultLinesNum(); i++) {
     char node_hostaddr_str[1024] = {'\0'};
-    sprintf(node_hostaddr_str, "%s:%s", result[i]["hostaddr"], result[i]["nodemgr_port"]);
-    if (!kunlun::ValidNetWorkAddr(result[i]["hostaddr"]))
-    {
-      syslog(Logger::INFO, "Invalid Network address: %s. Will ignore", node_hostaddr_str);
+    sprintf(node_hostaddr_str, "%s:%s", result[i]["hostaddr"],
+            result[i]["nodemgr_port"]);
+    if (!kunlun::ValidNetWorkAddr(result[i]["hostaddr"])) {
+      syslog(Logger::INFO, "Invalid Network address: %s. Will ignore",
+             node_hostaddr_str);
       continue;
     }
 
@@ -82,26 +79,25 @@ bool GlobalNodeChannelManager::initNodeChannelMap()
     channel_options.timeout_ms = 5000000;
 
     int ret = channel->Init(url, "", &channel_options);
-    if (ret != 0)
-    {
+    if (ret != 0) {
       set_err_num(ENODE_UNREACHEABLE);
-      syslog(Logger::ERROR, "Channel for %s init faild,Ignored", node_hostaddr_str);
+      syslog(Logger::ERROR, "Channel for %s init faild,Ignored",
+             node_hostaddr_str);
       setErr("Channel for %s init faild", node_hostaddr_str);
       delete channel;
       continue;
       // return false;
     }
-    syslog(Logger::INFO, "Channel %s for Node Manager init successfully", node_hostaddr_str);
+    syslog(Logger::INFO, "Channel %s for Node Manager init successfully",
+           node_hostaddr_str);
     nodes_channel_map_[result[i]["hostaddr"]] = channel;
   }
   return true;
 }
 
-bool GlobalNodeChannelManager::Init()
-{
+bool GlobalNodeChannelManager::Init() {
 
-  if (!mysql_conn_)
-  {
+  if (!mysql_conn_) {
     kunlun::MysqlConnectionOption option;
     option.ip = meta_svr_ip;
     option.port_num = meta_svr_port;
@@ -109,8 +105,7 @@ bool GlobalNodeChannelManager::Init()
     option.password = meta_svr_pwd;
 
     mysql_conn_ = new kunlun::MysqlConnection(option);
-    if (!mysql_conn_->Connect())
-    {
+    if (!mysql_conn_->Connect()) {
       setErr("%s", mysql_conn_->getErr());
       return false;
     }

@@ -24,6 +24,7 @@ enum RequestStatus {
 
 enum ClusterRequestTypes {
   kRequestTypeUndefined = 0,
+  kExampleRequestType,
   kCreateClusterType,
   kDropClusterType,
   kComputeNodeAddType,
@@ -35,7 +36,7 @@ enum ClusterRequestTypes {
   kClusterExpandType,
 
   // addtional type should add above
-  kRequestTypeMax
+  kRequestTypeMax = 1000
 };
 
 typedef struct RequestBody_ {
