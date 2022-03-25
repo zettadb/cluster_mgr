@@ -2317,7 +2317,7 @@ int MetadataShard::update_instance_status(Tpye_Ip_Port &ip_port, std::string &st
   @retval 0 succeed;
   		  1 fail;
 */
-int MetadataShard::get_backup_storage_string(std::string &name, std::string &storage_id, std::string &backup_storage)
+int MetadataShard::get_backup_storage_string(std::string &name, std::string &backup_storage_id, std::string &backup_storage_str)
 {
 	Scopped_mutex sm(mtx);
 
@@ -2336,8 +2336,8 @@ int MetadataShard::get_backup_storage_string(std::string &name, std::string &sto
 		ret = 1;
 		if ((row = mysql_fetch_row(result)))
 		{
-			storage_id = row[0];
-			backup_storage = row[1];
+			backup_storage_id = row[0];
+			backup_storage_str = row[1];
 			ret = 0;
 		}
 		cur_master->free_mysql_result();
@@ -2801,6 +2801,37 @@ int MetadataShard::check_nick_name(std::string &nick_name)
 		return 1;
 
 	std::string str_sql = "select id from db_clusters where nick_name='" + nick_name + "'";
+	int ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+
+		ret = 1;
+		if ((row = mysql_fetch_row(result)))
+		{
+			ret = 0;
+		}
+		cur_master->free_mysql_result();
+	}
+
+	return ret;
+}
+
+/*
+  check meta ip port from metadata table 
+  @retval 0 succeed;
+  		  1 fail;
+*/
+int MetadataShard::check_meta_ip_port(Tpye_Ip_Port &ip_port)
+{
+	Scopped_mutex sm(mtx);
+
+	if(cur_master == NULL)
+		return 1;
+
+	std::string str_sql = "select id from meta_db_nodes where hostaddr='" + ip_port.first;
+	str_sql += "' and port=" + std::to_string(ip_port.second);
 	int ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
 	if (ret==0)
 	{

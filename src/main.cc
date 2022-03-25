@@ -51,7 +51,8 @@ int main(int argc, char **argv)
 	// waiting for create meta shard or network connected
 	while(!Thread_manager::do_exit)
 	{
-		if(System::get_instance()->setup_metadata_shard() == 0)
+		if (System::get_instance()->get_cluster_mgr_working() && 
+			System::get_instance()->setup_metadata_shard() == 0)
 		{
 			// roll back job because cluster_mgr crash
 			System::get_instance()->refresh_shards_from_metadata_server();

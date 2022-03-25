@@ -43,6 +43,7 @@ JOB_UPDATE_PROMETHEUS,
 JOB_POSTGRES_EXPORTER, 
 JOB_MYSQLD_EXPORTER, 
 JOB_CONTROL_INSTANCE, 
+JOB_CREATE_META, 
 JOB_CREATE_CLUSTER, 
 JOB_DELETE_CLUSTER, 
 JOB_ADD_SHARDS, 
@@ -71,7 +72,7 @@ public:
 	static int do_exit;
 	std::vector<std::string> vec_local_ip;
 	std::string user_name;
-	std::string storage_id,backup_storage;
+	std::string backup_storage_id,backup_storage_str;
 
 private:
 	static Job *m_inst;
@@ -143,6 +144,8 @@ public:
 
 	bool job_generate_cluster_name(std::string &cluster_name);
 	bool job_create_program_path();
+	bool job_start_meta(std::vector<Tpye_Ip_Port> &vec_meta_ip_port, std::string &ha_mode);
+	void job_create_meta(cJSON *root);
 	bool job_create_meta_jsonfile();
 	bool job_create_shards_jsonfile(std::vector <std::vector<Tpye_Ip_Port_Paths>> &vec_shard, std::vector<std::string> &vec_shard_name);
 	bool job_create_storage(Tpye_Ip_Port_Paths &storage, cJSON *root, int install_id);

@@ -104,7 +104,7 @@ retry_group_seeds:
 		meta_shard.add_node(sn);
 
 		// set meta shard HAVL_mode
-		ret = sn->send_stmt(SQLCOM_SELECT, CONST_STR_PTR_LEN("select value from global_configuration where name='meta_ha_mode'"), 3);
+		ret = sn->send_stmt(SQLCOM_SELECT, CONST_STR_PTR_LEN("select value from global_configuration where name='meta_ha_mode'"), stmt_retries);
 		if (ret == 0)
 		{
 			MYSQL_RES *result = sn->get_result();
@@ -133,7 +133,7 @@ retry_group_seeds:
 	}
 
 	ret = sn->send_stmt(SQLCOM_SELECT, CONST_STR_PTR_LEN(
-		"select MEMBER_HOST, MEMBER_PORT from performance_schema.replication_group_members where MEMBER_ROLE = 'PRIMARY' and MEMBER_STATE = 'ONLINE'"), 3);
+		"select MEMBER_HOST, MEMBER_PORT from performance_schema.replication_group_members where MEMBER_ROLE = 'PRIMARY' and MEMBER_STATE = 'ONLINE'"), stmt_retries);
 	if (ret)
 		return ret;
 
@@ -582,6 +582,19 @@ bool System::rename_cluster(std::string &cluster_name, std::string &nick_name)
 	return true;
 }
 
+bool System::check_meta_ip_port(Tpye_Ip_Port &ip_port)
+{
+	Scopped_mutex sm(mtx);
+
+	if(meta_shard.check_meta_ip_port(ip_port))
+	{
+		//syslog(Logger::ERROR, "check_meta_ip_port error");
+		return false;
+	}
+
+	return true;
+}
+
 bool System::check_cluster_shard_name(std::string &cluster_name, std::string &shard_name)
 {
 	Scopped_mutex sm(mtx);
@@ -747,11 +760,11 @@ bool System::update_instance_status(Tpye_Ip_Port &ip_port, std::string &status, 
 	return true;
 }
 
-bool System::get_backup_storage_string(std::string &name, std::string &storage_id, std::string &backup_storage)
+bool System::get_backup_storage_string(std::string &name, std::string &backup_storage_id, std::string &backup_storage_str)
 {
 	Scopped_mutex sm(mtx);
 
-	if(meta_shard.get_backup_storage_string(name, storage_id, backup_storage))
+	if(meta_shard.get_backup_storage_string(name, backup_storage_id, backup_storage_str))
 	{
 		//syslog(Logger::ERROR, "get_backup_storage_string error");
 		return false;

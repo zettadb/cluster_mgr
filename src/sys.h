@@ -106,6 +106,7 @@ public:
 	bool check_cluster_name(std::string &cluster_name);
 	bool check_nick_name(std::string &nick_name);
 	bool rename_cluster(std::string &cluster_name, std::string &nick_name);
+	bool check_meta_ip_port(Tpye_Ip_Port &ip_port);
 	bool check_cluster_shard_name(std::string &cluster_name, std::string &shard_name);
 	bool check_cluster_comp_name(std::string &cluster_name, std::string &comp_name);
 	bool check_cluster_shard_more(std::string &cluster_name);
@@ -116,7 +117,7 @@ public:
 	bool get_meta_master(Tpye_Ip_Port_User_Pwd &meta);
 	bool get_machine_instance_port(Machine* machine);
 	bool update_instance_status(Tpye_Ip_Port &ip_port, std::string &status, int &type);
-	bool get_backup_storage_string(std::string &name, std::string &storage_id, std::string &backup_storage);
+	bool get_backup_storage_string(std::string &name, std::string &backup_storage_id, std::string &backup_storage_str);
 	bool get_backup_storage_list(cJSON *root, std::string &str_ret);
 	bool get_node_instance(cJSON *root, std::string &str_ret);
 	bool get_meta(cJSON *root, std::string &str_ret);

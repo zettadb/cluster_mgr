@@ -936,7 +936,7 @@ bool Job::job_machine_summary(cJSON *root, std::string &str_ret)
 
 		/////////////////////////////////////////////////////////
 		// get status from node 
-		get_status = "{\"ver\":\"" + http_cmd_version + "\",\"job_id\":\"" + uuid_job_id + "\",\"job_type\":\"get_status\"}";
+		get_status = "{\"version\":\"" + http_cmd_version + "\",\"job_id\":\"" + uuid_job_id + "\",\"job_type\":\"get_status\"}";
 
 		item_sub = cJSON_CreateObject();
 		cJSON_AddItemToArray(ret_root, item_sub);
@@ -1237,13 +1237,13 @@ bool Job::job_delete_backup_storage(cJSON *root, std::string &str_ret)
 
 	/////////////////////////////////////////////////////////
 	//must delete cluster_shard_backup_restore_log
-	if(!System::get_instance()->get_backup_storage_string(name, storage_id, backup_storage))
+	if(!System::get_instance()->get_backup_storage_string(name, backup_storage_id, backup_storage_str))
 	{
 		job_info = "get_backup_storage_string error";
 		goto end;
 	}
 
-	str_sql = "delete from cluster_shard_backup_restore_log where storage_id=" + storage_id;
+	str_sql = "delete from cluster_shard_backup_restore_log where storage_id=" + backup_storage_id;
 	//syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
 
 	if(System::get_instance()->execute_metadate_opertation(SQLCOM_DELETE, str_sql))
@@ -1254,7 +1254,7 @@ bool Job::job_delete_backup_storage(cJSON *root, std::string &str_ret)
 
 	/////////////////////////////////////////////////////////
 	//must delete cluster_backups 
-	str_sql = "delete from cluster_backups where storage_id=" + storage_id;
+	str_sql = "delete from cluster_backups where storage_id=" + backup_storage_id;
 	//syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
 
 	if(System::get_instance()->execute_metadate_opertation(SQLCOM_DELETE, str_sql))
@@ -2136,7 +2136,7 @@ bool Job::job_control_instance(Tpye_Ip_Port &ip_port, std::string type, std::str
 	/////////////////////////////////////////////////////////
 	// create json parameter
 	root = cJSON_CreateObject();
-	cJSON_AddStringToObject(root, "ver", http_cmd_version.c_str());
+	cJSON_AddStringToObject(root, "version", http_cmd_version.c_str());
 	cJSON_AddStringToObject(root, "job_id", uuid_job_id.c_str());
 	cJSON_AddStringToObject(root, "job_type", "control_instance");
 	cJSON_AddStringToObject(root, "type", type.c_str());
@@ -2173,7 +2173,7 @@ bool Job::job_control_instance(Tpye_Ip_Port &ip_port, std::string type, std::str
 
 	/////////////////////////////////////////////////////////
 	// get status from node 
-	get_status = "{\"ver\":\"" + http_cmd_version + "\",\"job_id\":\"" + uuid_job_id + "\",\"job_type\":\"get_status\"}";
+	get_status = "{\"version\":\"" + http_cmd_version + "\",\"job_id\":\"" + uuid_job_id + "\",\"job_type\":\"get_status\"}";
 	
 	retry = 30;
 	while(retry-->0 && !Job::do_exit)
@@ -2381,12 +2381,12 @@ bool Job::job_create_program_path()
 {
 	std::string cmd, cmd_path, program_path;
 
-	//upzip to program_binaries_path for install cmd
+	//unzip to program_binaries_path for install cmd
 	//storage
 	cmd_path = program_binaries_path + "/" + storage_prog_package_name + "/dba_tools";
 	if(access(cmd_path.c_str(), F_OK) != 0)
 	{
-		syslog(Logger::INFO, "upzip %s.tgz" , storage_prog_package_name.c_str());
+		syslog(Logger::INFO, "unzip %s.tgz" , storage_prog_package_name.c_str());
 		program_path = program_binaries_path + "/" + storage_prog_package_name + ".tgz";
 
 		cmd = "tar zxf " + program_path + " -C " + program_binaries_path;
@@ -2398,7 +2398,7 @@ bool Job::job_create_program_path()
 	cmd_path = program_binaries_path + "/" + computer_prog_package_name + "/scripts";
 	if(access(cmd_path.c_str(), F_OK) != 0)
 	{
-		syslog(Logger::INFO, "upzip %s.tgz" , computer_prog_package_name.c_str());
+		syslog(Logger::INFO, "unzip %s.tgz" , computer_prog_package_name.c_str());
 		program_path = program_binaries_path + "/" + computer_prog_package_name + ".tgz";
 
 		cmd = "tar zxf " + program_path + " -C " + program_binaries_path;
@@ -2407,6 +2407,292 @@ bool Job::job_create_program_path()
 	}
 
 	return true;
+}
+
+bool Job::job_start_meta(std::vector<Tpye_Ip_Port> &vec_meta_ip_port, std::string &ha_mode)
+{
+	FILE* pfd;
+	char buf[256];
+
+	int retry;
+	std::string cmd;
+
+	/////////////////////////////////////////////////////////
+	cJSON *root = NULL;
+	char *cjson = NULL;
+	cJSON *item_sub;
+
+	std::string jsonfile_path;
+
+	root = cJSON_CreateArray();
+	for(auto &ip_port: vec_meta_ip_port)
+	{
+		item_sub = cJSON_CreateObject();
+		cJSON_AddItemToArray(root, item_sub);
+
+		cJSON_AddStringToObject(item_sub, "ip", ip_port.first.c_str());
+		cJSON_AddNumberToObject(item_sub, "port", ip_port.second);
+		cJSON_AddStringToObject(item_sub, "user", "pgx");
+		cJSON_AddStringToObject(item_sub, "password", "pgx_pwd");
+	}
+
+	/////////////////////////////////////////////////////////
+	// save json file
+	jsonfile_path = program_binaries_path + "/" + computer_prog_package_name + "/scripts/pgsql_meta.json";
+	cjson = cJSON_Print(root);
+	if(cjson != NULL)
+	{
+		job_save_file(jsonfile_path, cjson);
+		free(cjson);
+	}
+	cJSON_Delete(root);
+
+	/////////////////////////////////////////////////////////
+	// start cluster cmd
+	cmd = "cd " + program_binaries_path + "/" + computer_prog_package_name + "/scripts/;";
+	cmd += "python2 bootstrap.py --config=./pgsql_meta.json --bootstrap_sql=./meta_inuse.sql --ha_mode " + ha_mode;
+	syslog(Logger::INFO, "job_start_meta cmd %s", cmd.c_str());
+
+	pfd = popen(cmd.c_str(), "r");
+	if(!pfd)
+	{
+		syslog(Logger::ERROR, "install error %s", cmd.c_str());
+		return false;
+	}
+	while(fgets(buf, 256, pfd)!=NULL)
+	{
+		//if(strcasestr(buf, "error") != NULL)
+			syslog(Logger::INFO, "%s", buf);
+	}
+	pclose(pfd);
+
+	/////////////////////////////////////////////////////////////
+	// check meta succeed
+	retry = thread_work_interval * 30;
+	while(retry-->0 && !Job::do_exit)
+	{
+		sleep(1);
+		bool all_meta_start = true;
+		for(auto &ip_port: vec_meta_ip_port)
+		{
+			if(!System::get_instance()->check_meta_ip_port(ip_port))
+			{
+				all_meta_start = false;
+				break;
+			}
+		}
+
+		if(all_meta_start)
+			break;
+	}
+
+	if(retry<0)
+	{
+		syslog(Logger::ERROR, "meta start error");
+		return false;
+	}
+
+	syslog(Logger::INFO, "meta start succeed");
+	return true;
+}
+
+void Job::job_create_meta(cJSON *root)
+{
+	std::lock_guard<std::mutex> lock(mutex_operation_);
+
+	std::string job_id;
+	std::string job_result;
+	std::string job_info;
+	std::string ha_mode;
+	std::string datadir,logdir,wal_log_dir;
+	cJSON *item;
+	cJSON *item_sub;
+	cJSON *item_machinelist;
+	int innodb_size;
+	char *cjson;
+
+	std::string cluster_name;
+	std::string shard_name;
+	std::string job_id_meta;
+	std::vector<Tpye_Ip_Port_Paths> vec_meta_ip_port_paths;
+	std::vector<std::string> vec_paths;
+	Tpye_string2 t_string2;
+
+	item = cJSON_GetObjectItem(root, "job_id");
+	if(item == NULL || item->valuestring == NULL)
+	{
+		syslog(Logger::ERROR, "get_job_id error");
+		return;
+	}
+	job_id = item->valuestring;
+
+	/////////////////////////////////////////////////////////
+
+	job_result = "ongoing";
+	job_info = "create meta start";
+	update_jobid_status(job_id, job_result, job_info);
+	syslog(Logger::INFO, "%s", job_info.c_str());
+	System::get_instance()->set_cluster_mgr_working(false);
+
+	item = cJSON_GetObjectItem(root, "ha_mode");
+	if(item == NULL || item->valuestring == NULL)
+	{
+		job_info = "get ha_mode error";
+		goto end;
+	}
+	ha_mode = item->valuestring;
+
+	item = cJSON_GetObjectItem(root, "innodb_size");
+	if(item == NULL || item->valuestring == NULL)
+	{
+		job_info = "get innodb_size error";
+		goto end;
+	}
+	innodb_size = atoi(item->valuestring);
+	if(innodb_size<1)
+	{
+		job_info = "innodb_size error(must > 0)";
+		goto end;
+	}
+
+	item = cJSON_GetObjectItem(root, "datadir");
+	if(item == NULL || item->valuestring == NULL)
+	{
+		job_info = "get datadir error";
+		goto end;
+	}
+	datadir = item->valuestring;
+
+	item = cJSON_GetObjectItem(root, "logdir");
+	if(item == NULL || item->valuestring == NULL)
+	{
+		job_info = "get logdir error";
+		goto end;
+	}
+	logdir = item->valuestring;
+
+	item = cJSON_GetObjectItem(root, "wal_log_dir");
+	if(item == NULL || item->valuestring == NULL)
+	{
+		job_info = "get wal_log_dir error";
+		goto end;
+	}
+	wal_log_dir = item->valuestring;
+
+	/////////////////////////////////////////////////////////
+	if(ha_mode == "no_rep")
+	{
+		if(vec_meta_ip_port.size()!=1)
+		{
+			job_info = "meta_group_seeds must be 1 while ha_mode=no_rep";
+			goto end;
+		}
+	}
+	else if(ha_mode == "mgr")
+	{
+		if(vec_meta_ip_port.size()<2)
+		{
+			job_info = "meta_group_seeds must >= 3 while ha_mode=mgr";
+			goto end;
+		}
+	}
+	else if(ha_mode == "rbr")
+	{
+		if(vec_meta_ip_port.size()<2)
+		{
+			job_info = "meta_group_seeds must >= 3 while ha_mode=rbr";
+			goto end;
+		}
+	}
+
+	/////////////////////////////////////////////////////////
+	// create meta
+	job_info = "create meta working";
+	update_jobid_status(job_id, job_result, job_info);
+	syslog(Logger::INFO, "%s", job_info.c_str());
+
+	/////////////////////////////////////////////////////////
+	// check meta exist
+	for(auto &ip_port: vec_meta_ip_port)
+	{
+		if(System::get_instance()->check_meta_ip_port(ip_port))
+		{
+			job_info = "meta have exist";
+			goto end;
+		}
+	}
+
+	/////////////////////////////////////////////////////////
+	// for install meta cmd
+	if(!job_create_program_path())
+	{
+		job_info = "create_cmd_path error";
+		goto end;
+	}
+
+	/////////////////////////////////////////////////////////
+	// generate meta node paths for install
+	vec_paths.emplace_back(datadir);
+	vec_paths.emplace_back(logdir);
+	vec_paths.emplace_back(wal_log_dir);
+	for(auto &ip_port: vec_meta_ip_port)
+		vec_meta_ip_port_paths.emplace_back(std::make_tuple(ip_port.first, ip_port.second, vec_paths));
+
+	///////////////////////////////////////////////////////////////////////////////
+	// create meta shard
+	job_info = "create meta shard";
+	update_jobid_status(job_id, job_result, job_info);
+	syslog(Logger::INFO, "%s", job_info.c_str());
+	cluster_name = "cluster_meta";
+	shard_name = "shard_meta";
+	job_id_meta = "";
+	t_string2 = std::make_tuple(ha_mode, std::to_string(innodb_size) + "GB");
+	if(!job_create_shard(vec_meta_ip_port_paths, cluster_name, shard_name, job_id_meta, t_string2))
+	{
+		//roll back
+		for(auto &ip_port_paths: vec_meta_ip_port_paths)
+		{
+			Tpye_Ip_Port storage = std::make_pair(std::get<0>(ip_port_paths), std::get<1>(ip_port_paths));
+			if(!job_delete_storage(storage))
+				syslog(Logger::ERROR, "delete storage error");
+		}
+
+		job_info = "create meta shard error";
+		goto end;
+	}
+
+	///////////////////////////////////////////////////////////////////////////////
+	//start meta table
+	job_info = "start meta cmd";
+	update_jobid_status(job_id, job_result, job_info);
+	syslog(Logger::INFO, "%s", job_info.c_str());
+	System::get_instance()->set_cluster_mgr_working(true);
+
+	if(!job_start_meta(vec_meta_ip_port, ha_mode))
+	{
+		//roll back
+		for(auto &ip_port_paths: vec_meta_ip_port_paths)
+		{
+			Tpye_Ip_Port storage = std::make_pair(std::get<0>(ip_port_paths), std::get<1>(ip_port_paths));
+			if(!job_delete_storage(storage))
+				syslog(Logger::ERROR, "delete storage error");
+		}
+
+		job_info = "start_meta error";
+		goto end;
+	}
+
+	job_result = "done";
+	job_info = "create meta succeed";
+	update_jobid_status(job_id, job_result, job_info);
+	syslog(Logger::INFO, "%s", job_info.c_str());
+	return;
+
+end:
+	job_result = "failed";
+	update_jobid_status(job_id, job_result, job_info);
+	syslog(Logger::ERROR, "%s", job_info.c_str());
+	System::get_instance()->set_cluster_mgr_working(true);
 }
 
 bool Job::job_create_meta_jsonfile()
@@ -2536,7 +2822,7 @@ start:
 	
 	/////////////////////////////////////////////////////////
 	// get status from node 
-	get_status = "{\"ver\":\"" + http_cmd_version + "\",\"job_id\":\"" + uuid_job_id + "\",\"job_type\":\"get_status\"}";
+	get_status = "{\"version\":\"" + http_cmd_version + "\",\"job_id\":\"" + uuid_job_id + "\",\"job_type\":\"get_status\"}";
 	
 	retry = 120;
 	while(retry-->0 && !Job::do_exit)
@@ -2736,7 +3022,7 @@ bool Job::job_create_shard(std::vector<Tpye_Ip_Port_Paths> &storages, std::strin
 	/////////////////////////////////////////////////////////
 	// create json parameter
 	root = cJSON_CreateObject();
-	cJSON_AddStringToObject(root, "ver", http_cmd_version.c_str());
+	cJSON_AddStringToObject(root, "version", http_cmd_version.c_str());
 	cJSON_AddStringToObject(root, "job_id", "");
 	cJSON_AddStringToObject(root, "job_type", "install_storage");
 	cJSON_AddStringToObject(root, "cluster_name", cluster_name.c_str());
@@ -2787,7 +3073,8 @@ bool Job::job_create_shard(std::vector<Tpye_Ip_Port_Paths> &storages, std::strin
 		cJSON_AddStringToObject(root_roll, "ip", std::get<0>(storages[i]).c_str());
 		cJSON_AddNumberToObject(root_roll, "port", std::get<1>(storages[i]));
 		cjson_roll = cJSON_Print(root_roll);
-		job_insert_roll_back_record(job_id, cjson_roll);
+		if(job_id.length()>0)	//create_meta must no insert into roll back
+			job_insert_roll_back_record(job_id, cjson_roll);
 		cJSON_Delete(root_roll);
 		free(cjson_roll);
 
@@ -2857,7 +3144,7 @@ start:
 	
 	/////////////////////////////////////////////////////////
 	// get status from node 
-	get_status = "{\"ver\":\"" + http_cmd_version + "\",\"job_id\":\"" + uuid_job_id + "\",\"job_type\":\"get_status\"}";
+	get_status = "{\"version\":\"" + http_cmd_version + "\",\"job_id\":\"" + uuid_job_id + "\",\"job_type\":\"get_status\"}";
 	
 	retry = 90;
 	while(retry-->0 && !Job::do_exit)
@@ -2942,7 +3229,7 @@ bool Job::job_create_comps(std::vector<Tpye_Ip_Port_Paths> &comps, std::string &
 	/////////////////////////////////////////////////////////
 	// create json parameter
 	root = cJSON_CreateObject();
-	cJSON_AddStringToObject(root, "ver", http_cmd_version.c_str());
+	cJSON_AddStringToObject(root, "version", http_cmd_version.c_str());
 	cJSON_AddStringToObject(root, "job_id", "");
 	cJSON_AddStringToObject(root, "job_type", "install_computer");
 	cJSON_AddNumberToObject(root, "install_id", 0);
@@ -3273,27 +3560,7 @@ void Job::job_create_cluster(cJSON *root)
 		goto end;
 	}
 	std::get<2>(cluster_info) = atoi(item->valuestring);
-	if(std::get<0>(cluster_info) == "mgr")
-	{
-		if(std::get<2>(cluster_info)<3 || std::get<2>(cluster_info)>10)
-		{
-			job_info = "error, nodes>=3 && nodes<=10 in mgr mode";
-			goto end;
-		}
-	}
-	else if(std::get<0>(cluster_info) == "no_rep")
-	{
-		if(std::get<2>(cluster_info)!=1)
-		{
-			job_info = "error, nodes=1 in no_rep mode";
-			goto end;
-		}
-	}
-	else
-	{
-		job_info = "it is not support " + std::get<0>(cluster_info);
-		goto end;
-	}
+
 
 	item = cJSON_GetObjectItem(root, "comps");
 	if(item == NULL || item->valuestring == NULL)
@@ -3339,6 +3606,33 @@ void Job::job_create_cluster(cJSON *root)
 		goto end;
 	}
 	std::get<7>(cluster_info) = atoi(item->valuestring);
+
+	/////////////////////////////////////////////////////////
+	if(std::get<0>(cluster_info) == "no_rep")
+	{
+		if(std::get<2>(cluster_info)!=1)
+		{
+			job_info = "error, nodes=1 in no_rep mode";
+			goto end;
+		}
+	}
+	else if(std::get<0>(cluster_info) == "mgr")
+	{
+		if(std::get<2>(cluster_info)<3 || std::get<2>(cluster_info)>10)
+		{
+			job_info = "error, nodes>=3 && nodes<=10 in mgr mode";
+			goto end;
+		}
+	}
+	else if(std::get<0>(cluster_info) == "rbr")
+	{
+		if(std::get<2>(cluster_info)<3 || std::get<2>(cluster_info)>10)
+		{
+			job_info = "error, nodes>=3 && nodes<=10 in rbr mode";
+			goto end;
+		}
+	}
+
 	if(std::get<7>(cluster_info)<1)
 	{
 		job_info = "innodb_size error(must > 0)";
@@ -3417,7 +3711,7 @@ bool Job::job_delete_storage(Tpye_Ip_Port &storage)
 	/////////////////////////////////////////////////////////
 	// create json parameter
 	root = cJSON_CreateObject();
-	cJSON_AddStringToObject(root, "ver", http_cmd_version.c_str());
+	cJSON_AddStringToObject(root, "version", http_cmd_version.c_str());
 	cJSON_AddStringToObject(root, "job_id", uuid_job_id.c_str());
 	cJSON_AddStringToObject(root, "job_type", "delete_storage");
 	cJSON_AddStringToObject(root, "ip", storage.first.c_str());
@@ -3447,7 +3741,7 @@ bool Job::job_delete_storage(Tpye_Ip_Port &storage)
 	
 	/////////////////////////////////////////////////////////
 	// get status from node 
-	get_status = "{\"ver\":\"" + http_cmd_version + "\",\"job_id\":\"" + uuid_job_id + "\",\"job_type\":\"get_status\"}";
+	get_status = "{\"version\":\"" + http_cmd_version + "\",\"job_id\":\"" + uuid_job_id + "\",\"job_type\":\"get_status\"}";
 	
 	retry = 90;
 	while(retry-->0 && !Job::do_exit)
@@ -3531,7 +3825,7 @@ bool Job::job_delete_computer(Tpye_Ip_Port &computer)
 	/////////////////////////////////////////////////////////
 	// create json parameter
 	root = cJSON_CreateObject();
-	cJSON_AddStringToObject(root, "ver", http_cmd_version.c_str());
+	cJSON_AddStringToObject(root, "version", http_cmd_version.c_str());
 	cJSON_AddStringToObject(root, "job_id", uuid_job_id.c_str());
 	cJSON_AddStringToObject(root, "job_type", "delete_computer");
 	cJSON_AddStringToObject(root, "ip", computer.first.c_str());
@@ -3561,7 +3855,7 @@ bool Job::job_delete_computer(Tpye_Ip_Port &computer)
 	
 	/////////////////////////////////////////////////////////
 	// get status from node 
-	get_status = "{\"ver\":\"" + http_cmd_version + "\",\"job_id\":\"" + uuid_job_id + "\",\"job_type\":\"get_status\"}";
+	get_status = "{\"version\":\"" + http_cmd_version + "\",\"job_id\":\"" + uuid_job_id + "\",\"job_type\":\"get_status\"}";
 	
 	retry = 60;
 	while(retry-->0 && !Job::do_exit)
@@ -4676,7 +4970,7 @@ void Job::job_add_nodes(cJSON *root)
 		vec_shard_name.emplace_back(shard_name);
 	}
 
-	if(!System::get_instance()->get_backup_storage_string(backup_storage , storage_id, backup_storage))
+	if(!System::get_instance()->get_backup_storage_string(backup_storage , backup_storage_id, backup_storage_str))
 	{
 		job_info = "get_backup_storage_string error";
 		goto end;
@@ -5064,14 +5358,14 @@ bool Job::job_backup_shard_node(std::string &cluster_name, std::string &cluster_
 	/////////////////////////////////////////////////////////
 	// create json parameter
 	root = cJSON_CreateObject();
-	cJSON_AddStringToObject(root, "ver", http_cmd_version.c_str());
+	cJSON_AddStringToObject(root, "version", http_cmd_version.c_str());
 	cJSON_AddStringToObject(root, "job_id", uuid_job_id.c_str());
 	cJSON_AddStringToObject(root, "job_type", "backup_shard");
 	cJSON_AddStringToObject(root, "ip", std::get<2>(shard_id_ip_port_id).c_str());
 	cJSON_AddNumberToObject(root, "port", std::get<3>(shard_id_ip_port_id));
 	cJSON_AddStringToObject(root, "cluster_name", cluster_name.c_str());
 	cJSON_AddStringToObject(root, "shard_name", std::get<0>(shard_id_ip_port_id).c_str());
-	cJSON_AddStringToObject(root, "backup_storage", backup_storage.c_str());
+	cJSON_AddStringToObject(root, "backup_storage", backup_storage_str.c_str());
 
 	/////////////////////////////////////////////////////////
 	// send json parameter to node
@@ -5104,7 +5398,7 @@ bool Job::job_backup_shard_node(std::string &cluster_name, std::string &cluster_
 	// insert metadata table
 	get_datatime(start_time);
 	str_sql = "INSERT INTO cluster_shard_backup_restore_log(storage_id,cluster_id,shard_id,shard_node_id,optype,status,when_started) VALUES(";
-	str_sql += storage_id + "," + cluster_id + "," + std::to_string(std::get<1>(shard_id_ip_port_id)) + "," + std::to_string(std::get<4>(shard_id_ip_port_id));
+	str_sql += backup_storage_id + "," + cluster_id + "," + std::to_string(std::get<1>(shard_id_ip_port_id)) + "," + std::to_string(std::get<4>(shard_id_ip_port_id));
 	str_sql += ",'backup','ongoing','" + start_time + "')";
 	syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
 
@@ -5117,7 +5411,7 @@ bool Job::job_backup_shard_node(std::string &cluster_name, std::string &cluster_
 
 	/////////////////////////////////////////////////////////
 	// get status from node 
-	get_status = "{\"ver\":\"" + http_cmd_version + "\",\"job_id\":\"" + uuid_job_id + "\",\"job_type\":\"get_status\"}";
+	get_status = "{\"version\":\"" + http_cmd_version + "\",\"job_id\":\"" + uuid_job_id + "\",\"job_type\":\"get_status\"}";
 	
 	retry = 60*60*3;	//3 hours
 	while(retry-->0 && !Job::do_exit)
@@ -5281,7 +5575,7 @@ bool Job::job_backup_cluster(std::string &cluster_name, std::string &datatime)
 	// insert metadata table
 	get_datatime(datatime);
 	str_sql = "INSERT INTO cluster_backups(storage_id,cluster_id,backup_type,has_comp_node_dump,start_ts,end_ts,name) VALUES(";
-	str_sql += storage_id + "," + cluster_id + ",'storage_shards',0,'" + start_time + "','" + datatime + "','" + shard_names + "')";
+	str_sql += backup_storage_id + "," + cluster_id + ",'storage_shards',0,'" + start_time + "','" + datatime + "','" + shard_names + "')";
 	syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
 
 	if(System::get_instance()->execute_metadate_opertation(SQLCOM_INSERT, str_sql))
@@ -5335,7 +5629,7 @@ void Job::job_backup_cluster(cJSON *root)
 		goto end;
 	}
 
-	if(!System::get_instance()->get_backup_storage_string(backup_storage, storage_id, backup_storage))
+	if(!System::get_instance()->get_backup_storage_string(backup_storage, backup_storage_id, backup_storage_str))
 	{
 		job_info = "get_backup_storage_string error";
 		goto end;
@@ -5379,7 +5673,7 @@ bool Job::job_restore_storage(std::string &cluster_name, std::string &shard_name
 	/////////////////////////////////////////////////////////
 	// create json parameter
 	root = cJSON_CreateObject();
-	cJSON_AddStringToObject(root, "ver", http_cmd_version.c_str());
+	cJSON_AddStringToObject(root, "version", http_cmd_version.c_str());
 	cJSON_AddStringToObject(root, "job_id", uuid_job_id.c_str());
 	cJSON_AddStringToObject(root, "job_type", "restore_storage");
 	cJSON_AddStringToObject(root, "ip", ip_port.first.c_str());
@@ -5387,7 +5681,7 @@ bool Job::job_restore_storage(std::string &cluster_name, std::string &shard_name
 	cJSON_AddStringToObject(root, "cluster_name", cluster_name.c_str());
 	cJSON_AddStringToObject(root, "shard_name", shard_name.c_str());
 	cJSON_AddStringToObject(root, "timestamp", timestamp.c_str());
-	cJSON_AddStringToObject(root, "backup_storage", backup_storage.c_str());
+	cJSON_AddStringToObject(root, "backup_storage", backup_storage_str.c_str());
 
 	/////////////////////////////////////////////////////////
 	// send json parameter to node
@@ -5418,7 +5712,7 @@ bool Job::job_restore_storage(std::string &cluster_name, std::string &shard_name
 
 	/////////////////////////////////////////////////////////
 	// get status from node 
-	get_status = "{\"ver\":\"" + http_cmd_version + "\",\"job_id\":\"" + uuid_job_id + "\",\"job_type\":\"get_status\"}";
+	get_status = "{\"version\":\"" + http_cmd_version + "\",\"job_id\":\"" + uuid_job_id + "\",\"job_type\":\"get_status\"}";
 	
 	retry = 60*60*3;	//3 hours
 	while(retry-->0 && !Job::do_exit)
@@ -5510,7 +5804,7 @@ bool Job::job_restore_computer(std::string &cluster_name, std::string &shard_map
 	/////////////////////////////////////////////////////////
 	// create json parameter
 	root = cJSON_CreateObject();
-	cJSON_AddStringToObject(root, "ver", http_cmd_version.c_str());
+	cJSON_AddStringToObject(root, "version", http_cmd_version.c_str());
 	cJSON_AddStringToObject(root, "job_id", uuid_job_id.c_str());
 	cJSON_AddStringToObject(root, "job_type", "restore_computer");
 	cJSON_AddStringToObject(root, "ip", ip_port.first.c_str());
@@ -5549,7 +5843,7 @@ bool Job::job_restore_computer(std::string &cluster_name, std::string &shard_map
 
 	/////////////////////////////////////////////////////////
 	// get status from node 
-	get_status = "{\"ver\":\"" + http_cmd_version + "\",\"job_id\":\"" + uuid_job_id + "\",\"job_type\":\"get_status\"}";
+	get_status = "{\"version\":\"" + http_cmd_version + "\",\"job_id\":\"" + uuid_job_id + "\",\"job_type\":\"get_status\"}";
 	
 	retry = 60*30;	//30 minutes
 	while(retry-->0 && !Job::do_exit)
@@ -5690,7 +5984,7 @@ void Job::job_restore_cluster(cJSON *root)
 		goto end;
 	}
 
-	if(!System::get_instance()->get_backup_storage_string(backup_storage, storage_id, backup_storage))
+	if(!System::get_instance()->get_backup_storage_string(backup_storage, backup_storage_id, backup_storage_str))
 	{
 		job_info = "get_backup_storage_string error";
 		goto end;
@@ -5898,7 +6192,7 @@ void Job::job_restore_new_cluster(cJSON *root)
 		goto end;
 	}
 
-	if(!System::get_instance()->get_backup_storage_string(backup_storage, storage_id, backup_storage))
+	if(!System::get_instance()->get_backup_storage_string(backup_storage, backup_storage_id, backup_storage_str))
 	{
 		job_info = "get_backup_storage_string error";
 		goto end;
@@ -6166,6 +6460,8 @@ bool Job::get_job_type(char *str, Job_type &job_type)
 		job_type = JOB_MYSQLD_EXPORTER;
 	else if(strcmp(str, "control_instance")==0)
 		job_type = JOB_CONTROL_INSTANCE;
+	else if(strcmp(str, "create_meta")==0)
+		job_type = JOB_CREATE_META;
 	else if(strcmp(str, "rename_cluster")==0)
 		job_type = JOB_RENAME_CLUSTER;
 	else if(strcmp(str, "create_cluster")==0)
@@ -6300,7 +6596,8 @@ bool Job::job_handle_ahead(const std::string &para, std::string &str_ret)
 	}
 	else
 	{
-		if(job_type == JOB_CREATE_CLUSTER
+		if(job_type == JOB_CREATE_META
+			|| job_type == JOB_CREATE_CLUSTER
 			|| job_type == JOB_DELETE_CLUSTER
 			|| job_type == JOB_ADD_SHARDS
 			|| job_type == JOB_DELETE_SHARD
@@ -6381,6 +6678,10 @@ void Job::job_handle(std::string &job)
 	else if(job_type == JOB_CONTROL_INSTANCE)
 	{
 		job_control_instance(root);
+	}
+	else if(job_type == JOB_CREATE_META)
+	{
+		job_create_meta(root);
 	}
 	else if(job_type == JOB_CREATE_CLUSTER)
 	{
