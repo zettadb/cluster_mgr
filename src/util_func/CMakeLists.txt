@@ -1,6 +1,6 @@
 add_library(util_func OBJECT meta_info.cc error_code.cc)
 target_include_directories(util_func INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_include_directories(util_func PUBLIC "${PROJECT_SOURCE_DIR}/src")
-target_include_directories(util_func PUBLIC "${PROJECT_SOURCE_DIR}/src/vendor/include")
+target_include_directories(util_func PUBLIC "${VENDOR_OUTPUT_PATH}/include")
 target_include_directories(util_func PUBLIC "${PROJECT_BINARY_DIR}")
 target_include_directories(util_func PUBLIC "${ZETTALIB_INCLUDE_PATH}")

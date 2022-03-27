@@ -1,7 +1,0 @@
-includedir=/home/summerxwu/code/kunlun/service/cluster_mgr/src/resources/include
-
-Name: RapidJSON
-Description: A fast JSON parser/generator for C++ with both SAX/DOM style API
-Version: 1.0.2
-URL: https://github.com/miloyip/rapidjson
-Cflags: -I${includedir}

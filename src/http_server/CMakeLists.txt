@@ -1,6 +1,6 @@
 add_library(http_server OBJECT http_server.cc node_channel.cc proto/clustermng.pb.cc)
 target_include_directories(http_server INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_include_directories(http_server PUBLIC "${PROJECT_SOURCE_DIR}/src")
-target_include_directories(http_server PUBLIC "${PROJECT_SOURCE_DIR}/src/vendor/include")
+target_include_directories(http_server PUBLIC "${VENDOR_OUTPUT_PATH}/include")
 target_include_directories(http_server PUBLIC "${PROJECT_BINARY_DIR}")
 target_include_directories(http_server PUBLIC "${ZETTALIB_INCLUDE_PATH}")

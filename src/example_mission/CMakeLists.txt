@@ -1,6 +1,6 @@
 add_library(example_mission OBJECT example_mission.cc)
 target_include_directories(example_mission INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_include_directories(example_mission PUBLIC "${PROJECT_SOURCE_DIR}/src")
-target_include_directories(example_mission PUBLIC "${PROJECT_SOURCE_DIR}/src/vendor/include")
+target_include_directories(example_mission PUBLIC "${VENDOR_OUTPUT_PATH}/include")
 target_include_directories(example_mission PUBLIC "${PROJECT_BINARY_DIR}")
 target_include_directories(example_mission PUBLIC "${ZETTALIB_INCLUDE_PATH}")

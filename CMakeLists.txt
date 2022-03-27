@@ -14,8 +14,9 @@ elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
 endif()
 set(ZETTALIB_INCLUDE_PATH "/home/snowao/code/kunlun/zettalib/build/output/include")
 set(ZETTALIB_LIB_PATH "/home/snowao/code/kunlun/zettalib/build/output/lib")
+set(VENDOR_OUTPUT_PATH "/home/snowao/code/kunlun/zettalib/src/vendor/vendor_output")
 
-link_directories(${PROJECT_SOURCE_DIR}/src/vendor/lib)
+link_directories(${VENDOR_OUTPUT_PATH}/lib)
 link_directories(${ZETTALIB_LIB_PATH})
 configure_file(src/sys_config.h.in sys_config.h)
 add_subdirectory(src/kl_mentain)
@@ -29,7 +30,7 @@ add_executable(cluster_mgr src/main.cc)
 target_include_directories(cluster_mgr PUBLIC
   "${PROJECT_BINARY_DIR}"
   "${ZETTALIB_INCLUDE_PATH}"
-  "${PROJECT_SOURCE_DIR}/src/vendor/include"
+  "${VENDOR_OUTPUT_PATH}/include"
   "${PROJECT_SOURCE_DIR}/src/kl_mentain"
   "${PROJECT_SOURCE_DIR}/src/http_server"
   "${PROJECT_SOURCE_DIR}/src/request_framework"
@@ -52,11 +53,11 @@ target_link_libraries(cluster_mgr
   libgflags.a 
   libprotobuf.a 
   libleveldb.a 
-  mariadb 
-  pthread 
-  pq 
+  libmariadb.a
+  libpq.a 
   libssl.a 
   libcrypto.a 
+  pthread 
   dl 
   z)
 

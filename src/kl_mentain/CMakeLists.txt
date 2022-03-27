@@ -14,6 +14,6 @@ add_library(kl_mentain OBJECT
   cjson.cc)
 target_include_directories(kl_mentain INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_include_directories(kl_mentain PUBLIC "${PROJECT_SOURCE_DIR}/src")
-target_include_directories(kl_mentain PUBLIC "${PROJECT_SOURCE_DIR}/src/vendor/include")
+target_include_directories(kl_mentain PUBLIC "${VENDOR_OUTPUT_PATH}/include")
 target_include_directories(kl_mentain PUBLIC "${PROJECT_BINARY_DIR}")
 target_include_directories(kl_mentain PUBLIC "${ZETTALIB_INCLUDE_PATH}")
