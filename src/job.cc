@@ -228,7 +228,7 @@ void Job::get_user_name()
 	char buf[256];
 	std::string str_cmd;
 
-	str_cmd = "who am i";
+	str_cmd = "whoami";
 	//syslog(Logger::INFO, "get_user_name str_cmd : %s",str_cmd.c_str());
 
 	pfd = popen(str_cmd.c_str(), "r");
@@ -238,7 +238,7 @@ void Job::get_user_name()
 	if(fgets(buf, 256, pfd) == NULL)
 		goto end;
 	
-	p = strchr(buf, 0x20);
+	p = strchr(buf, '\n');
 	if(p == NULL)
 		goto end;
 
@@ -760,6 +760,8 @@ bool Job::job_roll_back_record(std::string &job_id)
 
 bool Job::job_roll_back_check()
 {
+	std::lock_guard<std::mutex> lock(mutex_operation_);
+	
 	std::vector<std::string> vec_job_json,vec_job_id;
 
 	////////////////////////////////////////////////////////////////////////////////

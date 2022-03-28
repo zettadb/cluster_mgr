@@ -1152,6 +1152,11 @@ bool System::get_meta(cJSON *root, std::string &str_ret)
 			cJSON_AddStringToObject(ret_item, "status", "online");
 		else
 			cJSON_AddStringToObject(ret_item, "status", "offline");
+
+		if(node->is_master())
+			cJSON_AddStringToObject(ret_item, "master", "true");
+		else
+			cJSON_AddStringToObject(ret_item, "master", "false");
 	}
 
 	ret_cjson = cJSON_Print(ret_root);
@@ -1284,6 +1289,11 @@ bool System::get_cluster_detail(cJSON *root, std::string &str_ret)
 					cJSON_AddStringToObject(ret_item, "status", "online");
 				else
 					cJSON_AddStringToObject(ret_item, "status", "offline");
+
+				if(node->is_master())
+					cJSON_AddStringToObject(ret_item, "master", "true");
+				else
+					cJSON_AddStringToObject(ret_item, "master", "false");
 			}
 		}
 
@@ -1368,6 +1378,11 @@ bool System::get_storage(cJSON *root, std::string &str_ret)
 					cJSON_AddStringToObject(ret_item, "status", "online");
 				else
 					cJSON_AddStringToObject(ret_item, "status", "offline");
+
+				if(node->is_master())
+					cJSON_AddStringToObject(ret_item, "master", "true");
+				else
+					cJSON_AddStringToObject(ret_item, "master", "false");
 			}
 		}
 
