@@ -24,15 +24,32 @@
 #include <unistd.h>
 #include <iostream>
 
-#define BUFSIZE 2048		//2K
+#define BUFSIZE 8192		//8K
 
-static const char *lpHttpHtmlOk = "HTTP/1.0 200 OK\r\nContent-Type: text/html\r\nContent-Length: ";
-static const char *lpHttpBinOk = "HTTP/1.0 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ";
-static const char *lpHttpJspOk = "HTTP/1.0 200 OK\r\napplication/javascript\r\nContent-Length: ";
-static const char *lpHttpError = "HTTP/1.0 400 Bad Request\r\n";
+static const char *lpHttpHtmlOk = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: ";
+static const char *lpHttpHtmlOkTime = "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\n\
+Access-Control-Max-Age: 3600\r\n\
+Access-Control-Allow-Origin: *\r\n\
+Access-Control-Allow-Headers: *\r\n\
+Access-Control-Allow-Credentials: true\r\n\
+Access-Control-Allow-Methods: POST, GET, OPTIONS\r\n\
+Date: %s\r\nContent-Length: %ld\r\n\r\n%s";
+
+static const char *lpHttpBinOk = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ";
+static const char *lpHttpJspOk = "HTTP/1.1 200 OK\r\napplication/javascript\r\nContent-Length: ";
+static const char *lpHttpJsonOk = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: ";
+static const char *lpHttpError = "HTTP/1.1 400 Bad Request\r\n";
 static const char *lpReturnOk = "{\"result\":\"accept\"}";
 
-static const char *lpHttpRangeOk = "HTTP/1.0 206 Partial Content\r\n\
+static const char *lpHttpOPTIONS = "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\n\
+Access-Control-Max-Age: 3600\r\n\
+Access-Control-Allow-Origin: *\r\n\
+Access-Control-Allow-Headers: *\r\n\
+Access-Control-Allow-Credentials: true\r\n\
+Access-Control-Allow-Methods: POST, GET, OPTIONS\r\n\
+Date: %s\r\nContent-Length: 0\r\n\r\n";
+
+static const char *lpHttpRangeOk = "HTTP/1.1 206 Partial Content\r\n\
 Content-Type: text/plain\r\n\
 Content-Range: bytes %d-%d/%d\r\n\
 Content-Length: %d\r\n\r\n";
@@ -77,7 +94,7 @@ int Http_server::start_http_thread()
 		do_exit = 1;
 		return -1;
 	}
-	vec_pthread.push_back(hdl);
+	vec_pthread.emplace_back(hdl);
 
 	//start http server work thread
 	for(int i=0; i<num_http_threads; i++)
@@ -91,7 +108,7 @@ int Http_server::start_http_thread()
 			do_exit = 1;
 			return -1;
 		}
-		vec_pthread.push_back(hdl);
+		vec_pthread.emplace_back(hdl);
 	}
 
 	return 0;
@@ -115,6 +132,13 @@ void Http_server::join_all()
 	{
 		pthread_join(i, NULL);
 	}
+}
+
+void Http_server::GetDateTime(char* szDateTime)
+{
+	time_t now = time(NULL);
+	struct tm* ptr = gmtime(&now);
+	strftime(szDateTime, 100, "%a, %d %b %Y %H:%M:%S GMT", ptr);
 }
 
 bool Http_server::Get_http_path(const char* buf, std::string &path)
@@ -171,8 +195,10 @@ Http_server::Http_type Http_server::Get_http_type(const char* buf)
 {
 	if(strncmp(buf, "GET", 3) == 0)
 		return HTTP_GET;
-	else if(strncmp(buf, "POST", 3) == 0)
+	else if(strncmp(buf, "POST", 4) == 0)
 		return HTTP_POST;
+	else if(strncmp(buf, "OPTIONS", 7) == 0)
+		return HTTP_OPTIONS;
 
 	return HTTP_NONE;
 }
@@ -194,6 +220,8 @@ Http_server::Content_type Http_server::Get_http_content_type(const char* buf)
 	content_type = std::string(cStart, cEnd - cStart);
 
 	if(strstr(content_type.c_str(), "application/json") != NULL)
+		return Application_json;
+	else if(strstr(content_type.c_str(), "text/html") != NULL)
 		return Application_json;
 	else if(strstr(content_type.c_str(), "x-www-form-urlencoded") != NULL)
 		return Content_form_urlencoded;
@@ -285,6 +313,15 @@ void Http_server::Http_server_handle(int socket)
 				Http_server_handle_post_file(socket, http_buf, ret);
 			else
 				send(socket, lpHttpError, strlen(lpHttpError), 0);
+		}
+		else if(type == HTTP_OPTIONS)
+		{
+			syslog(Logger::INFO, "type:HTTP_OPTIONS start");
+			char datetime[100];
+			GetDateTime(datetime);
+			int n = snprintf(http_buf, BUFSIZE, lpHttpOPTIONS, datetime);
+			send(socket, http_buf, n, 0);
+			//syslog(Logger::INFO, "http_buf333=%s", http_buf);
 		}
 	}
 
@@ -512,17 +549,19 @@ void Http_server::Http_server_handle_post_para(int &socket, char* buf, int len)
 	std::string str_ret;
 	bool ret = Job::get_instance()->job_handle_ahead(para, str_ret);
 	
+	char datetime[100];
+	GetDateTime(datetime);
+
 	if(ret)
 	{
-		int n = snprintf(buf, BUFSIZE, "%s%lu\r\n\r\n", lpHttpJspOk, str_ret.length());
+		int n = snprintf(buf, BUFSIZE, lpHttpHtmlOkTime, datetime, str_ret.length(), str_ret.c_str());
 		send(socket, buf, n, 0);
-		send(socket, str_ret.c_str(), str_ret.length(), 0);
 	}
 	else
 	{
 		Job::get_instance()->add_job(para);
 
-		int n = snprintf(buf, BUFSIZE, "%s%lu\r\n\r\n%s", lpHttpJspOk, strlen(lpReturnOk), lpReturnOk);
+		int n = snprintf(buf, BUFSIZE, lpHttpHtmlOkTime, datetime, strlen(lpReturnOk), lpReturnOk);
 		send(socket, buf, n, 0);
 	}
 }
@@ -680,7 +719,7 @@ end:
 	//syslog(Logger::INFO, "Http_server_handle_post_file ret=%d", ret);
 	if(ret)
 	{
-		int n = snprintf(buf, BUFSIZE, "%s%lu\r\n\r\n%s", lpHttpJspOk, strlen(lpReturnOk), lpReturnOk);
+		int n = snprintf(buf, BUFSIZE, "%s%lu\r\n\r\n%s", lpHttpHtmlOk, strlen(lpReturnOk), lpReturnOk);
 		send(socket, buf, n, 0);
 	}
 	else
@@ -711,8 +750,8 @@ void Http_server::Http_server_accept()
 	pfdwakeup.events = POLLIN;
 
 	std::vector<struct pollfd> pollfds;
-	pollfds.push_back(pfdlisten);
-	pollfds.push_back(pfdwakeup);
+	pollfds.emplace_back(pfdlisten);
+	pollfds.emplace_back(pfdwakeup);
 
 	while (!Http_server::do_exit)
 	{

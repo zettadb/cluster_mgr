@@ -17,7 +17,7 @@
 #include <unistd.h>
 
 // export CLASSPATH=$CLASSPATH:$($HADOOP_HOME/bin/hadoop classpath --glob)
-#define BUFSIZE 2048		//2K
+#define BUFSIZE 4096		//4K
 
 int Hdfs_client::do_exit = 0;
 Hdfs_client* Hdfs_client::m_inst = NULL;

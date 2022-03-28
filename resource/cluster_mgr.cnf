@@ -65,3 +65,7 @@ raft_brpc_port = 8110
 
 # Net Interface device name
 dev_interface = eno1
+
+# meta server group seeds, note: no space in the middle of string
+# only one seed in no_rep mode, must three or more seeds in mgr/rbr mode
+meta_group_seeds = 192.168.0.135:6001

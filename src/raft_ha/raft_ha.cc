@@ -2,6 +2,7 @@
 #include "kl_mentain/log.h"
 #include "stdio.h"
 #include "sys/time.h"
+#include "zettalib/tool_func.h"
 #include <string>
 
 std::string raft_group_member_init_config;

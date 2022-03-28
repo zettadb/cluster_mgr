@@ -34,7 +34,7 @@ int PGSQL_CONN::connect(const char *database)
 
 	if (PQstatus(conn) != CONNECTION_OK)
 	{
-		syslog(Logger::ERROR, "Connected to pgsql %s fail...",conninfo);
+		syslog(Logger::ERROR, "Connected to pgsql fail: %s", PQerrorMessage(conn));
 		return 1;
 	}
 
@@ -76,12 +76,20 @@ int PGSQL_CONN::send_stmt(int pgres, const char *database, const char *stmt)
 	if(pgres == PG_COPYRES_TUPLES)
 	{
 		if (PQresultStatus(result) != PGRES_TUPLES_OK)
+		{
+			syslog(Logger::ERROR, "PQresultStatus error: %s", PQerrorMessage(conn));
+			close_conn();
 			ret = 1;
+		}
 	}
 	else
 	{
 		if (PQresultStatus(result) != PGRES_COMMAND_OK)
+		{
+			syslog(Logger::ERROR, "PQresultStatus error: %s", PQerrorMessage(conn));
+			close_conn();
 			ret = 1;
+		}
 	}
 
 	return ret;
@@ -113,6 +121,37 @@ send_stmt(int pgres, const char *database, const char *stmt, int nretries)
 	return ret;
 }
 
+bool Computer_node::get_variables(std::string &variable, std::string &value)
+{
+	int ret;
+	PGresult *presult;
+	MYSQL_RES *result;
+	MYSQL_ROW row;
+	std::string str_sql;
+
+	str_sql = "show " + variable;
+	ret = send_stmt(PG_COPYRES_TUPLES, "postgres", str_sql.c_str(), stmt_retries);
+	if(ret)
+		return -1;
+
+	presult = get_result();
+	if(PQntuples(presult)==1)
+	{
+		value = PQgetvalue(presult,0,0);
+	}
+	else
+	{
+		ret = -1;
+	}
+	free_pgsql_result();
+
+	return ret;
+}
+
+bool Computer_node::set_variables(std::string &variable, std::string &value_int, std::string &value_str)
+{
+	return true;
+}
 
 KunlunCluster::KunlunCluster(uint id_, const std::string &name_):
 	id(id_),name(name_)
@@ -150,7 +189,22 @@ int KunlunCluster::refresh_storages_to_computers()
 	//get TABLE_SCHEMA from one comp
 	if(computer_nodes.size() == 0)
 		return 0;
-	Computer_node* computer = computer_nodes[0];
+	Computer_node* computer = NULL;
+	
+	for(auto &node:computer_nodes)
+	{
+		if(node->send_stmt(PG_COPYRES_TUPLES, "postgres", "select datname from pg_database", stmt_retries)==0)
+		{
+			computer = node;
+			break;
+		}
+	}
+
+	if(computer == NULL)
+	{
+		syslog(Logger::ERROR, "none of computer node available!");
+		return 1;
+	}
 	
 	//get database
 	ret = computer->send_stmt(PG_COPYRES_TUPLES, "postgres", "select datname from pg_database", stmt_retries);
@@ -167,7 +221,7 @@ int KunlunCluster::refresh_storages_to_computers()
 		else if(db == "template0")
 			continue;
 
-		vec_database.push_back(db);
+		vec_database.emplace_back(db);
 	}
 	computer->free_pgsql_result();
 
@@ -196,9 +250,10 @@ int KunlunCluster::refresh_storages_to_computers()
 				continue;
 
 			uint oid = strtol(PQgetvalue(presult,i,0), &endptr, 10);
-			vec_database_namespace_oid.push_back(std::make_tuple(db, ns, oid));
+			vec_database_namespace_oid.emplace_back(std::make_tuple(db, ns, oid));
 		}
 		computer->free_pgsql_result();
+		computer->close_conn();
 	}
 
 	////////////////////////////////////////////////////////
@@ -281,6 +336,7 @@ int KunlunCluster::refresh_storages_to_computers()
 				//syslog(Logger::INFO, "str_sql222222 = %s", str_sql.c_str());
 				bool ret = comp->send_stmt(PG_COPYRES_EVENTS, std::get<0>(dbnsid.first).c_str(), str_sql.c_str(), stmt_retries);
 				comp->free_pgsql_result();
+				comp->close_conn();
 			}
 		}
 	}
@@ -309,12 +365,22 @@ int KunlunCluster::refresh_storages_to_computers_metashard(MetadataShard &meta_s
 	//get TABLE_SCHEMA from one comp
 	if(computer_nodes.size() == 0)
 		return 0;
-	Computer_node* computer = computer_nodes[0];
+	Computer_node* computer = NULL;
 	
-	//get database
-	ret = computer->send_stmt(PG_COPYRES_TUPLES, "postgres", "select datname from pg_database", stmt_retries);
-	if(ret)
-		return ret;
+	for(auto &node:computer_nodes)
+	{
+		if(node->send_stmt(PG_COPYRES_TUPLES, "postgres", "select datname from pg_database", stmt_retries)==0)
+		{
+			computer = node;
+			break;
+		}
+	}
+
+	if(computer == NULL)
+	{
+		syslog(Logger::ERROR, "none of computer node available!");
+		return 1;
+	}
 
 	presult = computer->get_result();
 	for(int i=0;i<PQntuples(presult);i++)
@@ -326,7 +392,7 @@ int KunlunCluster::refresh_storages_to_computers_metashard(MetadataShard &meta_s
 		else if(db == "template0")
 			continue;
 
-		vec_database.push_back(db);
+		vec_database.emplace_back(db);
 	}
 	computer->free_pgsql_result();
 
@@ -354,9 +420,10 @@ int KunlunCluster::refresh_storages_to_computers_metashard(MetadataShard &meta_s
 			else if(ns == "information_schema")
 				continue;
 
-			vec_database_namespace.push_back(std::make_pair(db, ns));
+			vec_database_namespace.emplace_back(std::make_pair(db, ns));
 		}
 		computer->free_pgsql_result();
+		computer->close_conn();
 	}
 
 	////////////////////////////////////////////////////////
@@ -481,7 +548,7 @@ unix_timestamp(UPDATE_TIME)<" + std::to_string(timesp);
 		while ((row = mysql_fetch_row(result)))
 		{
 			//syslog(Logger::ERROR, "vec_partition_tb row[0]=%s,row[1]=%s", row[0],row[1]);
-			vec_partition_tb.push_back(std::make_pair(std::string(row[0]),std::string(row[1])));
+			vec_partition_tb.emplace_back(std::make_pair(std::string(row[0]),std::string(row[1])));
 		}
 		
 		meta_master_sn->free_mysql_result();
@@ -492,10 +559,10 @@ unix_timestamp(UPDATE_TIME)<" + std::to_string(timesp);
 	std::set<std::string> set_recover;
 
 	std::vector<Shard *> all_shards;
-	all_shards.push_back(&meta_shard);
+	all_shards.emplace_back(&meta_shard);
 	for (auto &cluster:kl_clusters)
 		for (auto &shard:cluster->storage_shards)
-			all_shards.push_back(shard);
+			all_shards.emplace_back(shard);
 
 	for(auto &shard:all_shards)
 	{

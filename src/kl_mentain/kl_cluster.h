@@ -72,6 +72,16 @@ public:
 		pwd = gpsql_conn.pwd;
 	}
 
+	const std::string &get_name() const
+	{
+		return name;
+	}
+
+	bool matches_ip_port(const std::string &ip, int port) const
+	{
+		return gpsql_conn.ip == ip && gpsql_conn.port == port;
+	}
+
 	bool refresh_node_configs(int port_,
 		const char * name_, const char * ip_, const char * user_, const char * pwd_)
 	{
@@ -115,8 +125,11 @@ public:
 
 	int send_stmt(int pgres, const char *database, const char *stmt, int nretries = 1);
 	void close_conn() { gpsql_conn.close_conn(); }
+	bool connect_status() { return gpsql_conn.connected; }
 	PGresult *get_result() { return gpsql_conn.result; }
 	void free_pgsql_result() { gpsql_conn.free_pgsql_result(); }
+	bool get_variables(std::string &variable, std::string &value);
+	bool set_variables(std::string &variable, std::string &value_int, std::string &value_str);
 };
 
 class KunlunCluster
@@ -125,6 +138,7 @@ private:
 	mutable pthread_mutex_t mtx;
 	uint id;
 	std::string name;
+	std::string nick_name;
 	
 public:
 
@@ -145,6 +159,18 @@ public:
 	{
 		Scopped_mutex sm(mtx);
 		return name;
+	}
+
+	const std::string &get_nick_name() const
+	{
+		Scopped_mutex sm(mtx);
+		return nick_name;
+	}
+
+	void set_nick_name(const std::string &nick_name_)
+	{
+		Scopped_mutex sm(mtx);
+		nick_name = nick_name_;
 	}
 
 	int refresh_storages_to_computers();

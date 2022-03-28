@@ -28,8 +28,6 @@ extern std::string http_upload_path;
 extern std::string http_cmd_version;
 
 extern int64_t node_mgr_http_port;
-extern std::string hdfs_server_ip;
-extern int64_t hdfs_server_port;
 
 extern std::string cluster_json_path;
 extern std::string program_binaries_path;
@@ -44,7 +42,8 @@ extern std::string raft_group_member_init_config;
 extern std::string cluster_mgr_tmp_data_path;
 extern int64_t raft_brpc_port;
 std::string dev_interface;
-
+extern std::string prometheus_path;
+extern int64_t prometheus_port_start;
 
 Configs *Configs::get_instance() {
   if (m_inst == NULL)
@@ -190,6 +189,12 @@ void Configs::define_configs() {
                     "meta data server user account");
   define_str_config("meta_pwd", meta_svr_pwd, "",
                     "meta data server user's password");
+  define_str_config("meta_group_seeds", meta_group_seeds, "",
+                    "meta group seeds");
+  define_str_config("meta_ha_mode", meta_ha_mode, "no_rep", "meta ha mode");
+  define_str_config("meta_innodb_size", meta_innodb_size, "no_rep",
+                    "meta innodb size");
+
   define_int_config(
       "check_shard_interval", check_shard_interval, 1, 100, 3,
       "Interval in seconds a shard's two checks should be apart.");
@@ -216,6 +221,8 @@ void Configs::define_configs() {
                     "Number of http server threads to create.");
   define_int_config("cluster_mgr_brpc_http_port", cluster_mgr_brpc_http_port,
                     1000, 65535, 5000, "http server listen port.");
+  define_int_config("cluster_mgr_http_port", cluster_mgr_http_port, 1000, 65535,
+                    5000, "http server listen port.");
 
   char def_log_path[64];
   int slen = snprintf(def_log_path, sizeof(def_log_path),
@@ -234,10 +241,6 @@ void Configs::define_configs() {
   define_str_config("http_cmd_version", http_cmd_version, "0.1",
                     "http_cmd_version");
 
-  define_int_config("hdfs_server_port", hdfs_server_port, 0, 65535, 0,
-                    "hdfs_server_port");
-  define_str_config("hdfs_server_ip", hdfs_server_ip, "localhost",
-                    "hdfs_server_ip");
 
   define_str_config("cluster_json_path", cluster_json_path, "./cluster_json",
                     "cluster_json_path");
@@ -251,9 +254,9 @@ void Configs::define_configs() {
                     "postgresql-11.5-rel", "computer_prog_package_name");
 
   define_int_config("storage_instance_port_start", storage_instance_port_start,
-                    0, 65535, 5330, "storage_instance_port_start");
+                    0, 65535, 57330, "storage_instance_port_start");
   define_int_config("computer_instance_port_start",
-                    computer_instance_port_start, 0, 65535, 5030,
+                    computer_instance_port_start, 0, 65535, 57030,
                     "computer_instance_port_start");
   define_str_config(
       "raft_group_member_init_config", raft_group_member_init_config,
@@ -269,6 +272,11 @@ void Configs::define_configs() {
       "dev_interface", dev_interface,
       "eno1",
       "Net Interface device name");
+  
+  define_str_config("prometheus_path", prometheus_path,
+                    "../../../program_binaries/prometheus", "prometheus_path");
+  define_int_config("prometheus_port_start", prometheus_port_start, 0, 65535,
+                   57010, "prometheus_port_start");
 
   /*
     There is no practical way we can prevent multiple cluster_mgr processes
@@ -483,11 +491,11 @@ public:
       fclose(_fp);
   }
 };
-
 /*
   Return 0 on success;
   -9 on log entry format error
   -8 if there are vars that must be assigned a value are not so.
+  -10 meta_group_seeds is invalid
 */
 int Configs::process_config_file(const std::string &fn) {
   char line[1024];
@@ -550,7 +558,36 @@ int Configs::process_config_file(const std::string &fn) {
         nbad, bad_vars.c_str());
     return -8;
   }
+
+  // get meta_ip_port by meta_group_seeds
+  char *cStart, *cEnd;
+  cStart = (char *)meta_group_seeds.c_str();
+  while (*cStart != '\0') {
+    cEnd = strchr(cStart, ':');
+    if (cEnd == NULL)
+      break;
+
+    meta_svr_ip = std::string(cStart, cEnd - cStart);
+
+    cStart = cEnd + 1;
+    cEnd = strchr(cStart, ',');
+    meta_svr_port = atoi(cStart);
+    if (cEnd == NULL)
+      *cStart = '\0';
+    else
+      cStart = cEnd + 1;
+
+    vec_meta_ip_port.emplace_back(std::make_pair(meta_svr_ip, meta_svr_port));
+  }
+
+  if (vec_meta_ip_port.size() == 0) {
+    syslog(Logger::ERROR, "meta_group_seeds is invalid : %s",
+           meta_group_seeds.c_str());
+    return -10;
+  }
+
   return 0;
 }
+
 
 Configs *Configs::m_inst = NULL;
