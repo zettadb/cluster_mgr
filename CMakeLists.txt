@@ -12,9 +12,15 @@ elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
 	set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -Werror -O2")
 	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Werror -O2")
 endif()
-set(ZETTALIB_INCLUDE_PATH "/home/snowao/code/kunlun/zettalib/build/output/include")
-set(ZETTALIB_LIB_PATH "/home/snowao/code/kunlun/zettalib/build/output/lib")
-set(VENDOR_OUTPUT_PATH "/home/snowao/code/kunlun/zettalib/src/vendor/vendor_output")
+
+#set(ZETTALIB_PATH "/home/snowao/code/kunlun/zettalib")
+if(NOT DEFINED ZETTALIB_PATH)
+  message(FATAL_ERROR "ZETTALIB_PATH variable is not speicified, set by -DZETTALIB_PATH=?")
+endif()
+
+set(ZETTALIB_INCLUDE_PATH "${ZETTALIB_PATH}/build/output/include")
+set(ZETTALIB_LIB_PATH "${ZETTALIB_PATH}/build/output/lib")
+set(VENDOR_OUTPUT_PATH "${ZETTALIB_PATH}/src/vendor/vendor_output")
 
 link_directories(${VENDOR_OUTPUT_PATH}/lib)
 link_directories(${ZETTALIB_LIB_PATH})
