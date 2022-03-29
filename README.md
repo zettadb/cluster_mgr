@@ -20,3 +20,4 @@ For this software to work correctly you must keep its assumptions below true:
 1. A shard's mysqld processes are all up and running, it's the local Linux system's service manager or cron's responsibility to keep them up and running.
 2. Metadata shard always has almost latest meta/storage shard topology info or will be updated very soon. Inconsistency is allowed but the time window should be small otherwise leftover prepared transactions may not be discovered and ended. So if you added/removed a node to/from a shard you must update the metadata in metadata shard ASAP.
 
+
