@@ -25,9 +25,9 @@ extern int64_t computer_instance_port_start;
 std::string local_ip;
 
 System::~System() {
-  //Http_server::get_instance()->do_exit = 1;
-  //Http_server::get_instance()->join_all();
-  //delete Http_server::get_instance();
+  // Http_server::get_instance()->do_exit = 1;
+  // Http_server::get_instance()->join_all();
+  // delete Http_server::get_instance();
 
   Job::get_instance()->do_exit = 1;
   Job::get_instance()->join_all();
@@ -40,8 +40,8 @@ System::~System() {
   for (auto &i : kl_clusters)
     delete i;
 
-  //delete Configs::get_instance();
-  //delete Logger::get_instance();
+  // delete Configs::get_instance();
+  // delete Logger::get_instance();
 
   Thread_manager::do_exit = 1;
   Thread_manager::get_instance()->join_all();
@@ -265,14 +265,14 @@ int System::truncate_commit_log_from_metadata_server() {
 */
 int System::create_instance(const std::string &cfg_path) {
   m_global_instance = new System(cfg_path);
-  //Configs *cfg = Configs::get_instance();
+  // Configs *cfg = Configs::get_instance();
   int ret = 0;
 
-  //if ((ret = Logger::create_instance()))
+  // if ((ret = Logger::create_instance()))
   //  goto end;
-  //if ((ret = cfg->process_config_file(cfg_path)))
+  // if ((ret = cfg->process_config_file(cfg_path)))
   //  goto end;
-  //if ((ret = Logger::get_instance()->init(log_file_path)) != 0)
+  // if ((ret = Logger::get_instance()->init(log_file_path)) != 0)
   //  goto end;
   if ((ret = (Thread_manager::get_instance() == NULL)) != 0)
     goto end;
@@ -1073,6 +1073,11 @@ bool System::get_meta(cJSON *root, std::string &str_ret) {
       cJSON_AddStringToObject(ret_item, "status", "online");
     else
       cJSON_AddStringToObject(ret_item, "status", "offline");
+
+    if (node->is_master())
+      cJSON_AddStringToObject(ret_item, "master", "true");
+    else
+      cJSON_AddStringToObject(ret_item, "master", "false");
   }
 
   ret_cjson = cJSON_Print(ret_root);
@@ -1205,6 +1210,10 @@ bool System::get_cluster_detail(cJSON *root, std::string &str_ret) {
           cJSON_AddStringToObject(ret_item, "status", "online");
         else
           cJSON_AddStringToObject(ret_item, "status", "offline");
+        if (node->is_master())
+          cJSON_AddStringToObject(ret_item, "master", "true");
+        else
+          cJSON_AddStringToObject(ret_item, "master", "false");
       }
     }
 
@@ -1226,6 +1235,11 @@ bool System::get_cluster_detail(cJSON *root, std::string &str_ret) {
         cJSON_AddStringToObject(ret_item, "status", "online");
       else
         cJSON_AddStringToObject(ret_item, "status", "offline");
+
+      if (node->is_master())
+        cJSON_AddStringToObject(ret_item, "master", "true");
+      else
+        cJSON_AddStringToObject(ret_item, "master", "false");
     }
 
     break;
