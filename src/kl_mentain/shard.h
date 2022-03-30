@@ -36,8 +36,6 @@ extern int64_t commit_log_retention_hours;
 
 extern std::string meta_svr_ip;
 extern std::string meta_group_seeds;
-extern std::string meta_ha_mode;
-extern std::string meta_innodb_size;
 extern std::string meta_svr_user;
 extern std::string meta_svr_pwd;
 extern std::vector<Tpye_Ip_Port> vec_meta_ip_port;

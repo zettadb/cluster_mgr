@@ -12,6 +12,7 @@
 #include "kl_mentain/log.h"
 #include "kl_mentain/os.h"
 #include "kl_mentain/sys.h"
+#include "kl_mentain/job.h"
 #include "kl_mentain/thread_manager.h"
 #include "raft_ha/raft_ha.h"
 #include "stdio.h"
@@ -69,9 +70,7 @@ int main(int argc, char **argv) {
       if (System::create_instance(argv[1])) {
         return 1;
       }
-      syslog(Logger::INFO,
-             "Cluster manager started using meta-data shard node (%s:%d).",
-             meta_svr_ip.c_str(), meta_svr_port);
+
       global_instance = System::get_instance();
 
       bool ret = g_node_channel_manager.Init();
@@ -88,11 +87,32 @@ int main(int argc, char **argv) {
         _exit(0);
         return -1;
       }
+
+      // waiting for create meta shard or network connected
+      while(g_cluster_ha_handler.is_leader()) {
+        if (System::get_instance()->get_cluster_mgr_working() && 
+          System::get_instance()->setup_metadata_shard() == 0) {
+          // roll back job because cluster_mgr crash
+          System::get_instance()->refresh_shards_from_metadata_server();
+          System::get_instance()->refresh_computers_from_metadata_server();
+          //Job::get_instance()->job_roll_back_check();
+          break;
+        }
+        
+        syslog(Logger::ERROR, "setup_metadata_shard fail, waiting ...");
+        Thread_manager::get_instance()->sleep_wait(&main_thd, thread_work_interval * 3000);
+      }
+
+      syslog(Logger::INFO,
+             "Cluster manager started using meta-data shard node (%s:%d).",
+             meta_svr_ip.c_str(), meta_svr_port);
+
       httpServer = NewHttpServer();
       if (httpServer == nullptr) {
         fprintf(stderr, "cluster manager start faild");
         return 1;
       }
+
       while (g_cluster_ha_handler.is_leader()) {
         if (System::get_instance()->get_cluster_mgr_working() &&
             System::get_instance()->setup_metadata_shard() == 0) {
