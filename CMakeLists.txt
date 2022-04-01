@@ -67,7 +67,9 @@ target_link_libraries(cluster_mgr
   dl 
   z)
 
-set(CMAKE_INSTALL_PREFIX "${PROJECT_BINARY_DIR}/output")
+if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+  set(CMAKE_INSTALL_PREFIX "${PROJECT_BINARY_DIR}/output" CACHE PATH "..." FORCE)
+endif()
 install(TARGETS cluster_mgr DESTINATION bin)
 install(FILES 
   ${CMAKE_SOURCE_DIR}/resource/script/start_cluster_mgr.sh
