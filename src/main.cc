@@ -49,11 +49,11 @@ int main(int argc, char **argv) {
   if ((ret = Logger::get_instance()->init(log_file_path)) != 0) {
     return ret;
   }
-  char addr[256] = {0};
-  if (kunlun::GetIpFromInterface(dev_interface.c_str(), addr) != 0) {
-    return false;
-  }
-  local_ip = addr;
+//  char addr[256] = {0};
+//  if (kunlun::GetIpFromInterface(dev_interface.c_str(), addr) != 0) {
+//    return false;
+//  }
+//  local_ip = addr;
   brpc::Server *httpServer = nullptr;
   Thread main_thd;
   System * global_instance = nullptr;
