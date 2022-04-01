@@ -118,3 +118,5 @@ prometheus_path = ../../../../../program_binaries/prometheus
 # prometheus port start
 prometheus_port_start = 57010
 
+# cluster_mgr ip
+local_ip = 127.0.0.1
