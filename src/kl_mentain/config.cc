@@ -44,6 +44,7 @@ extern int64_t raft_brpc_port;
 std::string dev_interface;
 extern std::string prometheus_path;
 extern int64_t prometheus_port_start;
+extern std::string local_ip;
 
 Configs *Configs::get_instance() {
   if (m_inst == NULL)
@@ -270,6 +271,8 @@ void Configs::define_configs() {
                     "../../../program_binaries/prometheus", "prometheus_path");
   define_int_config("prometheus_port_start", prometheus_port_start, 0, 65535,
                    57010, "prometheus_port_start");
+  define_str_config("local_ip", local_ip,
+                    "127.0.0.1", "cluster_mgr ip address");
 
   /*
     There is no practical way we can prevent multiple cluster_mgr processes
