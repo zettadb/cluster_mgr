@@ -213,7 +213,7 @@ void Configs::define_configs() {
                     "Number of job work threads to create.");
   define_int_config("num_http_threads", num_http_threads, 1, 10, 3,
                     "Number of http server threads to create.");
-  define_int_config("cluster_mgr_brpc_http_port", cluster_mgr_brpc_http_port,
+  define_int_config("brpc_http_port", cluster_mgr_brpc_http_port,
                     1000, 65535, 5000, "http server listen port.");
   define_int_config("cluster_mgr_http_port", cluster_mgr_http_port, 1000, 65535,
                     5000, "http server listen port.");
@@ -260,7 +260,7 @@ void Configs::define_configs() {
       "cluster_mgr_tmp_data_path", cluster_mgr_tmp_data_path,
       "../data",
       "specify the temporary data path of the cluster_mgr");
-  define_int_config("raft_brpc_port", raft_brpc_port,
+  define_int_config("brpc_raft_port", raft_brpc_port,
                     1000, 65535, 5000, "raft brpc server listen port.");
   define_str_config(
       "dev_interface", dev_interface,

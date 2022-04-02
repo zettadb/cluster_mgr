@@ -47,7 +47,7 @@ meta_user = pgx
 meta_pwd = pgx_pwd
 
 # cluster mgr http port
-cluster_mgr_brpc_http_port = 8010
+brpc_http_port = 8010
 
 # log file path and name
 log_file = ../log/sys_cluster_mgr.log
@@ -65,7 +65,7 @@ statement_retry_interval_ms = 1000
 raft_group_member_init_config = 192.168.0.128:8110:0,
 
 # raft server listen port
-raft_brpc_port = 8110
+brpc_raft_port = 8110
 
 # Net Interface device name
 dev_interface = eno1
