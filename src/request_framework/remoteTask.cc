@@ -124,10 +124,11 @@ void RemoteTask::SetPara(const char *node_hostaddr, Json::Value para) {
   paras_map_[node_hostaddr] = para;
 }
 
-void RemoteTask::setParaToRequestBody(brpc::Controller *cntl,
+void RemoteTask::SetParaToRequestBody(brpc::Controller *cntl,
                                       std::string node_hostaddr) {
   Json::Value para_json = paras_map_[node_hostaddr];
   Json::FastWriter writer;
+  writer.omitEndingLineFeed();
   std::string body = writer.write(para_json);
   cntl->request_attachment().append(body);
   cntl->http_request().set_method(brpc::HTTP_METHOD_POST);
@@ -141,7 +142,7 @@ bool RemoteTask::RunTask() {
     kunlunrpc::HttpService_Stub stub(iter->second);
     brpc::Controller *cntl = new brpc::Controller();
 
-    setParaToRequestBody(cntl, iter->first);
+    SetParaToRequestBody(cntl, iter->first);
 
     google::protobuf::Closure *done = brpc::NewCallback(&CallBC, cntl, this);
     // `call_id` must be saved before the real RPC call
@@ -160,6 +161,10 @@ bool RemoteTask::RunTask() {
   TaskReport();
 
   return true;
+}
+
+void RemoteTask::set_prev_task(RemoteTask * prev){
+  prev_task_ = prev;
 }
 
 void TaskManager::PushBackTask(RemoteTask *sub_task) {
