@@ -10,9 +10,27 @@ mysql_write_timeout = 3
 # MySQL client max packet size in bytes.
 mysql_max_packet_size = 1073741824
 
+# NO. of times a SQL statement is resent for execution when MySQL connection broken.
+statement_retries = 2
+
+# Interval in milli-seconds a statement is resent for execution when it fails and we believe MySQL node will be ready in a while.
+statement_retry_interval_ms = 1000
+
+##################################################################
+# for log file
+
 # Log verbosity or amount of details, options are(in increasing details):
 # {ERROR, WARNING, INFO, LOG, DEBUG1, DEBUG2, DEBUG3}.
 log_verbosity = INFO
+
+# 100MB, if log grows larger than this it's rotated
+max_log_file_size = 100
+
+# log file path and name
+log_file = ./cluster_mgr.log
+
+##################################################################
+# for cluster working
 
 #Number of worker threads to create and maintain.
 num_worker_threads=6
@@ -29,15 +47,13 @@ storage_sync_interval = 60
 # Interval in hours a thread waits next commit_log clear.
 commit_log_retention_hours = 24
 
-# 100MB, if log grows larger than this it's rotated
-max_log_file_size = 100
-
-# log file path and name
-log_file = ./cluster_mgr.log
+##################################################################
+# for meta
 
 # meta server group seeds, note: no space in the middle of string
 # only one seed in no_rep mode, must three or more seeds in mgr/rbr mode
 meta_group_seeds = 127.0.0.1:6001,127.0.0.1:6004,127.0.0.1:6007
+#meta_group_seeds = 127.0.0.1:6001
 
 # meta data server user account
 meta_user = pgx
@@ -45,11 +61,8 @@ meta_user = pgx
 # meta data server user's password 
 meta_pwd = pgx_pwd
 
-# NO. of times a SQL statement is resent for execution when MySQL connection broken.
-statement_retries = 2
-
-# Interval in milli-seconds a statement is resent for execution when it fails and we believe MySQL node will be ready in a while.
-statement_retry_interval_ms = 1000
+##################################################################
+# for web http interfacde
 
 # Number of job threads to create.
 num_job_threads=6

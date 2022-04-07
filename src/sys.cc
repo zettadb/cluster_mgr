@@ -660,6 +660,33 @@ bool System::check_cluster_comp_more(std::string &cluster_name)
 	return true;
 }
 
+bool System::check_cluster_none()
+{
+	Scopped_mutex sm(mtx);
+
+	if(meta_shard.check_cluster_none())
+	{
+		//syslog(Logger::ERROR, "check_cluster_none error");
+		return false;
+	}
+
+	return true;
+}
+
+bool System::remove_all_meta()
+{
+	Scopped_mutex sm(mtx);
+
+	std::vector<uint> vec_id;
+	for(auto &node: meta_shard.get_nodes())
+		vec_id.emplace_back(node->get_id());
+
+	for(auto &id: vec_id)
+		meta_shard.remove_node(id);
+
+	return true;
+}
+
 bool System::get_cluster_shard_name(std::string &cluster_name, std::vector<std::string> &vec_shard_name)
 {
 	Scopped_mutex sm(mtx);
@@ -1136,7 +1163,7 @@ bool System::get_meta(cJSON *root, std::string &str_ret)
 	
 	for(auto &node: meta_shard.get_nodes())
 	{
-		std::string ip,user,pwd;;
+		std::string ip,user,pwd;
 		int port;
 		node->get_ip_port(ip, port);
 		node->get_user_pwd(user, pwd);
@@ -1783,6 +1810,22 @@ bool System::get_comps_ip_port(std::string &cluster_name, std::string &comp_name
 	}
 
 	return true;
+}
+
+bool System::get_meta_ip_port(std::vector<Tpye_Ip_Port> &vec_meta)
+{
+	Scopped_mutex sm(mtx);
+
+	for(auto &node: meta_shard.get_nodes())
+	{
+		std::string ip;
+		int port;
+		node->get_ip_port(ip, port);
+
+		vec_meta.emplace_back(std::make_pair(ip, port));
+	}
+
+	return (vec_meta.size() > 0);
 }
 
 bool System::update_variables(std::string &cluster_name, std::string &shard_name, Tpye_Ip_Port &ip_port, Tpye_string2 &t_string2)

@@ -33,8 +33,6 @@ int64_t stmt_retry_interval_ms = 500;
 
 std::string meta_svr_ip;
 std::string meta_group_seeds;
-std::string meta_ha_mode;
-std::string meta_innodb_size;
 std::string meta_svr_user;
 std::string meta_svr_pwd;
 
@@ -3126,6 +3124,40 @@ int MetadataShard::check_cluster_comp_more(std::string &cluster_name)
 			if(row[0] != NULL)
 			{
 				if(atoi(row[0]) > 1)
+					ret = 0;
+			}
+		}
+		cur_master->free_mysql_result();
+	}
+
+	return ret;
+}
+
+/*
+  check cluster cluster_comp_more from metadata table 
+  @retval 0 succeed;
+  		  1 fail;
+*/
+int MetadataShard::check_cluster_none()
+{
+	Scopped_mutex sm(mtx);
+
+	if(cur_master == NULL)
+		return 1;
+
+	std::string str_sql = "select count(*) from db_clusters";
+	int ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+
+		ret = 1;
+		if ((row = mysql_fetch_row(result)))
+		{
+			if(row[0] != NULL)
+			{
+				if(atoi(row[0]) == 0)
 					ret = 0;
 			}
 		}

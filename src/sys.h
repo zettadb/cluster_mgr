@@ -112,6 +112,8 @@ public:
 	bool check_cluster_shard_more(std::string &cluster_name);
 	bool check_cluster_shard_node_more(std::string &cluster_name, std::string &shard_name);
 	bool check_cluster_comp_more(std::string &cluster_name);
+	bool check_cluster_none();
+	bool remove_all_meta();
 	bool get_cluster_shard_name(std::string &cluster_name, std::vector<std::string> &vec_shard_name);
 	bool get_meta_info(std::vector<Tpye_Ip_Port_User_Pwd> &vec_meta);
 	bool get_meta_master(Tpye_Ip_Port_User_Pwd &meta);
@@ -132,6 +134,7 @@ public:
 	bool get_shards_ip_port(std::string &cluster_name, std::string &shard_name, std::vector<Tpye_Ip_Port> &vec_shard);
 	bool get_comps_ip_port(std::string &cluster_name, std::vector<Tpye_Ip_Port> &vec_comp);
 	bool get_comps_ip_port(std::string &cluster_name, std::string &comp_name, std::vector<Tpye_Ip_Port> &vec_comp);
+	bool get_meta_ip_port(std::vector<Tpye_Ip_Port> &vec_meta);
 	bool update_variables(std::string &cluster_name, std::string &shard_name, Tpye_Ip_Port &ip_port, Tpye_string2 &t_string2);
 	bool add_shard_nodes(std::string &cluster_name, std::string &shard_name, std::vector<Tpye_Ip_Port_User_Pwd> vec_ip_port_user_pwd);
 	bool stop_cluster(std::string &cluster_name);

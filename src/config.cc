@@ -183,15 +183,11 @@ void Configs::define_configs()
 
 	define_str_config("meta_group_seeds", meta_group_seeds, "",
 		"meta group seeds");
-	define_str_config("meta_ha_mode", meta_ha_mode, "no_rep",
-		"meta ha mode");
-	define_str_config("meta_innodb_size", meta_innodb_size, "no_rep",
-		"meta innodb size");
-	
 	define_str_config("meta_user", meta_svr_user, "",
 		"meta data server user account");
 	define_str_config("meta_pwd", meta_svr_pwd, "",
 		"meta data server user's password");
+
 	define_int_config("check_shard_interval", check_shard_interval, 1, 100, 3,
 		"Interval in seconds a shard's two checks should be apart.");
 	define_int_config("thread_work_interval", thread_work_interval, 1, 100, 3,

@@ -44,6 +44,7 @@ JOB_POSTGRES_EXPORTER,
 JOB_MYSQLD_EXPORTER, 
 JOB_CONTROL_INSTANCE, 
 JOB_CREATE_META, 
+JOB_DELETE_META, 
 JOB_CREATE_CLUSTER, 
 JOB_DELETE_CLUSTER, 
 JOB_ADD_SHARDS, 
@@ -146,6 +147,7 @@ public:
 	bool job_create_program_path();
 	bool job_start_meta(std::vector<Tpye_Ip_Port> &vec_meta_ip_port, std::string &ha_mode);
 	void job_create_meta(cJSON *root);
+	void job_delete_meta(cJSON *root);
 	bool job_create_meta_jsonfile();
 	bool job_create_shards_jsonfile(std::vector <std::vector<Tpye_Ip_Port_Paths>> &vec_shard, std::vector<std::string> &vec_shard_name);
 	bool job_create_storage(Tpye_Ip_Port_Paths &storage, cJSON *root, int install_id);
