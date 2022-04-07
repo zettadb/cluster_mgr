@@ -2124,7 +2124,7 @@ bool System::get_node_info_for_backup(std::string &cluster_name, std::string &sh
 		if(cluster_name != cluster->get_name())
 			continue;
 
-		cluster_id = cluster->get_id();
+		cluster_id = std::to_string(cluster->get_id());
 
 		//get a no master node for backup in every shard
 		for (auto &shard:cluster->storage_shards)
