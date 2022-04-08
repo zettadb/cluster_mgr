@@ -12,6 +12,7 @@
 #include "shard.h"
 #include "kl_cluster.h"
 #include "machine_info.h"
+#include "json/json.h"
 #include "cjson.h"
 #include <vector>
 #include <map>
@@ -120,7 +121,7 @@ public:
 	bool get_backup_storage_string(std::string &name, std::string &backup_storage_id, std::string &backup_storage_str);
 	bool get_backup_storage_list(cJSON *root, std::string &str_ret);
 	bool get_node_instance(cJSON *root, std::string &str_ret);
-	bool get_meta(cJSON *root, std::string &str_ret);
+	bool get_meta_list(cJSON *root, std::string &str_ret);
 	bool get_meta_mode(cJSON *root, std::string &str_ret);
 	bool get_cluster_summary(cJSON *root, std::string &str_ret);
 	bool get_cluster_detail(cJSON *root, std::string &str_ret);
@@ -147,5 +148,8 @@ public:
 	bool get_cluster_mgr_mode(std::string &cluster_name);
 	bool clear_cluster_shard_master(std::string &cluster_name);
 	bool update_instance_cluster_info(std::string &cluster_name);
+
+	bool get_meta_mode(Json::Value &attachment);
+	bool get_meta_list(Json::Value &attachment);
 };
 #endif // !SYS_H

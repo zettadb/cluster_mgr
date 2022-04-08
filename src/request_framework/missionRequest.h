@@ -21,6 +21,11 @@ public:
     task_manager_ = nullptr;
   }
   virtual ~MissionRequest();
+
+  // sync task impl
+  virtual bool SetUpSyncTaskImpl() { return SyncTaskImpl(); };
+  virtual bool SyncTaskImpl() { return true; };
+
   virtual void SetUpImpl() override final;
   // user should add arrange remote task logic
   virtual bool ArrangeRemoteTask() = 0;

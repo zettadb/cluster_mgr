@@ -23,13 +23,17 @@ public:
     }
 
     Json::Value root;
-    root["command_name"] = "echo";
     root["cluster_mgr_request_id"] = unique_request_id_;
     root["task_spec_info"] = task_spec_info_;
+    root["job_type"] = "execute_command";
+
     Json::Value paras;
-    paras.append(prev_task_->get_response()->SerializeResponseToStr());
-    paras.append(" 1>&2");
-    root["para"] = paras;
+    paras["command_name"] = "echo";
+    Json::Value para_json_array;
+    para_json_array.append(prev_task_->get_response()->SerializeResponseToStr());
+    para_json_array.append(" 1>&2");
+    paras["command_para"] = para_json_array;
+    root["paras"] = paras;
 
     Json::FastWriter writer;
     writer.omitEndingLineFeed();
@@ -63,13 +67,19 @@ public:
     fetch_date->AddNodeSubChannel(
         (iter->first).c_str(),
         g_node_channel_manager.getNodeChannel((iter->first).c_str()));
+
     Json::Value root;
-    root["command_name"] = "date";
     root["cluster_mgr_request_id"] = get_request_unique_id();
     root["task_spec_info"] = fetch_date->get_task_spec_info();
+    root["job_type"] = "execute_command";
+
     Json::Value paras;
-    paras.append(" 1>&2");
-    root["para"] = paras;
+    paras["command_name"] = "date";
+    Json::Value para_json_array;
+    para_json_array.append(" 1>&2");
+    paras["command_para"] = para_json_array;
+    root["paras"] = paras;
+
     fetch_date->SetPara((iter->first).c_str(), root);
     get_task_manager()->PushBackTask(fetch_date);
 
@@ -97,13 +107,19 @@ public:
     // the special requirment, see the ExpandClusterTask for detail
     RemoteTask *task = new RemoteTask("Example_Ifconfig_info");
     task->AddNodeSubChannel(node_ip, channel);
+
     Json::Value root;
-    root["command_name"] = "ifconfig";
-    root["cluster_mgr_request_id"] = get_request_unique_id();
     root["task_spec_info"] = task->get_task_spec_info();
+    root["cluster_mgr_request_id"] = get_request_unique_id();
+    root["job_type"] = "execute_command";
+    
     Json::Value paras;
-    paras.append("-a 1>&2");
-    root["para"] = paras;
+    paras["command_name"] = "ifconfig";
+    Json::Value para_json_array;
+    para_json_array.append("-a 1>&2");
+    paras["command_para"] = para_json_array;
+    root["paras"] = paras;
+
     task->SetPara(node_ip, root);
     get_task_manager()->PushBackTask(task);
     return true;

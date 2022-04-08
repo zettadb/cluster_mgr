@@ -36,6 +36,9 @@ public:
   }
   virtual ~ClusterRequest() {}
 
+  // sync task impl
+  virtual bool SetUpSyncTaskImpl() = 0;
+
   void SetUp();
   // Derived class should implament it
   // Invoked by SetUp()
@@ -63,6 +66,8 @@ public:
   void set_request_unique_id(std::string &);
 
   const Json::Value &get_body_json_document() const { return body_json_document_; }
+  const Json::Value &get_body_json_attachment() const { return body_json_attachment_; }
+  void set_body_json_attachment(Json::Value & attachment) { body_json_attachment_ = attachment; }
 
   RequestBody get_request_body();
   bool FillRequestBodySt();
@@ -84,6 +89,7 @@ private:
   std::mutex mtx_;
   std::string request_unique_id_;
   Json::Value body_json_document_;
+  Json::Value body_json_attachment_;
   RequestBody request_body_;
   bool init_by_recover_;
 };

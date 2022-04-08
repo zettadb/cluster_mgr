@@ -29,13 +29,13 @@ System::~System() {
   // Http_server::get_instance()->join_all();
   // delete Http_server::get_instance();
 
-  Job::get_instance()->do_exit = 1;
-  Job::get_instance()->join_all();
-  delete Job::get_instance();
+  //Job::get_instance()->do_exit = 1;
+  //Job::get_instance()->join_all();
+  //delete Job::get_instance();
 
   // delete Hdfs_client::get_instance();
-  delete Http_client::get_instance();
-  delete Machine_info::get_instance();
+  //delete Http_client::get_instance();
+  //delete Machine_info::get_instance();
 
   for (auto &i : kl_clusters)
     delete i;
@@ -276,16 +276,16 @@ int System::create_instance(const std::string &cfg_path) {
   //  goto end;
   if ((ret = (Thread_manager::get_instance() == NULL)) != 0)
     goto end;
-  if ((ret = (Machine_info::get_instance() == NULL)) != 0)
-    goto end;
+  //if ((ret = (Machine_info::get_instance() == NULL)) != 0)
+  //  goto end;
   // if ((ret = (Hdfs_client::get_instance()==NULL)) != 0)
   //	goto end;
-  if ((ret = (Http_client::get_instance() == NULL)) != 0)
-    goto end;
-  if ((ret = Job::get_instance()->start_job_thread()) != 0)
-    goto end;
-  if ((ret = Http_server::get_instance()->start_http_thread()) != 0)
-    goto end;
+  //if ((ret = (Http_client::get_instance() == NULL)) != 0)
+  //  goto end;
+  //if ((ret = Job::get_instance()->start_job_thread()) != 0)
+  //  goto end;
+  //if ((ret = Http_server::get_instance()->start_http_thread()) != 0)
+  //  goto end;
 
 end:
   return ret;
@@ -1047,7 +1047,7 @@ bool System::get_node_instance(cJSON *root, std::string &str_ret) {
   return ret;
 }
 
-bool System::get_meta(cJSON *root, std::string &str_ret) {
+bool System::get_meta_list(cJSON *root, std::string &str_ret) {
   Scopped_mutex sm(mtx);
 
   cJSON *ret_root;
@@ -2172,4 +2172,50 @@ bool System::update_instance_cluster_info(std::string &cluster_name) {
   }
 
   return ret;
+}
+
+bool System::get_meta_mode(Json::Value &attachment)
+{
+  Scopped_mutex sm(mtx);
+
+  std::string mode;
+  if (meta_shard.get_mode() == Shard::HAVL_mode::HA_no_rep)
+    mode = "no_rep";
+  else if (meta_shard.get_mode() == Shard::HAVL_mode::HA_mgr)
+    mode = "mgr";
+  else if (meta_shard.get_mode() == Shard::HAVL_mode::HA_rbr)
+    mode = "rbr";
+
+  attachment["mode"] = mode;
+
+  return true;
+}
+
+bool System::get_meta_list(Json::Value &attachment)
+{
+  Scopped_mutex sm(mtx);
+
+  for (auto &node : meta_shard.get_nodes()) {
+    std::string ip;
+    int port;
+
+    node->get_ip_port(ip, port);
+
+    Json::Value list;
+    list["ip"] = ip;
+    list["port"] = std::to_string(port);
+    if (node->connect_status())
+      list["status"] = "online";
+    else
+      list["status"] = "offline";
+
+    if (node->is_master())
+      list["master"] = "true";
+    else
+      list["master"] = "false";
+
+    attachment.append(list);
+  }
+
+  return true;
 }

@@ -6431,8 +6431,8 @@ bool Job::get_job_type(char *str, Job_type &job_type)
 		job_type = JOB_GET_STATUS;
 	else if(strcmp(str, "get_instance")==0)
 		job_type = JOB_GET_INSTANCES;
-	else if(strcmp(str, "get_meta")==0)
-		job_type = JOB_GET_META;
+	else if(strcmp(str, "get_meta_list")==0)
+		job_type = JOB_GET_META_LIST;
 	else if(strcmp(str, "get_meta_mode")==0)
 		job_type = JOB_GET_META_MODE;
 	else if(strcmp(str, "get_cluster_detail")==0)
@@ -6543,9 +6543,9 @@ bool Job::job_handle_ahead(const std::string &para, std::string &str_ret)
 	{
 		ret = System::get_instance()->get_node_instance(root, str_ret);
 	}
-	else if(job_type == JOB_GET_META)
+	else if(job_type == JOB_GET_META_LIST)
 	{
-		ret = System::get_instance()->get_meta(root, str_ret);
+		ret = System::get_instance()->get_meta_list(root, str_ret);
 	}
 	else if(job_type == JOB_GET_META_MODE)
 	{

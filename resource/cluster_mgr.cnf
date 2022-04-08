@@ -14,9 +14,30 @@ mysql_write_timeout = 3
 # MySQL client max packet size in bytes.
 mysql_max_packet_size = 1073741824
 
+# NO. of times a SQL statement is resent for execution when MySQL connection broken.
+statement_retries = 2
+
+# Interval in milli-seconds a statement is resent for execution when it fails and we believe MySQL node will be ready in a while.
+statement_retry_interval_ms = 1000
+
+##################################################################
+# for log file
+
 # Log verbosity or amount of details, options are(in increasing details):
 # {ERROR, WARNING, INFO, LOG, DEBUG1, DEBUG2, DEBUG3}.
 log_verbosity = INFO
+
+# 100MB, if log grows larger than this it's rotated
+max_log_file_size = 100
+
+# log file path and name
+log_file = ../log/sys_cluster_mgr.log
+
+# log file path and name
+cluster_mgr_tmp_data_path = ../data
+
+##################################################################
+# for cluster working
 
 #Number of worker threads to create and maintain.
 num_worker_threads=5
@@ -33,12 +54,13 @@ storage_sync_interval = 60
 # Interval in hours a thread waits next commit_log clear.
 commit_log_retention_hours = 24
 
-# 100MB, if log grows larger than this it's rotated
-max_log_file_size = 100
+##################################################################
+# for meta
 
 # meta server group seeds, note: no space in the middle of string
 # only one seed in no_rep mode, must three or more seeds in mgr/rbr mode
 meta_group_seeds = 192.168.0.128:57301,192.168.0.128:57304,192.168.0.128:57307
+#meta_group_seeds = 192.168.0.128:57301
 
 # meta data server user account
 meta_user = pgx
@@ -46,20 +68,8 @@ meta_user = pgx
 # meta data server user's password 
 meta_pwd = pgx_pwd
 
-# cluster mgr http port
-brpc_http_port = 8010
-
-# log file path and name
-log_file = ../log/sys_cluster_mgr.log
-
-# log file path and name
-cluster_mgr_tmp_data_path = ../data
-
-# NO. of times a SQL statement is resent for execution when MySQL connection broken.
-statement_retries = 2
-
-# Interval in milli-seconds a statement is resent for execution when it fails and we believe MySQL node will be ready in a while.
-statement_retry_interval_ms = 1000
+##################################################################
+# for raft
 
 # specify the raft group memeber config, comma seperate formation, must stop with comma
 raft_group_member_init_config = 192.168.0.128:8110:0,
@@ -67,32 +77,14 @@ raft_group_member_init_config = 192.168.0.128:8110:0,
 # raft server listen port
 brpc_raft_port = 8110
 
-# Net Interface device name
-dev_interface = eno1
+# cluster_mgr ip
+local_ip = 127.0.0.1
 
-# Number of job threads to create.
-num_job_threads=6
+##################################################################
+# for web http interfacde
 
-# Number of http threads to create.
-num_http_threads=6
-
-# http web path
-http_web_path = ./web
-
-# http upload path
-http_upload_path = ./upload
-
-# cluster_mgr http server port
-cluster_mgr_http_port = 57000
-
-# node_mgr http server port
-node_mgr_http_port = 57001
-
-# http cmd version
-http_cmd_version = 0.9
-
-# cluster create json path
-cluster_json_path = ./cluster_json
+# cluster mgr http port
+brpc_http_port = 8010
 
 # program_binaries_path
 program_binaries_path = ../../../../../program_binaries
@@ -118,5 +110,3 @@ prometheus_path = ../../../../../program_binaries/prometheus
 # prometheus port start
 prometheus_port_start = 57010
 
-# cluster_mgr ip
-local_ip = 127.0.0.1

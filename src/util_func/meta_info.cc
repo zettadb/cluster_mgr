@@ -69,6 +69,16 @@ ClusterRequestTypes GetReqTypeEnumByStr(const char *type_str) {
     type_enum = kClusterExpandType;
     break;
 
+  case "get_status"_hash:
+    type_enum = kGetStatusType;
+    break;
+  case "get_meta_mode"_hash:
+    type_enum = kGetMetaModeType;
+    break;
+  case "get_meta_list"_hash:
+    type_enum = kGetMetaListType;
+    break;
+
   // addtional type convert should add above
   default:
     type_enum = kRequestTypeMax;
