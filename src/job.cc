@@ -405,12 +405,19 @@ bool Job::job_update_cluster_info(std::string &cluster_name, std::string &nick_n
 {
 	std::string str_sql;
 
-	str_sql = "UPDATE db_clusters set nick_name='" + nick_name + "',memo='" + std::string(cjson) + "' where name='" + cluster_name + "'";
+	str_sql = "UPDATE db_clusters set memo='" + std::string(cjson) + "' where name='" + cluster_name + "'";
 	//syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
 
 	if(System::get_instance()->execute_metadate_opertation(SQLCOM_UPDATE, str_sql))
 	{
 		syslog(Logger::ERROR, "job_update_cluster_info error");
+		return false;
+	}
+	
+	//////////////////////////////////////////////////////////
+	if(!System::get_instance()->rename_cluster(cluster_name, nick_name))
+	{
+		syslog(Logger::ERROR, "rename cluster error");
 		return false;
 	}
 
