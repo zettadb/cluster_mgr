@@ -43,8 +43,10 @@ GlobalNodeChannelManager::get_nodes_channel_map() const {
 
 void GlobalNodeChannelManager::removeNodeChannel(const char * addr) {
     auto iter = nodes_channel_map_.find(addr);
-    if(iter != nodes_channel_map_.end())
+    if(iter != nodes_channel_map_.end()) {
+      delete (iter->second);
       nodes_channel_map_.erase(iter);
+    }
 }
 
 brpc::Channel *GlobalNodeChannelManager::getNodeChannel(const char *addr) {
