@@ -2184,7 +2184,7 @@ bool Job::job_control_instance(Tpye_Ip_Port &ip_port, std::string type, std::str
 	// get status from node 
 	get_status = "{\"version\":\"" + http_cmd_version + "\",\"job_id\":\"" + uuid_job_id + "\",\"job_type\":\"get_status\"}";
 	
-	retry = 30;
+	retry = 60;
 	while(retry-->0 && !Job::do_exit)
 	{
 		sleep(1);

@@ -62,7 +62,7 @@ meta_user = pgx
 meta_pwd = pgx_pwd
 
 ##################################################################
-# for web http interfacde
+# for web http interface
 
 # Number of job threads to create.
 num_job_threads=6
