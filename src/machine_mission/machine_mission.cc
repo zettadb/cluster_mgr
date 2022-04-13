@@ -42,6 +42,8 @@ void CreateMachineCallBack(Machine_New &machine, std::string &response, std::str
 
   job_status = "done";
   job_memo = "update machine succeed";
+
+  g_node_channel_manager.Init();
 }
 
 void UpdateMachineCallBack(Machine_New &machine, std::string &response, std::string &job_status, std::string &job_memo) {
@@ -364,6 +366,8 @@ void MachineMission::DeleteMachine() {
     job_memo = "delete_machine_on_meta error";
     goto end;
   }
+
+  g_node_channel_manager.removeNodeChannel(machine_.hostaddr.c_str());
 
   job_status = "done";
   job_memo = "delete machine succeed";
