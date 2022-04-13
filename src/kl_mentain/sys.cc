@@ -313,7 +313,7 @@ int System::execute_metadate_opertation(enum_sql_command command,
                                         const std::string &str_sql) {
   Scopped_mutex sm(mtx);
 
-  return meta_shard.execute_metadate_opertation(SQLCOM_INSERT, str_sql);
+  return meta_shard.execute_metadate_opertation(command, str_sql);
 }
 
 int System::get_comp_nodes_id_seq(int &comps_id) {
@@ -609,6 +609,30 @@ bool System::check_cluster_comp_more(std::string &cluster_name) {
   }
 
   return true;
+}
+
+bool System::check_cluster_none() {
+	Scopped_mutex sm(mtx);
+
+	if(meta_shard.check_cluster_none())	{
+		//syslog(Logger::ERROR, "check_cluster_none error");
+		return false;
+	}
+
+	return true;
+}
+
+bool System::remove_all_meta() {
+	Scopped_mutex sm(mtx);
+
+	std::vector<uint> vec_id;
+	for(auto &node: meta_shard.get_nodes())
+		vec_id.emplace_back(node->get_id());
+
+	for(auto &id: vec_id)
+		meta_shard.remove_node(id);
+
+	return true;
 }
 
 bool System::get_cluster_shard_name(std::string &cluster_name,
@@ -1047,7 +1071,7 @@ bool System::get_node_instance(cJSON *root, std::string &str_ret) {
   return ret;
 }
 
-bool System::get_meta_list(cJSON *root, std::string &str_ret) {
+bool System::get_meta(cJSON *root, std::string &str_ret) {
   Scopped_mutex sm(mtx);
 
   cJSON *ret_root;
@@ -1660,6 +1684,20 @@ bool System::get_comps_ip_port(std::string &cluster_name,
   return true;
 }
 
+bool System::get_meta_ip_port(std::vector<Tpye_Ip_Port> &vec_meta) {
+	Scopped_mutex sm(mtx);
+
+	for(auto &node: meta_shard.get_nodes())	{
+		std::string ip;
+		int port;
+		node->get_ip_port(ip, port);
+
+		vec_meta.emplace_back(std::make_pair(ip, port));
+	}
+
+	return (vec_meta.size() > 0);
+}
+
 bool System::update_variables(std::string &cluster_name,
                               std::string &shard_name, Tpye_Ip_Port &ip_port,
                               Tpye_string2 &t_string2) {
@@ -2174,8 +2212,23 @@ bool System::update_instance_cluster_info(std::string &cluster_name) {
   return ret;
 }
 
-bool System::get_meta_mode(Json::Value &attachment)
-{
+bool System::update_operation_record(std::string &id, std::string &status, std::string &memo) {
+	Scopped_mutex sm(mtx);
+
+	std::string str_sql;
+	str_sql = "UPDATE cluster_general_job_log set status='" + status + "',memo='" + memo;
+	str_sql += "',when_ended=current_timestamp(6) where id=" + id;
+	//syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
+
+	if(meta_shard.execute_metadate_opertation(SQLCOM_UPDATE, str_sql)) {
+		syslog(Logger::ERROR, "execute_metadate_opertation error");
+		return false;
+	}
+
+	return true;
+}
+
+bool System::get_meta_mode(Json::Value &attachment) {
   Scopped_mutex sm(mtx);
 
   std::string mode;
@@ -2191,8 +2244,7 @@ bool System::get_meta_mode(Json::Value &attachment)
   return true;
 }
 
-bool System::get_meta_list(Json::Value &attachment)
-{
+bool System::get_meta(Json::Value &attachment) {
   Scopped_mutex sm(mtx);
 
   for (auto &node : meta_shard.get_nodes()) {

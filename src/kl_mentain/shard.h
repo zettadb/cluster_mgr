@@ -591,6 +591,7 @@ public:
 	int check_cluster_shard_more(std::string &cluster_name);
 	int check_cluster_shard_node_more(std::string &cluster_name, std::string &shard_name);
 	int check_cluster_comp_more(std::string &cluster_name);
+	int check_cluster_none();
 };
 
 #endif // !SHARD_H

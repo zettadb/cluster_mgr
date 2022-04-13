@@ -68,6 +68,15 @@ ClusterRequestTypes GetReqTypeEnumByStr(const char *type_str) {
   case "expand_cluster"_hash:
     type_enum = kClusterExpandType;
     break;
+  case "create_machine"_hash:
+    type_enum = kCreateMachineType;
+    break;
+  case "update_machine"_hash:
+    type_enum = kUpdateMachineType;
+    break;
+  case "delete_machine"_hash:
+    type_enum = kDeleteMachineType;
+    break;
 
   case "get_status"_hash:
     type_enum = kGetStatusType;
@@ -75,8 +84,8 @@ ClusterRequestTypes GetReqTypeEnumByStr(const char *type_str) {
   case "get_meta_mode"_hash:
     type_enum = kGetMetaModeType;
     break;
-  case "get_meta_list"_hash:
-    type_enum = kGetMetaListType;
+  case "get_meta"_hash:
+    type_enum = kGetMetaType;
     break;
 
   // addtional type convert should add above

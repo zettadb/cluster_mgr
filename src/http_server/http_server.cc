@@ -10,6 +10,7 @@
 #include "cluster_expand/expand_mission.h"
 #include "example_mission/example_mission.h"
 #include "sync_mission/sync_mission.h"
+#include "machine_mission/machine_mission.h"
 #include "request_framework/missionRequest.h"
 #include "strings.h"
 #include "util_func/error_code.h"
@@ -155,12 +156,17 @@ MissionRequest *HttpServiceImpl::MissionRequestFactory(Json::Value *doc) {
   case kunlun::kExampleRequestType:
     request = new kunlun::ExampleMission(doc);
     break;
+  case kunlun::kCreateMachineType:
+  case kunlun::kUpdateMachineType:
+  case kunlun::kDeleteMachineType:
+    request = new kunlun::MachineMission(doc);
+    break;
     // TODO: Add more above
 
   //kSyncReturnType
   case kunlun::kGetStatusType:
   case kunlun::kGetMetaModeType:
-  case kunlun::kGetMetaListType:
+  case kunlun::kGetMetaType:
     request = new kunlun::SyncMission(doc);
     break;
 

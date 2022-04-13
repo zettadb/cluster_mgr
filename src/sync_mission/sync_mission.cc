@@ -10,7 +10,7 @@
 #include "util_func/error_code.h"
 #include "util_func/meta_info.h"
 
-bool SyncMission::GetStatus(){
+bool SyncMission::GetStatus() {
   Json::Value attachment;
   kunlun::MysqlConnection *meta_conn = g_node_channel_manager.get_meta_conn();
   char sql_buffer[4096] = {'\0'};
@@ -36,8 +36,7 @@ bool SyncMission::GetStatus(){
   return true;
 };
 
-bool SyncMission::GetMetaMode()
-{
+bool SyncMission::GetMetaMode() {
   Json::Value attachment;
 
   bool ret = System::get_instance()->get_meta_mode(attachment);
@@ -46,11 +45,10 @@ bool SyncMission::GetMetaMode()
   return ret;
 }
 
-bool SyncMission::GetMetaList()
-{
+bool SyncMission::GetMeta() {
   Json::Value attachment;
 
-  bool ret = System::get_instance()->get_meta_list(attachment);
+  bool ret = System::get_instance()->get_meta(attachment);
   set_body_json_attachment(attachment);
 
   return ret;

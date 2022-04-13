@@ -1,0 +1,6 @@
+add_library(machine_mission OBJECT machine_mission.cc machine_new.cc)
+target_include_directories(machine_mission INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_include_directories(machine_mission PUBLIC "${PROJECT_SOURCE_DIR}/src")
+target_include_directories(machine_mission PUBLIC "${VENDOR_OUTPUT_PATH}/include")
+target_include_directories(machine_mission PUBLIC "${PROJECT_BINARY_DIR}")
+target_include_directories(machine_mission PUBLIC "${ZETTALIB_INCLUDE_PATH}")

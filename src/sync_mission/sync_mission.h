@@ -20,7 +20,7 @@ public:
 
   bool GetStatus();
   bool GetMetaMode();
-  bool GetMetaList();
+  bool GetMeta();
   virtual bool SyncTaskImpl() override {
     bool ret = true;
     switch (get_request_type()) {
@@ -30,8 +30,8 @@ public:
     case kunlun::kGetMetaModeType:
       ret = GetMetaMode();
       break;
-    case kunlun::kGetMetaListType:
-      ret = GetMetaList();
+    case kunlun::kGetMetaType:
+      ret = GetMeta();
       break;
 
     default:

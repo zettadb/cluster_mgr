@@ -72,19 +72,19 @@ meta_pwd = pgx_pwd
 # for raft
 
 # specify the raft group memeber config, comma seperate formation, must stop with comma
-raft_group_member_init_config = 192.168.0.128:8110:0,
+raft_group_member_init_config = 192.168.0.128:57001:0,
 
 # raft server listen port
-brpc_raft_port = 8110
+brpc_raft_port = 57001
 
 # cluster_mgr ip
 local_ip = 127.0.0.1
 
 ##################################################################
-# for web http interfacde
+# for web http interface
 
 # cluster mgr http port
-brpc_http_port = 8010
+brpc_http_port = 57000
 
 # program_binaries_path
 program_binaries_path = ../../../../../program_binaries

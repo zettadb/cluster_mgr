@@ -405,12 +405,19 @@ bool Job::job_update_cluster_info(std::string &cluster_name, std::string &nick_n
 {
 	std::string str_sql;
 
-	str_sql = "UPDATE db_clusters set nick_name='" + nick_name + "',memo='" + std::string(cjson) + "' where name='" + cluster_name + "'";
+	str_sql = "UPDATE db_clusters set memo='" + std::string(cjson) + "' where name='" + cluster_name + "'";
 	//syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
 
 	if(System::get_instance()->execute_metadate_opertation(SQLCOM_UPDATE, str_sql))
 	{
 		syslog(Logger::ERROR, "job_update_cluster_info error");
+		return false;
+	}
+	
+	//////////////////////////////////////////////////////////
+	if(!System::get_instance()->rename_cluster(cluster_name, nick_name))
+	{
+		syslog(Logger::ERROR, "rename cluster error");
 		return false;
 	}
 
@@ -760,7 +767,8 @@ bool Job::job_roll_back_record(std::string &job_id)
 
 bool Job::job_roll_back_check()
 {
-  std::lock_guard<std::mutex> lock(mutex_operation_);
+	std::lock_guard<std::mutex> lock(mutex_operation_);
+	
 	std::vector<std::string> vec_job_json,vec_job_id;
 
 	////////////////////////////////////////////////////////////////////////////////
@@ -2467,6 +2475,7 @@ bool Job::job_start_meta(std::vector<Tpye_Ip_Port> &vec_meta_ip_port, std::strin
 	}
 	pclose(pfd);
 
+	System::get_instance()->set_cluster_mgr_working(true);
 	/////////////////////////////////////////////////////////////
 	// check meta succeed
 	retry = thread_work_interval * 30;
@@ -2667,8 +2676,7 @@ void Job::job_create_meta(cJSON *root)
 	job_info = "start meta cmd";
 	update_jobid_status(job_id, job_result, job_info);
 	syslog(Logger::INFO, "%s", job_info.c_str());
-	System::get_instance()->set_cluster_mgr_working(true);
-
+	
 	if(!job_start_meta(vec_meta_ip_port, ha_mode))
 	{
 		//roll back
@@ -2687,6 +2695,81 @@ void Job::job_create_meta(cJSON *root)
 	job_info = "create meta succeed";
 	update_jobid_status(job_id, job_result, job_info);
 	syslog(Logger::INFO, "%s", job_info.c_str());
+	System::get_instance()->set_cluster_mgr_working(true);
+	return;
+
+end:
+	job_result = "failed";
+	update_jobid_status(job_id, job_result, job_info);
+	syslog(Logger::ERROR, "%s", job_info.c_str());
+	System::get_instance()->set_cluster_mgr_working(true);
+}
+
+void Job::job_delete_meta(cJSON *root)
+{
+	std::lock_guard<std::mutex> lock(mutex_operation_);
+
+	std::string job_id;
+	std::string job_result;
+	std::string job_info;
+	cJSON *item;
+	std::vector<Tpye_Ip_Port> vec_meta;
+
+	item = cJSON_GetObjectItem(root, "job_id");
+	if(item == NULL || item->valuestring == NULL)
+	{
+		syslog(Logger::ERROR, "get_job_id error");
+		return;
+	}
+	job_id = item->valuestring;
+
+	/////////////////////////////////////////////////////////
+
+	job_result = "ongoing";
+	job_info = "delete meta start";
+	update_jobid_status(job_id, job_result, job_info);
+	syslog(Logger::INFO, "%s", job_info.c_str());
+	System::get_instance()->set_cluster_mgr_working(false);
+
+	/////////////////////////////////////////////////////////
+	// check cluster is null
+	if(!System::get_instance()->check_cluster_none())
+	{
+		job_info = "must delete cluster first";
+		goto end;
+	}
+
+	/////////////////////////////////////////////////////////
+	// get vec_meta
+	if(!System::get_instance()->get_meta_ip_port(vec_meta))
+	{
+		job_info = "get_meta_ip_port error";
+		goto end;
+	}
+
+	/////////////////////////////////////////////////////////
+	//start delete meta
+	job_info = "start delete meta";
+	update_jobid_status(job_id, job_result, job_info);
+	syslog(Logger::INFO, "%s", job_info.c_str());
+	for(auto &meta: vec_meta)
+	{
+		if(!job_delete_storage(meta))
+			syslog(Logger::ERROR, "delete meta error");
+	}
+
+	/////////////////////////////////////////////////////////
+	// remove all meta
+	if(!System::get_instance()->remove_all_meta())
+	{
+		syslog(Logger::ERROR, "remove_all_meta error");
+	}
+
+	job_result = "done";
+	job_info = "delete meta succeed";
+	update_jobid_status(job_id, job_result, job_info);
+	syslog(Logger::INFO, "%s", job_info.c_str());
+	System::get_instance()->set_cluster_mgr_working(true);
 	return;
 
 end:
@@ -6431,8 +6514,8 @@ bool Job::get_job_type(char *str, Job_type &job_type)
 		job_type = JOB_GET_STATUS;
 	else if(strcmp(str, "get_instance")==0)
 		job_type = JOB_GET_INSTANCES;
-	else if(strcmp(str, "get_meta_list")==0)
-		job_type = JOB_GET_META_LIST;
+	else if(strcmp(str, "get_meta")==0)
+		job_type = JOB_GET_META;
 	else if(strcmp(str, "get_meta_mode")==0)
 		job_type = JOB_GET_META_MODE;
 	else if(strcmp(str, "get_cluster_detail")==0)
@@ -6463,6 +6546,8 @@ bool Job::get_job_type(char *str, Job_type &job_type)
 		job_type = JOB_CONTROL_INSTANCE;
 	else if(strcmp(str, "create_meta")==0)
 		job_type = JOB_CREATE_META;
+	else if(strcmp(str, "delete_meta")==0)
+		job_type = JOB_DELETE_META;
 	else if(strcmp(str, "rename_cluster")==0)
 		job_type = JOB_RENAME_CLUSTER;
 	else if(strcmp(str, "create_cluster")==0)
@@ -6543,9 +6628,9 @@ bool Job::job_handle_ahead(const std::string &para, std::string &str_ret)
 	{
 		ret = System::get_instance()->get_node_instance(root, str_ret);
 	}
-	else if(job_type == JOB_GET_META_LIST)
+	else if(job_type == JOB_GET_META)
 	{
-		ret = System::get_instance()->get_meta_list(root, str_ret);
+		ret = System::get_instance()->get_meta(root, str_ret);
 	}
 	else if(job_type == JOB_GET_META_MODE)
 	{
@@ -6598,6 +6683,7 @@ bool Job::job_handle_ahead(const std::string &para, std::string &str_ret)
 	else
 	{
 		if(job_type == JOB_CREATE_META
+			|| job_type == JOB_DELETE_META
 			|| job_type == JOB_CREATE_CLUSTER
 			|| job_type == JOB_DELETE_CLUSTER
 			|| job_type == JOB_ADD_SHARDS
@@ -6683,6 +6769,10 @@ void Job::job_handle(std::string &job)
 	else if(job_type == JOB_CREATE_META)
 	{
 		job_create_meta(root);
+	}
+	else if(job_type == JOB_DELETE_META)
+	{
+		job_delete_meta(root);
 	}
 	else if(job_type == JOB_CREATE_CLUSTER)
 	{

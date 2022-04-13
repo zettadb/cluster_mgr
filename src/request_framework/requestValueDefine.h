@@ -34,11 +34,14 @@ enum ClusterRequestTypes {
   kShardNodeAddType,
   kShardNodeDropType,
   kClusterExpandType,
+  kCreateMachineType,
+  kUpdateMachineType,
+  kDeleteMachineType,
 
   kSyncReturnType = 300,
   kGetStatusType,
   kGetMetaModeType,
-  kGetMetaListType,
+  kGetMetaType,
 
   // addtional type should add above
   kRequestTypeMax = 1000

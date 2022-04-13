@@ -3134,6 +3134,40 @@ int MetadataShard::check_cluster_comp_more(std::string &cluster_name)
 }
 
 /*
+  check cluster cluster_comp_more from metadata table 
+  @retval 0 succeed;
+  		  1 fail;
+*/
+int MetadataShard::check_cluster_none()
+{
+	Scopped_mutex sm(mtx);
+
+	if(cur_master == NULL)
+		return 1;
+
+	std::string str_sql = "select count(*) from db_clusters";
+	int ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+
+		ret = 1;
+		if ((row = mysql_fetch_row(result)))
+		{
+			if(row[0] != NULL)
+			{
+				if(atoi(row[0]) == 0)
+					ret = 0;
+			}
+		}
+		cur_master->free_mysql_result();
+	}
+
+	return ret;
+}
+
+/*
   Query meta shard node sn to fetch all meta shard nodes from its
   meta_db_nodes table, and refresh the shard nodes contained in this object.
   This method is can be called repeatedly to refresh metashard nodes periodically.
