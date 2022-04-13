@@ -11,6 +11,7 @@
 #include "example_mission/example_mission.h"
 #include "sync_mission/sync_mission.h"
 #include "machine_mission/machine_mission.h"
+#include "backup_storage/backup_storage.h"
 #include "request_framework/missionRequest.h"
 #include "strings.h"
 #include "util_func/error_code.h"
@@ -160,6 +161,11 @@ MissionRequest *HttpServiceImpl::MissionRequestFactory(Json::Value *doc) {
   case kunlun::kUpdateMachineType:
   case kunlun::kDeleteMachineType:
     request = new kunlun::MachineMission(doc);
+    break;
+  case kunlun::kCreateBackupStorageType:
+  case kunlun::kUpdateBackupStorageType:
+  case kunlun::kDeleteBackupStorageType:
+    request = new kunlun::BackupStorage(doc);
     break;
     // TODO: Add more above
 

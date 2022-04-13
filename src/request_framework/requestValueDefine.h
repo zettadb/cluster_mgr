@@ -37,6 +37,9 @@ enum ClusterRequestTypes {
   kCreateMachineType,
   kUpdateMachineType,
   kDeleteMachineType,
+  kCreateBackupStorageType,
+  kUpdateBackupStorageType,
+  kDeleteBackupStorageType,
 
   kSyncReturnType = 300,
   kGetStatusType,

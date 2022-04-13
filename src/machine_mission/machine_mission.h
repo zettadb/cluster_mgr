@@ -24,7 +24,12 @@ public:
       }
   ~MachineRemoteTask() {}
   void SetParaToRequestBody(brpc::Controller *cntl,
-                            std::string node_hostaddr) override final;
+                            std::string node_hostaddr) override {
+    if (prev_task_ == nullptr) {
+      return super::SetParaToRequestBody(cntl, node_hostaddr);
+    }
+  }
+
   MachineMission *getMission() { return mission_; }
 private:
   std::string unique_request_id_;

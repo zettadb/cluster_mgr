@@ -4,7 +4,7 @@
   This source code is licensed under Apache 2.0 License,
   combined with Common Clause Condition 1.0, as detailed in the NOTICE file.
 */
-#include "machine_mission/machine_mission.h"
+#include "machine_mission.h"
 #include "kl_mentain/global.h"
 #include "kl_mentain/sys.h"
 
@@ -104,13 +104,6 @@ void Machine_Call_Back(void *cb_context) {
 
   syslog(Logger::INFO, "%s", job_memo.c_str());
   System::get_instance()->update_operation_record(job_id, job_status, job_memo);
-}
-
-void MachineRemoteTask::SetParaToRequestBody(brpc::Controller *cntl,
-                          std::string node_hostaddr) {
-  if (prev_task_ == nullptr) {
-    return super::SetParaToRequestBody(cntl, node_hostaddr);
-  }
 }
 
 bool MachineMission::ArrangeRemoteTask() {

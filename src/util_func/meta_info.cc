@@ -77,6 +77,15 @@ ClusterRequestTypes GetReqTypeEnumByStr(const char *type_str) {
   case "delete_machine"_hash:
     type_enum = kDeleteMachineType;
     break;
+  case "create_backup_storage"_hash:
+    type_enum = kCreateBackupStorageType;
+    break;
+  case "update_backup_storage"_hash:
+    type_enum = kUpdateBackupStorageType;
+    break;
+  case "delete_backup_storage"_hash:
+    type_enum = kDeleteBackupStorageType;
+    break;
 
   case "get_status"_hash:
     type_enum = kGetStatusType;
