@@ -1248,7 +1248,7 @@ bool Job::job_delete_backup_storage(cJSON *root, std::string &str_ret)
 	//must delete cluster_shard_backup_restore_log
 	if(!System::get_instance()->get_backup_storage_string(name, backup_storage_id, backup_storage_str))
 	{
-		job_info = "get_backup_storage_string error, create_backup_storage first";
+		job_info = "get_backup_storage error, create_backup_storage first";
 		goto end;
 	}
 
@@ -5056,7 +5056,7 @@ void Job::job_add_nodes(cJSON *root)
 
 	if(!System::get_instance()->get_backup_storage_string(backup_storage , backup_storage_id, backup_storage_str))
 	{
-		job_info = "get_backup_storage_string error, create_backup_storage first";
+		job_info = "get_backup_storage error, create_backup_storage first";
 		goto end;
 	}
 
@@ -5715,7 +5715,7 @@ void Job::job_backup_cluster(cJSON *root)
 
 	if(!System::get_instance()->get_backup_storage_string(backup_storage, backup_storage_id, backup_storage_str))
 	{
-		job_info = "get_backup_storage_string error, create_backup_storage first";
+		job_info = "get_backup_storage error, create_backup_storage first";
 		goto end;
 	}
 
@@ -6070,7 +6070,7 @@ void Job::job_restore_cluster(cJSON *root)
 
 	if(!System::get_instance()->get_backup_storage_string(backup_storage, backup_storage_id, backup_storage_str))
 	{
-		job_info = "get_backup_storage_string error, create_backup_storage first";
+		job_info = "get_backup_storage error, create_backup_storage first";
 		goto end;
 	}
 
@@ -6278,7 +6278,7 @@ void Job::job_restore_new_cluster(cJSON *root)
 
 	if(!System::get_instance()->get_backup_storage_string(backup_storage, backup_storage_id, backup_storage_str))
 	{
-		job_info = "get_backup_storage_string error, create_backup_storage first";
+		job_info = "get_backup_storage error, create_backup_storage first";
 		goto end;
 	}
 
