@@ -168,6 +168,7 @@ MissionRequest *HttpServiceImpl::MissionRequestFactory(Json::Value *doc) {
   case kunlun::kDeleteBackupStorageType:
     request = new kunlun::BackupStorage(doc);
     break;
+  case kunlun::kRenameClusterType:
   case kunlun::kCreateClusterType:
   case kunlun::kDeleteClusterType:
     request = new kunlun::ClusterMission(doc);

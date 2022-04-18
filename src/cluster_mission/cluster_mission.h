@@ -8,6 +8,8 @@
 #define _CLUSTER_MISSION_H_
 #include "http_server/node_channel.h"
 #include "request_framework/missionRequest.h"
+#include "zettalib/biodirectpopen.h"
+#include "zettalib/errorcup.h"
 #include "kl_mentain/machine_info.h"
 #include "kl_mentain/global.h"
 #include "kl_mentain/sys.h"
@@ -71,12 +73,14 @@ public:
   explicit ClusterMission(Json::Value *doc) : super(doc){};
   ~ClusterMission(){};
 
+  void renameCluster();
   void createCluster();
   void deleteCluster();
 
   void createStorageInfo();
   void createComputerInfo();
   void createClusterInfo();
+  bool updateClusterInfo();
   void create_shard(std::vector<Tpye_Ip_Port_Paths> &storages, std::string &shard_name);
   void create_storage(Tpye_Ip_Port_Paths &storage, Json::Value &para);
   void create_comps(std::vector<Tpye_Ip_Port_Paths> &comps, 

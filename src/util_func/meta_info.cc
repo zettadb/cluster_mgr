@@ -41,6 +41,9 @@ ClusterRequestTypes GetReqTypeEnumByStr(const char *type_str) {
   case "example_mission"_hash:
     type_enum = kExampleRequestType;
     break;
+  case "rename_cluster"_hash:
+    type_enum = kRenameClusterType;
+    break;
   case "create_cluster"_hash:
     type_enum = kCreateClusterType;
     break;

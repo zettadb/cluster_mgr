@@ -219,6 +219,9 @@ bool ClusterMission::ArrangeRemoteTask() {
   job_id = get_request_unique_id();
 
   switch (request_type) {
+  case kunlun::kRenameClusterType:
+    renameCluster();
+    break;
   case kunlun::kCreateClusterType:
     createCluster();
     break;
@@ -231,6 +234,52 @@ bool ClusterMission::ArrangeRemoteTask() {
   }
 
   return true;
+}
+
+void ClusterMission::renameCluster() {
+	std::string job_status;
+	std::string job_memo;
+
+  if (!super::get_body_json_document().isMember("paras")) {
+    setExtraErr("missing `paras` key-value pair in the request body");
+    return;
+  }
+  Json::Value paras = super::get_body_json_document()["paras"];
+
+  if (!paras.isMember("cluster_name")) {
+    job_memo = "missing `cluster_name` key-value pair in the request body";
+    goto end;
+  }
+  cluster_name = paras["cluster_name"].asString();
+
+  if (!paras.isMember("nick_name")) {
+    job_memo = "missing `nick_name` key-value pair in the request body";
+    goto end;
+  }
+  nick_name = paras["nick_name"].asString();
+
+	//////////////////////////////////////////////////////////
+	if(System::get_instance()->check_nick_name(nick_name)) {
+		job_memo = "new nick_name have existed";
+		goto end;
+	}
+
+	//////////////////////////////////////////////////////////
+	if(!System::get_instance()->rename_cluster(cluster_name, nick_name)) {
+		job_memo = "rename cluster error";
+		goto end;
+	}
+
+	job_status = "done";
+	job_memo = "rename cluster succeed";
+  syslog(Logger::ERROR, "%s", job_memo.c_str());
+  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  return;
+
+end:
+  job_status = "failed";
+  syslog(Logger::ERROR, "%s", job_memo.c_str());
+  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
 }
 
 void ClusterMission::createCluster() {
@@ -580,7 +629,7 @@ void ClusterMission::createClusterInfo() {
 	std::string job_status;
 	std::string job_memo;
 
-  FILE* pfd;
+	FILE* pfd;
 	char buf[256];
 
 	int retry;
@@ -633,8 +682,7 @@ void ClusterMission::createClusterInfo() {
 		goto end;
 	}
 
-	for(auto &ip_port_user_pwd: meta)
-	{
+	for(auto &ip_port_user_pwd: meta)	{
 		Json::Value meta_json_sub;
     meta_json_sub["ip"] = std::get<0>(ip_port_user_pwd);
     meta_json_sub["port"] = std::get<1>(ip_port_user_pwd);
@@ -659,13 +707,11 @@ void ClusterMission::createClusterInfo() {
 	syslog(Logger::INFO, "createClusterInfo cmd %s", cmd.c_str());
 
 	pfd = popen(cmd.c_str(), "r");
-	if(!pfd)
-	{
+	if(!pfd) {
 		job_memo = "createClusterInfo start cmd error";
 		goto end;
 	}
-	while(fgets(buf, 256, pfd)!=NULL)
-	{
+	while(fgets(buf, 256, pfd)!=NULL)	{
 		//if(strcasestr(buf, "error") != NULL)
 			syslog(Logger::INFO, "%s", buf);
 	}
@@ -674,22 +720,27 @@ void ClusterMission::createClusterInfo() {
 	/////////////////////////////////////////////////////////////
 	// check instance succeed by connect to instance
 	retry = thread_work_interval * 30;
-	while(retry-->0)
-	{
+	while(retry-->0) {
 		sleep(1);
 		if(System::get_instance()->check_cluster_name(cluster_name))
 			break;
 	}
 
-	if(retry<0)
-	{
+	if(retry<0)	{
 		job_memo = "cluster start error";
 		goto end;
 	}
 
-	syslog(Logger::INFO, "cluster start succeed");
+	/////////////////////////////////////////////////////////
+	// update cluster info
+	if(!updateClusterInfo()) {
+		job_memo = "update cluster info error";
+		goto end;
+	}
+
+  syslog(Logger::INFO, "create cluster succeed : %s", cluster_name.c_str());
   job_status = "done";
-	job_memo = cluster_name;
+  job_memo = cluster_name;
   System::get_instance()->update_operation_record(job_id, job_status, job_memo);
   return;
 
@@ -697,6 +748,32 @@ end:
   job_status = "failed";
   syslog(Logger::ERROR, "%s", job_memo.c_str());
   System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+}
+
+bool ClusterMission::updateClusterInfo() {
+  Json::Value paras = super::get_body_json_document()["paras"];
+	std::string str_sql;
+  std::string memo;
+
+  Json::FastWriter writer;
+  writer.omitEndingLineFeed();
+  memo = writer.write(paras);
+
+	str_sql = "UPDATE db_clusters set memo='" + memo + "' where name='" + cluster_name + "'";
+	//syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
+
+	if(System::get_instance()->execute_metadate_opertation(SQLCOM_UPDATE, str_sql))	{
+		syslog(Logger::ERROR, "update cluster info error");
+		return false;
+	}
+	
+	//////////////////////////////////////////////////////////
+	if(!System::get_instance()->rename_cluster(cluster_name, nick_name)) {
+		syslog(Logger::ERROR, "rename cluster error");
+		return false;
+	}
+
+	return true;
 }
 
 void ClusterMission::create_shard(std::vector<Tpye_Ip_Port_Paths> &storages, std::string &shard_name) {
@@ -1045,27 +1122,24 @@ void ClusterMission::stop_cluster() {
 }
 
 bool ClusterMission::system_cmd(std::string &cmd) {
-	FILE* pfd;
-	char* line;
-	char buf[256];
+  kunlun::BiodirectPopen *popen_p = new kunlun::BiodirectPopen(cmd.c_str());
+  FILE *stderr_fp;
 
-	syslog(Logger::INFO, "system cmd: %s" ,cmd.c_str());
+  if (!popen_p->Launch("rw")) {
+    goto end;
+  }
+  stderr_fp = popen_p->getReadStdErrFp();
+  char buf[256];
+  if (fgets(buf, 256, stderr_fp) != nullptr) {
+    syslog(Logger::ERROR, "Biopopen stderr: %s", buf);
+    goto end;
+  }
 
-	pfd = popen(cmd.c_str(), "r");
-	if(!pfd) {
-		syslog(Logger::ERROR, "system cmd error %s" ,cmd.c_str());
-		return false;
-	}
-	memset(buf, 0, 256);
-	line = fgets(buf, 256, pfd);
-	pclose(pfd);
+end:
+  if (popen_p != nullptr)
+    delete popen_p;
 
-	if(strlen(buf))	{
-		syslog(Logger::ERROR, "system cmd error %s, %s", cmd.c_str(), buf);
-		return false;
-	}
-
-	return true;
+  return true;
 }
 
 void ClusterMission::get_uuid(std::string &uuid) {
