@@ -8,7 +8,7 @@
 #define _MACHINE_MISSION_H_
 #include "http_server/node_channel.h"
 #include "request_framework/missionRequest.h"
-#include "machine_new.h"
+#include "kl_mentain/machine_info.h"
 
 void Machine_Call_Back(void *);
 namespace kunlun {
@@ -39,18 +39,15 @@ private:
 class MachineMission : public ::MissionRequest {
   typedef MissionRequest super;
 
-private:
-  ClusterRequestTypes request_type_;
-  Machine_New machine_;
-  std::string job_id_;
+public:
+  ClusterRequestTypes request_type;
+  std::string job_id;
+  Machine machine;
 
 public:
   explicit MachineMission(Json::Value *doc) : super(doc){};
   ~MachineMission(){};
 
-  Machine_New &getMachine() { return machine_; }
-  std::string &getJobId() { return job_id_; }
-  ClusterRequestTypes getRequestTypes() { return request_type_; }
   void CreateMachine();
   void UpdateMachine();
   void DeleteMachine();

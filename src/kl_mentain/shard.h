@@ -567,10 +567,6 @@ public:
 	int delete_cluster_shard_from_metadata(std::string &cluster_name, std::string &shard_name);
 	int delete_cluster_shard_node_from_metadata(std::string &cluster_name, std::string &shard_name, Tpye_Ip_Port &ip_port);
 	int delete_cluster_comp_from_metadata(std::string &cluster_name, std::string &comp_name);
-	int get_server_nodes_from_metadata(std::vector<Machine*> &vec_machines);
-	int get_meta_instance(Machine* machine);
-	int get_storage_instance_port(Machine* machine);
-	int get_computer_instance_port(Machine* machine);
 	int update_instance_status(Tpye_Ip_Port &ip_port, std::string &status, int &type);
 	int get_backup_storage_string(std::string &name, std::string &backup_storage_id, std::string &backup_storage_str);
 	int get_backup_storage_list(std::vector<Tpye_string4> &vec_t_string4);
@@ -592,6 +588,8 @@ public:
 	int check_cluster_shard_node_more(std::string &cluster_name, std::string &shard_name);
 	int check_cluster_comp_more(std::string &cluster_name);
 	int check_cluster_none();
+
+	int update_server_nodes_from_metadata(std::map<std::string, Machine*> &map_machine);
 };
 
 #endif // !SHARD_H

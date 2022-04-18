@@ -12,6 +12,7 @@
 #include "sync_mission/sync_mission.h"
 #include "machine_mission/machine_mission.h"
 #include "backup_storage/backup_storage.h"
+#include "cluster_mission/cluster_mission.h"
 #include "request_framework/missionRequest.h"
 #include "strings.h"
 #include "util_func/error_code.h"
@@ -166,6 +167,10 @@ MissionRequest *HttpServiceImpl::MissionRequestFactory(Json::Value *doc) {
   case kunlun::kUpdateBackupStorageType:
   case kunlun::kDeleteBackupStorageType:
     request = new kunlun::BackupStorage(doc);
+    break;
+  case kunlun::kCreateClusterType:
+  case kunlun::kDeleteClusterType:
+    request = new kunlun::ClusterMission(doc);
     break;
     // TODO: Add more above
 

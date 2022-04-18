@@ -59,8 +59,8 @@ commit_log_retention_hours = 24
 
 # meta server group seeds, note: no space in the middle of string
 # only one seed in no_rep mode, must three or more seeds in mgr/rbr mode
-meta_group_seeds = 192.168.0.128:57301,192.168.0.128:57304,192.168.0.128:57307
-#meta_group_seeds = 192.168.0.128:57301
+meta_group_seeds = 192.168.0.128:58100,192.168.0.128:58103,192.168.0.128:58106
+#meta_group_seeds = 192.168.0.128:58100
 
 # meta data server user account
 meta_user = pgx
@@ -72,10 +72,10 @@ meta_pwd = pgx_pwd
 # for raft
 
 # specify the raft group memeber config, comma seperate formation, must stop with comma
-raft_group_member_init_config = 192.168.0.128:57001:0,
+raft_group_member_init_config = 192.168.0.128:58001:0,
 
 # raft server listen port
-brpc_raft_port = 57001
+brpc_raft_port = 58001
 
 # cluster_mgr ip
 local_ip = 127.0.0.1
@@ -84,13 +84,13 @@ local_ip = 127.0.0.1
 # for web http interface
 
 # cluster mgr http port
-brpc_http_port = 57000
+brpc_http_port = 58000
 
 # program_binaries_path
-program_binaries_path = ../../../../../program_binaries
+program_binaries_path = /home/kunlun/program_binaries
 
 # instance_binaries_path
-instance_binaries_path = ../../../../../instance_binaries
+instance_binaries_path = /home/kunlun/instance_binaries
 
 # storage_prog_package_name
 storage_prog_package_name = kunlun-storage-0.9.1
@@ -98,15 +98,15 @@ storage_prog_package_name = kunlun-storage-0.9.1
 # computer_prog_package_name
 computer_prog_package_name = kunlun-server-0.9.1
 
-# storage instance port start
-storage_instance_port_start = 57330
-
 # computer instance port start
-computer_instance_port_start = 57030
+computer_instance_port_start = 58200
+
+# storage instance port start
+storage_instance_port_start = 58500
 
 # prometheus path
-prometheus_path = ../../../../../program_binaries/prometheus
+prometheus_path = /home/kunlun/program_binaries/prometheus
 
 # prometheus port start
-prometheus_port_start = 57010
+prometheus_port_start = 58010
 

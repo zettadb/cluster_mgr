@@ -41,11 +41,11 @@ ClusterRequestTypes GetReqTypeEnumByStr(const char *type_str) {
   case "example_mission"_hash:
     type_enum = kExampleRequestType;
     break;
-  case "cluster_create"_hash:
+  case "create_cluster"_hash:
     type_enum = kCreateClusterType;
     break;
-  case "cluster_drop"_hash:
-    type_enum = kDropClusterType;
+  case "delete_cluster"_hash:
+    type_enum = kDeleteClusterType;
     break;
   case "comp_node_create"_hash:
     type_enum = kComputeNodeAddType;

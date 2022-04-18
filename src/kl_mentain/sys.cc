@@ -25,18 +25,8 @@ extern int64_t computer_instance_port_start;
 std::string local_ip;
 
 System::~System() {
-  // Http_server::get_instance()->do_exit = 1;
-  // Http_server::get_instance()->join_all();
-  // delete Http_server::get_instance();
 
-  //Job::get_instance()->do_exit = 1;
-  //Job::get_instance()->join_all();
-  //delete Job::get_instance();
-
-  // delete Hdfs_client::get_instance();
-  //delete Http_client::get_instance();
-  //delete Machine_info::get_instance();
-
+  delete Machine_info::get_instance();
   for (auto &i : kl_clusters)
     delete i;
 
@@ -276,16 +266,8 @@ int System::create_instance(const std::string &cfg_path) {
   //  goto end;
   if ((ret = (Thread_manager::get_instance() == NULL)) != 0)
     goto end;
-  //if ((ret = (Machine_info::get_instance() == NULL)) != 0)
-  //  goto end;
-  // if ((ret = (Hdfs_client::get_instance()==NULL)) != 0)
-  //	goto end;
-  //if ((ret = (Http_client::get_instance() == NULL)) != 0)
-  //  goto end;
-  //if ((ret = Job::get_instance()->start_job_thread()) != 0)
-  //  goto end;
-  //if ((ret = Http_server::get_instance()->start_http_thread()) != 0)
-  //  goto end;
+  if ((ret = (Machine_info::get_instance() == NULL)) != 0)
+    goto end;
 
 end:
   return ret;
@@ -384,18 +366,6 @@ int System::get_max_comp_name_id(std::string &cluster_name, int &comp_id) {
   }
 
   return 0;
-}
-
-bool System::get_server_nodes_from_metadata(
-    std::vector<Machine *> &vec_machines) {
-  Scopped_mutex sm(mtx);
-
-  if (meta_shard.get_server_nodes_from_metadata(vec_machines)) {
-    // syslog(Logger::ERROR, "get_server_nodes_from_metadata error");
-    return false;
-  }
-
-  return true;
 }
 
 bool System::get_roll_info_from_metadata(
@@ -684,34 +654,6 @@ bool System::get_meta_master(Tpye_Ip_Port_User_Pwd &meta) {
   node->get_user_pwd(user, pwd);
 
   meta = std::make_tuple(ip, port, user, pwd);
-
-  return true;
-}
-
-bool System::get_machine_instance_port(Machine *machine) {
-  Scopped_mutex sm(mtx);
-
-  machine->instances = 0;
-  machine->instance_storage = 0;
-  machine->instance_computer = 0;
-  machine->port_storage = 0;
-  machine->port_computer = 0;
-
-  meta_shard.get_meta_instance(machine);
-  meta_shard.get_storage_instance_port(machine);
-  meta_shard.get_computer_instance_port(machine);
-
-  machine->instances = machine->instance_storage + machine->instance_computer;
-
-  if (machine->port_storage < storage_instance_port_start)
-    machine->port_storage = storage_instance_port_start;
-  else
-    machine->port_storage += 3;
-
-  if (machine->port_computer < computer_instance_port_start)
-    machine->port_computer = computer_instance_port_start;
-  else
-    machine->port_computer += 1;
 
   return true;
 }
@@ -2210,6 +2152,76 @@ bool System::update_instance_cluster_info(std::string &cluster_name) {
   }
 
   return ret;
+}
+
+bool System::get_machine_instance_port(Machine *machine) {
+  Scopped_mutex sm(mtx);
+
+  std::string ip;
+  int port;
+  int instances = 0;
+  int instance_storage = 0;
+  int instance_computer = 0;
+  int port_storage = 0;
+  int port_computer = 0;
+
+  instance_storage = meta_shard.get_nodes().size();
+  for (auto &node : meta_shard.get_nodes()) {
+    node->get_ip_port(ip, port);
+    if(port_storage < port)
+      port_storage = port;
+  }
+
+  for (auto &cluster : kl_clusters) {
+    for (auto &shard : cluster->storage_shards) {
+      instance_storage += shard->get_nodes().size();
+      for (auto &node : shard->get_nodes()) {
+        node->get_ip_port(ip, port);
+        if(port_storage < port)
+          port_storage = port;
+      }
+    }
+
+    instance_computer += cluster->computer_nodes.size();
+    for (auto &node : cluster->computer_nodes) {
+      node->get_ip_port(ip, port);
+      if(port_computer < port)
+        port_computer = port;
+    }
+  }
+
+  if(machine->instances < instance_storage + instance_computer)
+    machine->instances = instance_storage + instance_computer;
+
+  if (machine->port_storage < port_storage)
+    machine->port_storage = port_storage + 3;
+
+  if (machine->port_computer < port_computer)
+    machine->port_computer = port_computer + 1;
+
+  if (machine->port_storage < storage_instance_port_start)
+    machine->port_storage = storage_instance_port_start;
+  else
+    machine->port_storage += 3;
+
+  if (machine->port_computer < computer_instance_port_start)
+    machine->port_computer = computer_instance_port_start;
+  else
+    machine->port_computer += 1;
+
+  return true;
+}
+
+bool System::update_server_nodes_from_metadata(std::map<std::string, Machine*> &map_machine)
+{
+  Scopped_mutex sm(mtx);
+
+  if (meta_shard.update_server_nodes_from_metadata(map_machine)) {
+    // syslog(Logger::ERROR, "update_server_nodes_from_metadata error");
+    return false;
+  }
+
+  return true;
 }
 
 bool System::update_operation_record(std::string &id, std::string &status, std::string &memo) {

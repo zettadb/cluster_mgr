@@ -10,6 +10,7 @@
 #include "sys_config.h"
 #include <errno.h>
 #include "global.h"
+#include "json/json.h"
 
 #include <pthread.h>
 #include <mutex>
@@ -20,15 +21,13 @@
 #include <tuple>
 #include <algorithm>
 
-
 class Machine
 {
 public:
-	std::string ip;
+	std::string hostaddr;
 	std::string rack_id;
 	int total_mem;
 	int total_cpu_cores;
-	int nodemgr_port;
 	//datadir_paths, logdir_paths, wal_log_dir_paths, comp_datadir_paths
 	std::vector<std::string> vec_paths; 
 	std::vector<std::vector<Tpye_Path_Used_Free>> vec_vec_path_used_free;
@@ -39,7 +38,7 @@ public:
 	int port_computer;
 	int port_storage;
 
-	Machine(std::string &ip_, std::vector<std::string> &vec_paths_, Tpye_string3 &t_string3);
+	Machine();
 	~Machine();
 };
 
@@ -50,8 +49,8 @@ private:
 	Machine_info();
 
 	std::mutex mutex_nodes_;
-	std::vector<Machine*> vec_machines;
-	int nodes_select;
+	std::map<std::string, Machine*> map_machine;
+
 public:
 	~Machine_info();
 	static Machine_info *get_instance()
@@ -62,15 +61,26 @@ public:
 
 	bool insert_machine_to_table(Machine* machine);
 	bool update_machine_in_table(Machine* machine);
-	bool delete_machine_from_table(std::string &ip);
+	bool delete_machine_from_table(std::string &hostaddr);
 	bool get_machine_path_space(Machine* machine, std::string &result_str);
-	bool create_machine(std::string &ip, std::vector<std::string> &vec_paths, Tpye_string3 &t_string3, std::string &info);
-	bool update_machine(std::string &ip, std::vector<std::string> &vec_paths, Tpye_string3 &t_string3, std::string &info);
-	bool delete_machine(std::string &ip, std::string &info);
+	bool create_machine(std::string &hostaddr, std::vector<std::string> &vec_paths, Tpye_string3 &t_string3, std::string &info);
+	bool update_machine(std::string &hostaddr, std::vector<std::string> &vec_paths, Tpye_string3 &t_string3, std::string &info);
+	bool delete_machine(std::string &hostaddr, std::string &info);
 	bool update_machines_info();
 	bool get_storage_nodes(int nodes, std::vector<Tpye_Ip_Port_Paths> &vec_ip_port_paths, std::set<std::string> &set_machine);
 	bool get_computer_nodes(int nodes, std::vector<Tpye_Ip_Port_Paths> &vec_ip_port_paths, std::set<std::string> &set_machine);
 	bool check_machine_port_idle(std::string &ip, std::vector<int> &vec_port);
+
+	bool insert_machine_on_meta(Machine *machine);
+	bool update_machine_on_meta(Machine *machine);
+	bool delete_machine_on_meta(Machine *machine);
+	bool update_machine_path_space(Machine *machine, Json::Value &json_info);
+	bool get_machines_info(std::vector<Machine*> &vec_machine, std::set<std::string> &set_machine);
+	bool check_machines_path(std::vector<Machine*> &vec_machine);
+	bool get_storage_nodes(int nodes, int &nodes_select, 
+			std::vector<Tpye_Ip_Port_Paths> &vec_ip_port_paths, std::vector<Machine*> &vec_machine);
+	bool get_computer_nodes(int nodes, int &nodes_select, 
+			std::vector<Tpye_Ip_Port_Paths> &vec_ip_port_paths, std::vector<Machine*> &vec_machine);
 };
 
 #endif // !NODE_INFO_H

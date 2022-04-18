@@ -95,7 +95,6 @@ public:
 	int get_max_cluster_id(int &cluster_id);
 	int get_max_shard_name_id(std::string &cluster_name, int &shard_id);
 	int get_max_comp_name_id(std::string &cluster_name, int &comp_id);
-	bool get_server_nodes_from_metadata(std::vector<Machine*> &vec_machines);
 	bool get_roll_info_from_metadata(std::string &job_id, std::vector<std::string> &vec_roll_info);
 	bool get_ongoing_job_id_from_metadata(std::vector<std::string> &vec_job_id);
 	bool get_ongoing_job_json_from_metadata(std::vector<std::string> &vec_job_json);
@@ -118,7 +117,6 @@ public:
 	bool get_cluster_shard_name(std::string &cluster_name, std::vector<std::string> &vec_shard_name);
 	bool get_meta_info(std::vector<Tpye_Ip_Port_User_Pwd> &vec_meta);
 	bool get_meta_master(Tpye_Ip_Port_User_Pwd &meta);
-	bool get_machine_instance_port(Machine* machine);
 	bool update_instance_status(Tpye_Ip_Port &ip_port, std::string &status, int &type);
 	bool get_backup_storage_string(std::string &name, std::string &backup_storage_id, std::string &backup_storage_str);
 	bool get_backup_storage_list(cJSON *root, std::string &str_ret);
@@ -152,6 +150,8 @@ public:
 	bool clear_cluster_shard_master(std::string &cluster_name);
 	bool update_instance_cluster_info(std::string &cluster_name);
 
+	bool get_machine_instance_port(Machine* machine);
+	bool update_server_nodes_from_metadata(std::map<std::string, Machine*> &map_machine);
 	bool update_operation_record(std::string &id, std::string &status, std::string &memo);
 	bool get_meta_mode(Json::Value &attachment);
 	bool get_meta(Json::Value &attachment);

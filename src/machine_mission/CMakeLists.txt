@@ -1,4 +1,4 @@
-add_library(machine_mission OBJECT machine_mission.cc machine_new.cc)
+add_library(machine_mission OBJECT machine_mission.cc)
 target_include_directories(machine_mission INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_include_directories(machine_mission PUBLIC "${PROJECT_SOURCE_DIR}/src")
 target_include_directories(machine_mission PUBLIC "${VENDOR_OUTPUT_PATH}/include")

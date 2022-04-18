@@ -43,26 +43,26 @@ void BackupStorage::CreateBackupStorage() {
   Json::Value paras = super::get_body_json_document()["paras"];
 
   if (!paras.isMember("name")) {
-    setExtraErr("missing `name` key-value pair in the request body");
-    return;
+    job_memo = "missing `name` key-value pair in the request body";
+    goto end;
   }
   name = paras["name"].asString();
 
   if (!paras.isMember("stype")) {
-    setExtraErr("missing `stype` key-value pair in the request body");
-    return;
+    job_memo = "missing `stype` key-value pair in the request body";
+    goto end;
   }
   stype = paras["stype"].asString();
 
   if (!paras.isMember("hostaddr")) {
-    setExtraErr("missing `hostaddr` key-value pair in the request body");
-    return;
+    job_memo = "missing `hostaddr` key-value pair in the request body";
+    goto end;
   }
   hostaddr= paras["hostaddr"].asString();
 
   if (!paras.isMember("port")) {
-    setExtraErr("missing `port` key-value pair in the request body");
-    return;
+    job_memo = "missing `port` key-value pair in the request body";
+    goto end;
   }
   port = paras["port"].asString();
 
@@ -118,26 +118,26 @@ void BackupStorage::UpdateBackupStorage() {
   Json::Value paras = super::get_body_json_document()["paras"];
 
   if (!paras.isMember("name")) {
-    setExtraErr("missing `name` key-value pair in the request body");
-    return;
+    job_memo = "missing `name` key-value pair in the request body";
+    goto end;
   }
   name = paras["name"].asString();
 
   if (!paras.isMember("stype")) {
-    setExtraErr("missing `stype` key-value pair in the request body");
-    return;
+    job_memo = "missing `stype` key-value pair in the request body";
+    goto end;
   }
   stype = paras["stype"].asString();
 
   if (!paras.isMember("hostaddr")) {
-    setExtraErr("missing `hostaddr` key-value pair in the request body");
-    return;
+    job_memo = "missing `hostaddr` key-value pair in the request body";
+    goto end;
   }
   hostaddr= paras["hostaddr"].asString();
 
   if (!paras.isMember("port")) {
-    setExtraErr("missing `port` key-value pair in the request body");
-    return;
+    job_memo = "missing `port` key-value pair in the request body";
+    goto end;
   }
   port = paras["port"].asString();
 
@@ -193,8 +193,8 @@ void BackupStorage::DeleteBackupStorage() {
   Json::Value paras = super::get_body_json_document()["paras"];
 
   if (!paras.isMember("name")) {
-    setExtraErr("missing `name` key-value pair in the request body");
-    return;
+    job_memo = "missing `name` key-value pair in the request body";
+    goto end;
   }
   name = paras["name"].asString();
 

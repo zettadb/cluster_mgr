@@ -26,7 +26,7 @@ enum ClusterRequestTypes {
   kRequestTypeUndefined = 0,
   kExampleRequestType,
   kCreateClusterType,
-  kDropClusterType,
+  kDeleteClusterType,
   kComputeNodeAddType,
   kComputeNodeDeleteType,
   kShardAddType,
