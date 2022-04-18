@@ -21,6 +21,7 @@ public:
   bool GetStatus();
   bool GetMetaMode();
   bool GetMeta();
+  bool GetBackupStorage();
   virtual bool SyncTaskImpl() override {
     bool ret = true;
     switch (get_request_type()) {
@@ -32,6 +33,9 @@ public:
       break;
     case kunlun::kGetMetaType:
       ret = GetMeta();
+      break;
+    case kunlun::kGetBackupStorageType:
+      ret = GetBackupStorage();
       break;
 
     default:

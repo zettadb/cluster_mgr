@@ -662,7 +662,7 @@ void ClusterMission::createClusterInfo() {
     shards_json.append(shards_json_sub);
 	}
 
-	// save json file to cluster_json_path and cmd_path
+	// save json file to cmd_path
 	file_path = program_binaries_path + "/" + computer_prog_package_name + "/scripts/pgsql_shards.json";
 
   writer.omitEndingLineFeed();
@@ -692,7 +692,7 @@ void ClusterMission::createClusterInfo() {
 	}
 
 	/////////////////////////////////////////////////////////
-	// save json file to cluster_json_path
+	// save json file to cmd_path
 	file_path = program_binaries_path + "/" + computer_prog_package_name + "/scripts/pgsql_meta.json";
 
   writer.omitEndingLineFeed();

@@ -99,6 +99,9 @@ ClusterRequestTypes GetReqTypeEnumByStr(const char *type_str) {
   case "get_meta"_hash:
     type_enum = kGetMetaType;
     break;
+  case "get_backup_storage"_hash:
+    type_enum = kGetBackupStorageType;
+    break;
 
   // addtional type convert should add above
   default:

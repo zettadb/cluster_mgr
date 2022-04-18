@@ -8,10 +8,7 @@ add_library(kl_mentain OBJECT
   thread_manager.cc 
   kl_cluster.cc 
   machine_info.cc
-  http_server.cc 
-  http_client.cc 
-  job.cc 
-  cjson.cc)
+)
 target_include_directories(kl_mentain INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_include_directories(kl_mentain PUBLIC "${PROJECT_SOURCE_DIR}/src")
 target_include_directories(kl_mentain PUBLIC "${VENDOR_OUTPUT_PATH}/include")

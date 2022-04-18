@@ -59,18 +59,6 @@ public:
 		return m_inst;
 	}
 
-	bool insert_machine_to_table(Machine* machine);
-	bool update_machine_in_table(Machine* machine);
-	bool delete_machine_from_table(std::string &hostaddr);
-	bool get_machine_path_space(Machine* machine, std::string &result_str);
-	bool create_machine(std::string &hostaddr, std::vector<std::string> &vec_paths, Tpye_string3 &t_string3, std::string &info);
-	bool update_machine(std::string &hostaddr, std::vector<std::string> &vec_paths, Tpye_string3 &t_string3, std::string &info);
-	bool delete_machine(std::string &hostaddr, std::string &info);
-	bool update_machines_info();
-	bool get_storage_nodes(int nodes, std::vector<Tpye_Ip_Port_Paths> &vec_ip_port_paths, std::set<std::string> &set_machine);
-	bool get_computer_nodes(int nodes, std::vector<Tpye_Ip_Port_Paths> &vec_ip_port_paths, std::set<std::string> &set_machine);
-	bool check_machine_port_idle(std::string &ip, std::vector<int> &vec_port);
-
 	bool insert_machine_on_meta(Machine *machine);
 	bool update_machine_on_meta(Machine *machine);
 	bool delete_machine_on_meta(Machine *machine);

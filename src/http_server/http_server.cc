@@ -179,6 +179,7 @@ MissionRequest *HttpServiceImpl::MissionRequestFactory(Json::Value *doc) {
   case kunlun::kGetStatusType:
   case kunlun::kGetMetaModeType:
   case kunlun::kGetMetaType:
+  case kunlun::kGetBackupStorageType:
     request = new kunlun::SyncMission(doc);
     break;
 

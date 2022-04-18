@@ -345,7 +345,7 @@ extern "C" void *thread_func_storage_sync(void*thrdarg)
 			{
 				commit_log_count = 0;
 				System::get_instance()->truncate_commit_log_from_metadata_server();
-				Machine_info::get_instance()->update_machines_info();
+				//Machine_info::get_instance()->update_machines_info();
 			}
 		}
 

@@ -20,16 +20,6 @@ extern int64_t thread_work_interval;
 extern int64_t storage_sync_interval;
 extern int64_t commit_log_retention_hours;
 
-extern int64_t num_job_threads;
-extern int64_t num_http_threads;
-extern int64_t cluster_mgr_http_port;
-extern std::string http_web_path;
-extern std::string http_upload_path;
-extern std::string http_cmd_version;
-
-extern int64_t node_mgr_http_port;
-
-extern std::string cluster_json_path;
 extern std::string program_binaries_path;
 extern std::string instance_binaries_path;
 extern std::string storage_prog_package_name;
@@ -41,9 +31,8 @@ extern int64_t cluster_mgr_brpc_http_port;
 extern std::string raft_group_member_init_config;
 extern std::string cluster_mgr_tmp_data_path;
 extern int64_t raft_brpc_port;
-std::string dev_interface;
-extern std::string prometheus_path;
-extern int64_t prometheus_port_start;
+std::string prometheus_path;
+int64_t prometheus_port_start;
 extern std::string local_ip;
 
 Configs *Configs::get_instance() {
@@ -209,14 +198,9 @@ void Configs::define_configs() {
       "Interval in milli-seconds a statement is resent for execution when it "
       "fails and we believe MySQL node will be ready in a while.");
 
-  define_int_config("num_job_threads", num_job_threads, 1, 10, 3,
-                    "Number of job work threads to create.");
-  define_int_config("num_http_threads", num_http_threads, 1, 10, 3,
-                    "Number of http server threads to create.");
+
   define_int_config("brpc_http_port", cluster_mgr_brpc_http_port,
                     1000, 65535, 5000, "http server listen port.");
-  define_int_config("cluster_mgr_http_port", cluster_mgr_http_port, 1000, 65535,
-                    5000, "http server listen port.");
 
   char def_log_path[64];
   int slen = snprintf(def_log_path, sizeof(def_log_path),
@@ -225,19 +209,6 @@ void Configs::define_configs() {
 
   define_str_config("log_file", log_file_path, def_log_path, "log file path");
 
-  define_str_config("http_web_path", http_web_path, "./web", "http_web_path");
-  define_str_config("http_upload_path", http_upload_path, "./upload",
-                    "http_upload_path");
-
-  define_int_config("node_mgr_http_port", node_mgr_http_port, 0, 65535, 5001,
-                    "node_mgr_http_port");
-
-  define_str_config("http_cmd_version", http_cmd_version, "0.1",
-                    "http_cmd_version");
-
-
-  define_str_config("cluster_json_path", cluster_json_path, "./cluster_json",
-                    "cluster_json_path");
   define_str_config("program_binaries_path", program_binaries_path,
                     "../../../program_binaries", "program_binaries_path");
   define_str_config("instance_binaries_path", instance_binaries_path,
@@ -262,10 +233,6 @@ void Configs::define_configs() {
       "specify the temporary data path of the cluster_mgr");
   define_int_config("brpc_raft_port", raft_brpc_port,
                     1000, 65535, 5000, "raft brpc server listen port.");
-  define_str_config(
-      "dev_interface", dev_interface,
-      "eno1",
-      "Net Interface device name");
   
   define_str_config("prometheus_path", prometheus_path,
                     "../../../program_binaries/prometheus", "prometheus_path");

@@ -13,7 +13,6 @@
 #include "kl_cluster.h"
 #include "machine_info.h"
 #include "json/json.h"
-#include "cjson.h"
 #include <vector>
 #include <map>
 
@@ -119,16 +118,6 @@ public:
 	bool get_meta_master(Tpye_Ip_Port_User_Pwd &meta);
 	bool update_instance_status(Tpye_Ip_Port &ip_port, std::string &status, int &type);
 	bool get_backup_storage_string(std::string &name, std::string &backup_storage_id, std::string &backup_storage_str);
-	bool get_backup_storage_list(cJSON *root, std::string &str_ret);
-	bool get_node_instance(cJSON *root, std::string &str_ret);
-	bool get_meta(cJSON *root, std::string &str_ret);
-	bool get_meta_mode(cJSON *root, std::string &str_ret);
-	bool get_cluster_summary(cJSON *root, std::string &str_ret);
-	bool get_cluster_detail(cJSON *root, std::string &str_ret);
-	bool get_storage(cJSON *root, std::string &str_ret);
-	bool get_computer(cJSON *root, std::string &str_ret);
-	bool get_variable(cJSON *root, std::string &str_ret);
-	bool set_variable(cJSON *root, std::string &str_ret);
 	bool get_shards_ip_port(std::string &cluster_name, std::vector <std::vector<Tpye_Ip_Port>> &vec_vec_shard);
 	bool get_shards_ip_port(std::string &cluster_name, std::string &shard_name, std::vector<Tpye_Ip_Port> &vec_shard);
 	bool get_comps_ip_port(std::string &cluster_name, std::vector<Tpye_Ip_Port> &vec_comp);
@@ -155,5 +144,13 @@ public:
 	bool update_operation_record(std::string &id, std::string &status, std::string &memo);
 	bool get_meta_mode(Json::Value &attachment);
 	bool get_meta(Json::Value &attachment);
+	bool get_backup_storage(Json::Value &attachment);
+
+/*
+	bool get_cluster_summary(cJSON *root, std::string &str_ret);
+	bool get_cluster_detail(cJSON *root, std::string &str_ret);
+	bool get_variable(cJSON *root, std::string &str_ret);
+	bool set_variable(cJSON *root, std::string &str_ret);
+	*/
 };
 #endif // !SYS_H

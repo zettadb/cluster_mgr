@@ -46,6 +46,7 @@ enum ClusterRequestTypes {
   kGetStatusType,
   kGetMetaModeType,
   kGetMetaType,
+  kGetBackupStorageType,
 
   // addtional type should add above
   kRequestTypeMax = 1000

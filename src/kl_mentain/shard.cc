@@ -12,7 +12,6 @@
 #include "sys.h"
 #include "shard.h"
 #include "os.h"
-#include "job.h"
 #include "kl_cluster.h"
 #include "thread_manager.h"
 #include <unistd.h>
@@ -1572,7 +1571,7 @@ int MetadataShard::refresh_shards(std::vector<KunlunCluster *> &kl_clusters)
 	}
 
 	if(alterant_node_ip.size() != 0)
-		Job::get_instance()->notify_node_update(alterant_node_ip, 1);
+		;//Job::get_instance()->notify_node_update(alterant_node_ip, 1);
 
 	return 0;
 }
@@ -1673,7 +1672,7 @@ int MetadataShard::refresh_computers(std::vector<KunlunCluster *> &kl_clusters)
 	}
 
 	if(alterant_node_ip.size() != 0)
-		Job::get_instance()->notify_node_update(alterant_node_ip, 2);
+		;//Job::get_instance()->notify_node_update(alterant_node_ip, 2);
 
 	return 0;
 }
@@ -3206,7 +3205,7 @@ int MetadataShard::fetch_meta_shard_nodes(Shard_node *sn, bool is_master,
 	}
 
 	if(alterant_node_ip.size() != 0)
-		Job::get_instance()->notify_node_update(alterant_node_ip, 0);
+		;//Job::get_instance()->notify_node_update(alterant_node_ip, 0);
 
 	return 0;
 }

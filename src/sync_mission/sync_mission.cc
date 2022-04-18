@@ -53,3 +53,13 @@ bool SyncMission::GetMeta() {
 
   return ret;
 }
+
+bool SyncMission::GetBackupStorage() {
+  Json::Value attachment;
+
+  bool ret = System::get_instance()->get_backup_storage(attachment);
+  set_body_json_attachment(attachment);
+
+  return ret;
+}
+

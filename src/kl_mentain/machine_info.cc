@@ -7,12 +7,9 @@
 
 #include "sys_config.h"
 #include "global.h"
-#include "cjson.h"
 #include "log.h"
-#include "job.h"
 #include "sys.h"
 #include "machine_info.h"
-#include "http_client.h"
 #include <errno.h>
 #include <unistd.h>
 
@@ -40,70 +37,6 @@ Machine_info::~Machine_info()
 	for(auto &node: map_machine)
 		delete node.second;
 }
-
-bool Machine_info::insert_machine_to_table(Machine* machine)
-{
-	return true;
-}
-
-bool Machine_info::update_machine_in_table(Machine* machine)
-{
-	return true;
-}
-
-bool Machine_info::delete_machine_from_table(std::string &hostaddr)
-{
-	return true;
-}
-
-bool Machine_info::get_machine_path_space(Machine* machine, std::string &info)
-{
-	return true;
-}
-
-bool Machine_info::create_machine(std::string &ip, std::vector<std::string> &vec_paths, Tpye_string3 &t_string3, std::string &info)
-{
-	return true;
-}
-
-bool Machine_info::update_machine(std::string &ip, std::vector<std::string> &vec_paths, Tpye_string3 &t_string3, std::string &info)
-{
-	return true;
-}
-
-bool Machine_info::delete_machine(std::string &ip, std::string &info)
-{
-	return true;
-}
-
-bool Machine_info::update_machines_info()
-{
-	std::lock_guard<std::mutex> lock(mutex_nodes_);
-
-	return true;
-}
-
-bool Machine_info::get_storage_nodes(int nodes, std::vector<Tpye_Ip_Port_Paths> &vec_ip_port_paths, std::set<std::string> &set_machine)
-{
-	std::lock_guard<std::mutex> lock(mutex_nodes_);
-
-	return true;
-}
-
-bool Machine_info::get_computer_nodes(int nodes, std::vector<Tpye_Ip_Port_Paths> &vec_ip_port_paths, std::set<std::string> &set_machine)
-{
-	std::lock_guard<std::mutex> lock(mutex_nodes_);
-
-	return true;
-}
-
-bool Machine_info::check_machine_port_idle(std::string &ip, std::vector<int> &vec_port)
-{
-	return true;
-}
-
-
-
 
 bool Machine_info::insert_machine_on_meta(Machine *machine)
 {
