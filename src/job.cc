@@ -6286,7 +6286,7 @@ void Job::job_restore_new_cluster(cJSON *root)
 	// get backup_info from metadata
 	if(!System::get_instance()->get_backup_info_from_metadata(backup_cluster_name, timestamp, vec_backup_shard_name))
 	{
-		job_info = "get_backup_info_from_metadata error";
+		job_info = "get_backup_info error, maybe timestamp too early";
 		goto end;
 	}
 
@@ -6294,7 +6294,7 @@ void Job::job_restore_new_cluster(cJSON *root)
 	// get backup_cluster_info
 	if(!job_get_cluster_info(backup_cluster_name, backup_cluster_info))
 	{
-		job_info = "job_get_cluster_info error";
+		job_info = "get_cluster_info error";
 		goto end;
 	}
 	std::get<1>(backup_cluster_info) = vec_backup_shard_name.size();
