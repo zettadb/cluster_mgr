@@ -49,6 +49,10 @@ class ClusterMission : public ::MissionRequest {
 public:
   ClusterRequestTypes request_type;
   std::string job_id;
+  std::string job_status;
+  std::string job_memo;
+  bool missiom_finish;
+
   std::string user_name;
   std::string cluster_name;
   std::string nick_name;
@@ -76,6 +80,8 @@ public:
   void renameCluster();
   void createCluster();
   void deleteCluster();
+  void addShards();
+  void deleteShard();
 
   void createStorageInfo();
   void createComputerInfo();
@@ -91,6 +97,9 @@ public:
   void delete_computer(Tpye_Ip_Port &computer);
   void stop_cluster();
 
+  bool insert_roll_back_record(Json::Value &para);
+  bool delete_roll_back_record();
+  bool roll_back_record();
   bool system_cmd(std::string &cmd);
   void get_uuid(std::string &uuid);
   void get_timestamp(std::string &timestamp);
@@ -101,7 +110,16 @@ public:
 
   virtual bool ArrangeRemoteTask() override final;
   virtual bool SetUpMisson() override { return true; }
-  virtual bool TearDownMission() override { return true; }
+  virtual bool TearDownMission() override { 
+    if(!missiom_finish) {
+      job_status = "failed";
+      System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+      delete_roll_back_record();
+      missiom_finish = true;
+    }
+    System::get_instance()->set_cluster_mgr_working(true);
+    return true; 
+  }
   virtual bool FillRequestBodyStImpl() override { return true; }
   virtual void ReportStatus() override {}
 };
