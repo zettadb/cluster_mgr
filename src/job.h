@@ -163,10 +163,10 @@ public:
 	void job_delete_cluster(cJSON *root);
 	void job_delete_cluster(std::string &cluster_name);
 
-	bool job_start_shards(std::string &cluster_name, std::vector<std::string> &vec_shard_name, std::string &job_id);
+	bool job_start_shards(std::string &cluster_name, std::vector<std::string> &vec_shard_name, std::string &ha_mode, std::string &job_id);
 	void job_add_shards(cJSON *root);
 	void job_delete_shard(cJSON *root);
-	bool job_start_comps(std::string &cluster_name, std::vector<std::string> &vec_comp_name, std::string &job_id);
+	bool job_start_comps(std::string &cluster_name, std::vector<std::string> &vec_comp_name, std::string &ha_mode, std::string &job_id);
 	void job_add_comps(cJSON *root);
 	void job_delete_comp(cJSON *root);
 	bool job_update_shard_nodes(std::string &cluster_name, std::string &shard_name);

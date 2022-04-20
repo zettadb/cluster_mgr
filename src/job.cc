@@ -4126,7 +4126,7 @@ void Job::job_delete_cluster(std::string &cluster_name)
 	syslog(Logger::INFO, "delete cluster finish");
 }
 
-bool Job::job_start_shards(std::string &cluster_name, std::vector<std::string> &vec_shard_name, std::string &job_id)
+bool Job::job_start_shards(std::string &cluster_name, std::vector<std::string> &vec_shard_name, std::string &ha_mode, std::string &job_id)
 {
 	FILE* pfd;
 	char buf[256];
@@ -4154,7 +4154,8 @@ bool Job::job_start_shards(std::string &cluster_name, std::vector<std::string> &
 	/////////////////////////////////////////////////////////
 	// start cluster cmd
 	cmd = "cd " + program_binaries_path + "/" + computer_prog_package_name + "/scripts/;";
-	cmd += "python2 add_shards.py --config ./pgsql_shards.json --meta_config ./pgsql_meta.json --cluster_name " + cluster_name;
+	cmd += "python2 add_shards.py --config ./pgsql_shards.json --meta_config ./pgsql_meta.json --cluster_name ";
+	cmd += cluster_name + " --ha_mode "+ ha_mode;
 	syslog(Logger::INFO, "job_start_shards cmd %s", cmd.c_str());
 
 	pfd = popen(cmd.c_str(), "r");
@@ -4355,7 +4356,7 @@ void Job::job_add_shards(cJSON *root)
 	job_info = "add shard cmd";
 	update_jobid_status(job_id, job_result, job_info);
 	syslog(Logger::INFO, "%s", job_info.c_str());
-	if(!job_start_shards(cluster_name, vec_shard_name, job_id))
+	if(!job_start_shards(cluster_name, vec_shard_name, std::get<0>(cluster_info), job_id))
 	{
 		job_info = "start_shards error";
 		goto end;
@@ -4497,7 +4498,7 @@ end:
 	System::get_instance()->set_cluster_mgr_working(true);
 }
 
-bool Job::job_start_comps(std::string &cluster_name, std::vector<std::string> &vec_comp_name, std::string &job_id)
+bool Job::job_start_comps(std::string &cluster_name, std::vector<std::string> &vec_comp_name, std::string &ha_mode, std::string &job_id)
 {
 	FILE* pfd;
 	char buf[256];
@@ -4525,7 +4526,8 @@ bool Job::job_start_comps(std::string &cluster_name, std::vector<std::string> &v
 	/////////////////////////////////////////////////////////
 	// start cluster cmd
 	cmd = "cd " + program_binaries_path + "/" + computer_prog_package_name + "/scripts/;";
-	cmd += "python2 add_comp_nodes.py --config ./pgsql_comps.json --meta_config ./pgsql_meta.json --cluster_name " + cluster_name;
+	cmd += "python2 add_comp_nodes.py --config ./pgsql_comps.json --meta_config ./pgsql_meta.json --cluster_name ";
+	cmd += cluster_name + " --ha_mode "+ ha_mode;
 	syslog(Logger::INFO, "job_start_copms cmd %s", cmd.c_str());
 
 	pfd = popen(cmd.c_str(), "r");
@@ -4591,6 +4593,7 @@ void Job::job_add_comps(cJSON *root)
 	std::vector<Tpye_Ip_Port_Paths> vec_comps_ip_port_paths;
 	std::vector<std::string> vec_comp_name;
 	std::set<std::string> set_machine;
+	Tpye_cluster_info cluster_info;
 
 	item = cJSON_GetObjectItem(root, "job_id");
 	if(item == NULL || item->valuestring == NULL)
@@ -4655,6 +4658,14 @@ void Job::job_add_comps(cJSON *root)
 	}
 
 	/////////////////////////////////////////////////////////
+	// get cluster_info
+	if(!job_get_cluster_info(cluster_name, cluster_info))
+	{
+		job_info = "job_get_cluster_info error";
+		goto end;
+	}
+
+	/////////////////////////////////////////////////////////
 	// update all ip,port,path of machines
 	if(!Machine_info::get_instance()->update_machines_info())
 	{
@@ -4711,7 +4722,7 @@ void Job::job_add_comps(cJSON *root)
 	job_info = "add comps cmd";
 	update_jobid_status(job_id, job_result, job_info);
 	syslog(Logger::INFO, "%s", job_info.c_str());
-	if(!job_start_comps(cluster_name, vec_comp_name, job_id))
+	if(!job_start_comps(cluster_name, vec_comp_name, std::get<0>(cluster_info), job_id))
 	{
 		job_info = "start comps error";
 		goto end;
