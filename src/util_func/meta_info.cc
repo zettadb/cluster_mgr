@@ -56,11 +56,11 @@ ClusterRequestTypes GetReqTypeEnumByStr(const char *type_str) {
   case "delete_shard"_hash:
     type_enum = kDeleteShardType;
     break;
-  case "comp_node_create"_hash:
-    type_enum = kComputeNodeAddType;
+  case "add_comps"_hash:
+    type_enum = kAddCompsType;
     break;
-  case "comp_node_drop"_hash:
-    type_enum = kComputeNodeDeleteType;
+  case "delete_comp"_hash:
+    type_enum = kDeleteCompType;
     break;
   case "shard_node_create"_hash:
     type_enum = kShardNodeAddType;

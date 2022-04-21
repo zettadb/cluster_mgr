@@ -173,6 +173,8 @@ MissionRequest *HttpServiceImpl::MissionRequestFactory(Json::Value *doc) {
   case kunlun::kDeleteClusterType:
   case kunlun::kAddShardsType:
   case kunlun::kDeleteShardType:
+  case kunlun::kAddCompsType:
+  case kunlun::kDeleteCompType:
     request = new kunlun::ClusterMission(doc);
     break;
     // TODO: Add more above

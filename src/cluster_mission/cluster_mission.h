@@ -64,14 +64,19 @@ public:
 	std::vector<std::string> vec_comp_name;
   std::vector<std::string> vec_shard_json;
   std::string comps_json;
+
+  std::string shard_name;
+  std::string comp_name;
+  int add_shards;
+  int add_comps;
+
   int nodes_select;
   int task_num;
   int task_wait;
   int task_incomplete;
   int task_step;
 
-  enum CreateClusterStep {GET_PATH_SIZE, INSTALL_STORAGE, INSTALL_COMPUTER,
-                          DELETE_INSTANCE};
+  enum ClusterStep {GET_PATH_SIZE, INSTALL_STORAGE, INSTALL_COMPUTER, DELETE_INSTANCE};
 
 public:
   explicit ClusterMission(Json::Value *doc) : super(doc){};
@@ -82,20 +87,30 @@ public:
   void deleteCluster();
   void addShards();
   void deleteShard();
+  void addComps();
+  void deleteComp();
 
   void createStorageInfo();
   void createComputerInfo();
-  void createClusterInfo();
+  void startClusterInfo();
   bool updateClusterInfo();
+  void addShardsInfo();
+  void startShardsInfo();
+  void addCompsInfo();
+  void startCompsInfo();
+
   void create_shard(std::vector<Tpye_Ip_Port_Paths> &storages, std::string &shard_name);
   void create_storage(Tpye_Ip_Port_Paths &storage, Json::Value &para);
   void create_comps(std::vector<Tpye_Ip_Port_Paths> &comps, 
-                                std::vector<std::string> &vec_comp_name, int comps_id);
+      std::vector<std::string> &vec_comp_name, int comps_id);
   void create_computer(Tpye_Ip_Port_Paths &comp, Json::Value &para);
+
   void delete_cluster(std::string &cluster_name);
   void delete_storage(Tpye_Ip_Port &storage);
   void delete_computer(Tpye_Ip_Port &computer);
   void stop_cluster();
+  void stop_shard();
+  void stop_comp();
 
   bool insert_roll_back_record(Json::Value &para);
   bool delete_roll_back_record();
@@ -104,7 +119,8 @@ public:
   void get_uuid(std::string &uuid);
   void get_timestamp(std::string &timestamp);
   bool save_file(std::string &path, const char *buf);
-  void generate_cluster_name(std::string &cluster_name);
+  void generate_cluster_name();
+  bool get_cluster_info();
   bool create_program_path();
   void get_user_name();
 
