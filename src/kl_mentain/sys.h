@@ -143,14 +143,11 @@ public:
 	bool update_server_nodes_from_metadata(std::map<std::string, Machine*> &map_machine);
 	bool update_operation_record(std::string &id, std::string &status, std::string &memo);
 	bool get_meta_mode(Json::Value &attachment);
-	bool get_meta(Json::Value &attachment);
+	bool get_meta_summary(Json::Value &attachment);
 	bool get_backup_storage(Json::Value &attachment);
-
-/*
-	bool get_cluster_summary(cJSON *root, std::string &str_ret);
-	bool get_cluster_detail(cJSON *root, std::string &str_ret);
-	bool get_variable(cJSON *root, std::string &str_ret);
-	bool set_variable(cJSON *root, std::string &str_ret);
-	*/
+	bool get_cluster_summary(Json::Value &attachment);
+	bool get_cluster_detail(Json::Value &paras, Json::Value &attachment);
+	bool get_variable(Json::Value &paras, Json::Value &attachment);
+	bool set_variable(Json::Value &paras, Json::Value &attachment);
 };
 #endif // !SYS_H

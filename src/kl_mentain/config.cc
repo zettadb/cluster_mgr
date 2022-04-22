@@ -31,8 +31,8 @@ extern int64_t cluster_mgr_brpc_http_port;
 extern std::string raft_group_member_init_config;
 extern std::string cluster_mgr_tmp_data_path;
 extern int64_t raft_brpc_port;
-std::string prometheus_path;
-int64_t prometheus_port_start;
+extern std::string prometheus_path;
+extern int64_t prometheus_port_start;
 extern std::string local_ip;
 
 Configs *Configs::get_instance() {

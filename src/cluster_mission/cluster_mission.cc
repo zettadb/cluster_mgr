@@ -368,7 +368,7 @@ bool ClusterMission::ArrangeRemoteTask() {
     addShards();
     break;
   case kunlun::kDeleteShardType:
-    deleteShard();
+    // deleteShard(); // no support now
     break;
 
   case kunlun::kAddCompsType:

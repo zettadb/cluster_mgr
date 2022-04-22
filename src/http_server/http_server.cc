@@ -13,6 +13,7 @@
 #include "machine_mission/machine_mission.h"
 #include "backup_storage/backup_storage.h"
 #include "cluster_mission/cluster_mission.h"
+#include "other_mission/other_mission.h"
 #include "request_framework/missionRequest.h"
 #include "strings.h"
 #include "util_func/error_code.h"
@@ -168,6 +169,12 @@ MissionRequest *HttpServiceImpl::MissionRequestFactory(Json::Value *doc) {
   case kunlun::kDeleteBackupStorageType:
     request = new kunlun::BackupStorage(doc);
     break;
+  case kunlun::kControlInstanceType:
+  case kunlun::kUpdatePrometheusType:
+  case kunlun::kPostgresExporterType:
+  case kunlun::kMysqldExporterType:
+    request = new kunlun::OtherMission(doc);
+    break;
   case kunlun::kRenameClusterType:
   case kunlun::kCreateClusterType:
   case kunlun::kDeleteClusterType:
@@ -182,8 +189,13 @@ MissionRequest *HttpServiceImpl::MissionRequestFactory(Json::Value *doc) {
   //kSyncReturnType
   case kunlun::kGetStatusType:
   case kunlun::kGetMetaModeType:
-  case kunlun::kGetMetaType:
+  case kunlun::kGetMetaSummaryType:
   case kunlun::kGetBackupStorageType:
+  case kunlun::kGetMachineSummaryType:
+  case kunlun::kGetClusterSummaryType:
+  case kunlun::kGetClusterDetailType:
+  case kunlun::kGetVariableType:
+  case kunlun::kSetVariableType:
     request = new kunlun::SyncMission(doc);
     break;
 

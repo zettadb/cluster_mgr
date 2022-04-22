@@ -20,8 +20,13 @@ public:
 
   bool GetStatus();
   bool GetMetaMode();
-  bool GetMeta();
+  bool GetMetaSummary();
   bool GetBackupStorage();
+  bool GetMachineSummary();
+  bool GetClusterSummary();
+  bool GetClusterDetail();
+  bool GetVariable();
+  bool SetVariable();
   virtual bool SyncTaskImpl() override {
     bool ret = true;
     switch (get_request_type()) {
@@ -31,11 +36,26 @@ public:
     case kunlun::kGetMetaModeType:
       ret = GetMetaMode();
       break;
-    case kunlun::kGetMetaType:
-      ret = GetMeta();
+    case kunlun::kGetMetaSummaryType:
+      ret = GetMetaSummary();
       break;
     case kunlun::kGetBackupStorageType:
       ret = GetBackupStorage();
+      break;
+    case kunlun::kGetMachineSummaryType:
+      ret = GetMachineSummary();
+      break;
+    case kunlun::kGetClusterSummaryType:
+      ret = GetClusterSummary();
+      break;
+    case kunlun::kGetClusterDetailType:
+      ret = GetClusterDetail();
+      break;
+    case kunlun::kGetVariableType:
+      ret = GetVariable();
+      break;
+    case kunlun::kSetVariableType:
+      ret = SetVariable();
       break;
 
     default:

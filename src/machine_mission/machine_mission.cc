@@ -192,6 +192,7 @@ void MachineMission::CreateMachine() {
 	job_status = "not_started";
 	job_memo = "create machine start";
   syslog(Logger::INFO, "%s", job_memo.c_str());
+  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
 
   //init channel again
   g_node_channel_manager.Init();
@@ -294,6 +295,7 @@ void MachineMission::UpdateMachine() {
 	job_status = "not_started";
 	job_memo = "update machine start";
   syslog(Logger::INFO, "%s", job_memo.c_str());
+  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
 
   //init channel again
   g_node_channel_manager.Init();
@@ -354,6 +356,7 @@ void MachineMission::DeleteMachine() {
 	job_status = "not_started";
 	job_memo = "delete machine start";
   syslog(Logger::INFO, "%s", job_memo.c_str());
+  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
 
 	//////////////////////////////////////////////////////////
 	if(!System::get_instance()->check_machine_hostaddr(machine.hostaddr)) {

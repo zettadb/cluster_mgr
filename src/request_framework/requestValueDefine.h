@@ -43,11 +43,21 @@ enum ClusterRequestTypes {
   kUpdateBackupStorageType,
   kDeleteBackupStorageType,
 
+  kControlInstanceType,
+  kUpdatePrometheusType,
+  kPostgresExporterType,
+  kMysqldExporterType,
+
   kSyncReturnType = 300,
   kGetStatusType,
   kGetMetaModeType,
-  kGetMetaType,
+  kGetMetaSummaryType,
   kGetBackupStorageType,
+  kGetMachineSummaryType,
+  kGetClusterSummaryType,
+  kGetClusterDetailType,
+  kGetVariableType,
+  kSetVariableType,
 
   // addtional type should add above
   kRequestTypeMax = 1000

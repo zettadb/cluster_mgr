@@ -91,17 +91,45 @@ ClusterRequestTypes GetReqTypeEnumByStr(const char *type_str) {
     type_enum = kDeleteBackupStorageType;
     break;
 
+  case "control_instance"_hash:
+    type_enum = kControlInstanceType;
+    break;
+  case "update_prometheus"_hash:
+    type_enum = kUpdatePrometheusType;
+    break;
+  case "postgres_exporter"_hash:
+    type_enum = kPostgresExporterType;
+    break;
+  case "mysqld_exporter"_hash:
+    type_enum = kMysqldExporterType;
+    break;
+
   case "get_status"_hash:
     type_enum = kGetStatusType;
     break;
   case "get_meta_mode"_hash:
     type_enum = kGetMetaModeType;
     break;
-  case "get_meta"_hash:
-    type_enum = kGetMetaType;
+  case "get_meta_summary"_hash:
+    type_enum = kGetMetaSummaryType;
     break;
   case "get_backup_storage"_hash:
     type_enum = kGetBackupStorageType;
+    break;
+  case "get_machine_summary"_hash:
+    type_enum = kGetMachineSummaryType;
+    break;
+  case "get_cluster_summary"_hash:
+    type_enum = kGetClusterSummaryType;
+    break;
+  case "get_cluster_detail"_hash:
+    type_enum = kGetClusterDetailType;
+    break;
+  case "get_variable"_hash:
+    type_enum = kGetVariableType;
+    break;
+  case "set_variable"_hash:
+    type_enum = kSetVariableType;
     break;
 
   // addtional type convert should add above
