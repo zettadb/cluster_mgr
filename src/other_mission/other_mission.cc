@@ -38,6 +38,33 @@ end:
   System::get_instance()->set_cluster_mgr_working(true);
 }
 
+void UpdatePrometheusCallBack(OtherMission *mission, std::string &response){
+  Json::Value root,array,info;
+  Json::Reader reader;
+  std::string job_status,job_memo;
+
+  mission->task_wait--;
+
+  job_status = "failed";
+  bool ret = reader.parse(response.c_str(), root);
+  if (!ret) {
+    job_memo = "JSON parse error: " + response;
+	syslog(Logger::INFO, "%s", job_memo.c_str());
+    return;
+  }
+  array = root["response_array"][0];
+  info = array["info"];
+
+  job_status = info["status"].asString();
+  if(job_status == "failed") {
+    job_memo = info["info"].asString();
+    syslog(Logger::INFO, "%s", job_memo.c_str());
+	return;
+  }
+
+  mission->task_incomplete--;
+}
+
 void OTHER_Call_Back(void *cb_context) {
   OtherRemoteTask *task = static_cast<OtherRemoteTask *>(cb_context);
   std::string response = task->get_response()->SerializeResponseToStr();
@@ -45,6 +72,21 @@ void OTHER_Call_Back(void *cb_context) {
   switch (task->getMission()->request_type) {
   case kunlun::kControlInstanceType:
     ControlInstanceCallBack(task->getMission(), response);
+    break;
+  case kunlun::kUpdatePrometheusType:
+    UpdatePrometheusCallBack(task->getMission(), response);
+	if(task->getMission()->task_wait == 0){
+		std::string job_status,job_memo;
+		if(task->getMission()->task_incomplete == 0){
+			job_status = "done";
+			job_memo = "update prometheus succeed";
+		}else{
+			job_status = "failed";
+			job_memo = "update prometheus failed";
+		}
+		syslog(Logger::INFO, "%s", job_memo.c_str());
+		System::get_instance()->update_operation_record(task->getMission()->job_id, job_status, job_memo);
+	}
     break;
 
   default:
@@ -182,113 +224,148 @@ void OtherMission::UpdatePrometheus(){
 	std::string job_memo;
 
 	job_status = "not_started";
-	job_memo = "control instance working";
-  syslog(Logger::INFO, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+	job_memo = "update prometheus start";
+	syslog(Logger::INFO, "%s", job_memo.c_str());
+	System::get_instance()->update_operation_record(job_id, job_status, job_memo);
 
 	if(!update_prometheus()) {
 		job_memo = "update prometheus error";
 		goto end;
 	}
 
-	job_status = "done";
-	job_memo = "update prometheus succeed";
+	job_memo = "update prometheus working";
 	syslog(Logger::INFO, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+	System::get_instance()->update_operation_record(job_id, job_status, job_memo);
 	return;
 
 end:
 	job_status = "failed";
 	syslog(Logger::ERROR, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+	System::get_instance()->update_operation_record(job_id, job_status, job_memo);
 }
 
-void OtherMission::PostgresExporter(){
-  
-}
+void OtherMission::PostgresExporter() {
+	std::string job_status;
+	std::string job_memo;
 
-void OtherMission::MysqldExporter(){
+	std::string hostaddr;
+	int port;
 
-}
+	if (!super::get_body_json_document().isMember("paras")) {
+		setExtraErr("missing `paras` key-value pair in the request body");
+		return;
+	}
+	Json::Value paras = super::get_body_json_document()["paras"];
 
+	if (!paras.isMember("hostaddr")) {
+		job_memo = "missing `hostaddr` key-value pair in the request body";
+		goto end;
+	}
+	hostaddr = paras["hostaddr"].asString();
 
-bool OtherMission::restart_node_exporter(std::vector<std::string> &vec_node)
-{
-	bool ret = false;
-/*
-	cJSON *root = NULL;
-	cJSON *item;
-	char *cjson = NULL;
+	if (!paras.isMember("port")) {
+		job_memo = "missing `port` key-value pair in the request body";
+		goto end;
+	}
+	port = stoi(paras["port"].asString());
 
-	cJSON *ret_root = NULL;
-	cJSON *ret_item;
+	job_status = "not_started";
+	job_memo = "postgres exporter start";
+	syslog(Logger::INFO, "%s", job_memo.c_str());
+	System::get_instance()->update_operation_record(job_id, job_status, job_memo);
 
-	root = cJSON_CreateObject();
-	cJSON_AddStringToObject(root, "job_type", "node_exporter");
-	cjson = cJSON_Print(root);
-	cJSON_Delete(root);
-	root = NULL;
-	
-	for(auto &node: vec_node)
-	{
-		std::string post_url = "http://" + node + ":" + std::to_string(node_mgr_http_port);
-		//syslog(Logger::INFO, "post_url=%s",post_url.c_str());
-		
-		std::string result, result_str;
-		int retry = 3;
-		while(retry-->0)
-		{
-			if(Http_client::get_instance()->Http_client_post_para(post_url.c_str(), cjson, result_str)==0)
-			{
-				syslog(Logger::INFO, "job_start_node_exporter result_str=%s",result_str.c_str());
-
-				if(ret_root!=NULL)
-				{
-					cJSON_Delete(ret_root);
-					ret_root = NULL;
-				}
-
-				ret_root = cJSON_Parse(result_str.c_str());
-				if(ret_root == NULL)
-				{
-					syslog(Logger::ERROR, "cJSON_Parse error");	
-					break;
-				}
-
-				ret_item = cJSON_GetObjectItem(ret_root, "result");
-				if(ret_item == NULL || ret_item->valuestring == NULL)
-				{
-					syslog(Logger::ERROR, "get result item error");
-					break;
-				}
-				result = ret_item->valuestring;
-
-				if(result == "error")
-				{
-					syslog(Logger::ERROR, "get result error");
-					break;
-				}
-				else if(result == "succeed")
-				{
-					break;
-				}
-			}
-		}
+	if(!restart_postgres_exporter(hostaddr, port)) {
+		job_memo = "restart_postgres_exporter error";
+		goto end;
 	}
 
+	job_status = "done";
+	job_memo = "postgres exporter succeed";
+	syslog(Logger::INFO, "%s", job_memo.c_str());
+	System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+	return;
+
 end:
-	if(ret_root!=NULL)
-		cJSON_Delete(ret_root);
-	if(root!=NULL)
-		cJSON_Delete(root);
-	if(cjson!=NULL)
-		free(cjson);
-*/
+	job_status = "failed";
+	syslog(Logger::ERROR, "%s", job_memo.c_str());
+	System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+}
+
+void OtherMission::MysqldExporter() {
+	std::string job_status;
+	std::string job_memo;
+
+	std::string hostaddr;
+	int port;
+
+	if (!super::get_body_json_document().isMember("paras")) {
+		setExtraErr("missing `paras` key-value pair in the request body");
+		return;
+	}
+	Json::Value paras = super::get_body_json_document()["paras"];
+
+	if (!paras.isMember("hostaddr")) {
+		job_memo = "missing `hostaddr` key-value pair in the request body";
+		goto end;
+	}
+	hostaddr = paras["hostaddr"].asString();
+
+	if (!paras.isMember("port")) {
+		job_memo = "missing `port` key-value pair in the request body";
+		goto end;
+	}
+	port = stoi(paras["port"].asString());
+
+	job_status = "not_started";
+	job_memo = "mysql exporter start";
+	syslog(Logger::INFO, "%s", job_memo.c_str());
+	System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+
+	if(!restart_mysql_exporter(hostaddr, port)) {
+		job_memo = "restart_mysql_exporter error";
+		goto end;
+	}
+
+	job_status = "done";
+	job_memo = "mysql exporter succeed";
+	syslog(Logger::INFO, "%s", job_memo.c_str());
+	System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+	return;
+
+end:
+	job_status = "failed";
+	syslog(Logger::ERROR, "%s", job_memo.c_str());
+	System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+}
+
+bool OtherMission::restart_node_exporter(std::vector<std::string> &vec_node) {
+	OtherRemoteTask *node_exporter;
+	Json::Value root_node;
+	Json::Value paras_node;
+
+	root_node["cluster_mgr_request_id"] = job_id;
+	root_node["task_spec_info"] = "node_exporter";
+	root_node["job_type"] = "node_exporter";
+	root_node["paras"] = paras_node;
+
+	for(auto &node: vec_node) {
+		node_exporter =
+			new OtherRemoteTask("node_exporter", job_id.c_str(), this);
+		node_exporter->AddNodeSubChannel(
+			node.c_str(),
+			g_node_channel_manager.getNodeChannel(node.c_str()));
+
+		node_exporter->SetPara(node.c_str(), root_node);
+		get_task_manager()->PushBackTask(node_exporter);
+	}
+
+	task_wait = vec_node.size();
+	task_incomplete = task_wait;
+
 	return true;
 }
 
-bool OtherMission::restart_postgres_exporter(std::string &ip, int port)
-{
+bool OtherMission::restart_postgres_exporter(std::string &hostaddr, int port) {
 	FILE* pfd;
 	char buf[256];
 
@@ -342,7 +419,7 @@ bool OtherMission::restart_postgres_exporter(std::string &ip, int port)
 
 	/////////////////////////////////////////////////////////
 	// start postgres_exporter
-	cmd = "export DATA_SOURCE_NAME=\"postgresql://abc:abc@" + ip + ":" + std::to_string(port) + "/postgres?sslmode=disable\";";
+	cmd = "export DATA_SOURCE_NAME=\"postgresql://abc:abc@" + hostaddr + ":" + std::to_string(port) + "/postgres?sslmode=disable\";";
 	cmd += "cd " + prometheus_path + "/postgres_exporter;";
 	cmd += "./postgres_exporter --web.listen-address=:" + std::to_string(prometheus_port_start+2) + " &";
 	syslog(Logger::INFO, "restart_postgres_exporter cmd %s", cmd.c_str());
@@ -357,7 +434,7 @@ bool OtherMission::restart_postgres_exporter(std::string &ip, int port)
 	return true;
 }
 
-bool OtherMission::restart_mysql_exporter(std::string &ip, int port) {
+bool OtherMission::restart_mysql_exporter(std::string &hostaddr, int port) {
 	FILE* pfd;
 	char buf[256];
 
@@ -411,7 +488,7 @@ bool OtherMission::restart_mysql_exporter(std::string &ip, int port) {
 
 	/////////////////////////////////////////////////////////
 	// start mysql_exporter
-	cmd = "export DATA_SOURCE_NAME=\"pgx:pgx_pwd@tcp(" + ip + ":" + std::to_string(port) + ")/\";";
+	cmd = "export DATA_SOURCE_NAME=\"pgx:pgx_pwd@tcp(" + hostaddr + ":" + std::to_string(port) + ")/\";";
 	cmd += "cd " + prometheus_path + "/mysqld_exporter;";
 	cmd += "./mysqld_exporter --web.listen-address=:" + std::to_string(prometheus_port_start+3) + " &";
 	syslog(Logger::INFO, "restart_mysql_exporter cmd %s", cmd.c_str());

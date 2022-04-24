@@ -43,6 +43,8 @@ class OtherMission : public ::MissionRequest {
 public:
   ClusterRequestTypes request_type;
   std::string job_id;
+  int task_wait;
+  int task_incomplete;
 
 public:
   explicit OtherMission(Json::Value *doc) : super(doc){};
@@ -54,8 +56,8 @@ public:
   void MysqldExporter();
 
 	bool restart_node_exporter(std::vector<std::string> &vec_node);
-	bool restart_postgres_exporter(std::string &ip, int port);
-	bool restart_mysql_exporter(std::string &ip, int port);
+	bool restart_postgres_exporter(std::string &hostaddr, int port);
+	bool restart_mysql_exporter(std::string &hostaddr, int port);
 	bool restart_prometheus();
 	bool update_prometheus();
   bool save_file(std::string &path, char* buf);
