@@ -2261,7 +2261,10 @@ bool System::get_shard_map_for_restore(std::string &backup_cluster_name, std::st
 
 	if(vec_backup_shard.size() == 0 || vec_restore_shard.size() == 0 ||
 		vec_backup_shard.size() != vec_restore_shard.size())
+	{
+		syslog(Logger::ERROR, "shard.size() = %d,%d", vec_backup_shard.size(),vec_restore_shard.size());
 		return false;
+	}
 
 	shard_map = "{";
 	for(int i=0; i<vec_backup_shard.size(); i++)

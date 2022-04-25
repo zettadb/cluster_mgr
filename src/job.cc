@@ -5801,7 +5801,7 @@ bool Job::job_restore_storage(std::string &cluster_name, std::string &shard_name
 
 	if(retry<0)
 	{
-		syslog(Logger::ERROR, "retore shard fail because http post");
+		syslog(Logger::ERROR, "restore shard fail because http post");
 		goto end;
 	}
 
@@ -5854,7 +5854,7 @@ bool Job::job_restore_storage(std::string &cluster_name, std::string &shard_name
 			}
 			else if(result == "succeed")
 			{
-				syslog(Logger::INFO, "retore %s:%s:%d finish!", shard_name.c_str(), ip_port.first.c_str(), ip_port.second);
+				syslog(Logger::INFO, "restore %s:%s:%d finish!", shard_name.c_str(), ip_port.first.c_str(), ip_port.second);
 				break;
 			}
 		}
@@ -5862,7 +5862,7 @@ bool Job::job_restore_storage(std::string &cluster_name, std::string &shard_name
 
 	if(retry<0)
 	{
-		syslog(Logger::ERROR, "retore shard timeout %s", result_str.c_str());
+		syslog(Logger::ERROR, "restore shard timeout %s", result_str.c_str());
 		goto end;
 	}
 
@@ -5932,7 +5932,7 @@ bool Job::job_restore_computer(std::string &cluster_name, std::string &shard_map
 
 	if(retry<0)
 	{
-		syslog(Logger::ERROR, "retore computer fail because http post");
+		syslog(Logger::ERROR, "restore computer fail because http post");
 		goto end;
 	}
 
@@ -5985,7 +5985,7 @@ bool Job::job_restore_computer(std::string &cluster_name, std::string &shard_map
 			}
 			else if(result == "succeed")
 			{
-				syslog(Logger::INFO, "retore %s:%d finish!", ip_port.first.c_str(), ip_port.second);
+				syslog(Logger::INFO, "restore %s:%d finish!", ip_port.first.c_str(), ip_port.second);
 				break;
 			}
 		}
@@ -5993,7 +5993,7 @@ bool Job::job_restore_computer(std::string &cluster_name, std::string &shard_map
 
 	if(retry<0)
 	{
-		syslog(Logger::ERROR, "retore computer timeout %s", result_str.c_str());
+		syslog(Logger::ERROR, "restore computer timeout %s", result_str.c_str());
 		goto end;
 	}
 
@@ -6799,7 +6799,7 @@ void Job::job_handle(std::string &job)
 	}
 	else if(job_type == JOB_DELETE_SHARD)
 	{
-		job_delete_shard(root);
+		//delete job_delete_shard(root);
 	}
 	else if(job_type == JOB_ADD_COMPS)
 	{
