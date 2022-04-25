@@ -68,6 +68,12 @@ ClusterRequestTypes GetReqTypeEnumByStr(const char *type_str) {
   case "shard_node_drop"_hash:
     type_enum = kShardNodeDropType;
     break;
+  case "backup_cluster"_hash:
+    type_enum = kBackupClusterType;
+    break;
+  case "restore_new_cluster"_hash:
+    type_enum = kRestoreNewClusterType;
+    break;
   case "expand_cluster"_hash:
     type_enum = kClusterExpandType;
     break;

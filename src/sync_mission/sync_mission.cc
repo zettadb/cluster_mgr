@@ -70,7 +70,8 @@ bool SyncMission::GetMachineSummary() {
   g_node_channel_manager.Init();
 
   for(auto &machine: vec_machine)	{
-      Json::Value root_node;
+      Json::Reader reader;
+      Json::Value root_node,root_ret;
       Json::Value paras;
       Json::Value list;
       root_node["cluster_mgr_request_id"] = "ping_pong";
@@ -79,7 +80,16 @@ bool SyncMission::GetMachineSummary() {
       root_node["paras"] = paras;
 
       SyncBrpc syncBrpc;
-      if(syncBrpc.syncBrpcToNode(machine, root_node))
+      syncBrpc.syncBrpcToNode(machine, root_node);
+
+      bool ret = reader.parse(syncBrpc.response.c_str(), root_ret);
+      if (ret) {
+        std::string status = root_ret["status"].asString();
+        if(status == "failed")
+          ret = false;
+      }
+
+      if(ret)
         list["status"] = "online";
       else
         list["status"] = "offline";

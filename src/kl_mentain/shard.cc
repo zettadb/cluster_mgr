@@ -472,14 +472,14 @@ bool Shard_node::get_variables(std::string &variable, std::string &value)
 	return ret;
 }
 
-bool Shard_node::set_variables(std::string &variable, std::string &value_int, std::string &value_str)
+bool Shard_node::set_variables(std::string &variable, std::string &type, std::string &value)
 {
 	std::string str_sql;
 
-	if(value_int.length())
-		str_sql = "set persist " + variable + "=" + value_int;
+	if(type == "int")
+		str_sql = "set persist " + variable + "=" + value;
 	else
-		str_sql = "set persist " + variable + "='" + value_str + "'";
+		str_sql = "set persist " + variable + "='" + value + "'";
 	syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
 
 	return send_stmt(SQLCOM_SET_OPTION, str_sql.c_str(), str_sql.length(), stmt_retries);
@@ -1571,7 +1571,7 @@ int MetadataShard::refresh_shards(std::vector<KunlunCluster *> &kl_clusters)
 	}
 
 	if(alterant_node_ip.size() != 0)
-		;//Job::get_instance()->notify_node_update(alterant_node_ip, 1);
+		Machine_info::get_instance()->notify_node_update(alterant_node_ip, 1);
 
 	return 0;
 }
@@ -1672,7 +1672,7 @@ int MetadataShard::refresh_computers(std::vector<KunlunCluster *> &kl_clusters)
 	}
 
 	if(alterant_node_ip.size() != 0)
-		;//Job::get_instance()->notify_node_update(alterant_node_ip, 2);
+		Machine_info::get_instance()->notify_node_update(alterant_node_ip, 2);
 
 	return 0;
 }
@@ -3205,7 +3205,7 @@ int MetadataShard::fetch_meta_shard_nodes(Shard_node *sn, bool is_master,
 	}
 
 	if(alterant_node_ip.size() != 0)
-		;//Job::get_instance()->notify_node_update(alterant_node_ip, 0);
+		Machine_info::get_instance()->notify_node_update(alterant_node_ip, 0);
 
 	return 0;
 }

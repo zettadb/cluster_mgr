@@ -228,6 +228,9 @@ void OtherMission::UpdatePrometheus(){
 	syslog(Logger::INFO, "%s", job_memo.c_str());
 	System::get_instance()->update_operation_record(job_id, job_status, job_memo);
 
+	//init channel again
+	g_node_channel_manager.Init();
+
 	if(!update_prometheus()) {
 		job_memo = "update prometheus error";
 		goto end;

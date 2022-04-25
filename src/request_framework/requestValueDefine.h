@@ -34,6 +34,8 @@ enum ClusterRequestTypes {
   kDeleteCompType,
   kShardNodeAddType,
   kShardNodeDropType,
+  kBackupClusterType,
+  kRestoreNewClusterType,
   kClusterExpandType,
   
   kCreateMachineType,

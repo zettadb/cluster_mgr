@@ -159,7 +159,7 @@ public:
 
 	bool update_variables(Tpye_string2 &t_string2);
 	bool get_variables(std::string &variable, std::string &value);
-	bool set_variables(std::string &variable, std::string &value_int, std::string &value_str);
+	bool set_variables(std::string &variable, std::string &type, std::string &value);
 	bool update_instance_cluster_info();
 	int start_mgr(Group_member_status st, bool as_master);
 	

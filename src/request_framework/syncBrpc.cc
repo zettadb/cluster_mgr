@@ -23,10 +23,9 @@ static void CallBC(brpc::Controller *cntl, SyncBrpc *syncBrpc) {
 
 bool SyncBrpc::syncBrpcToNode(std::string &hostaddr, Json::Value &para) {
 
-  result = false;
   auto channel = g_node_channel_manager.getNodeChannel(hostaddr.c_str());
   if(channel == nullptr)
-	  return result;
+	  return false;
 
   kunlunrpc::HttpService_Stub stub(channel);
   brpc::Controller *cntl = new brpc::Controller();
@@ -41,5 +40,5 @@ bool SyncBrpc::syncBrpcToNode(std::string &hostaddr, Json::Value &para) {
   stub.Emit(cntl, nullptr, nullptr, done);
   brpc::Join(cntl->call_id());
 
-  return result;
+  return true;
 }

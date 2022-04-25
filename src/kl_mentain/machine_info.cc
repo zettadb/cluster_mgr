@@ -10,6 +10,8 @@
 #include "log.h"
 #include "sys.h"
 #include "machine_info.h"
+#include "http_server/node_channel.h"
+#include "request_framework/syncBrpc.h"
 #include <errno.h>
 #include <unistd.h>
 
@@ -36,6 +38,29 @@ Machine_info::~Machine_info()
 {
 	for(auto &node: map_machine)
 		delete node.second;
+}
+
+void Machine_info::notify_node_update(std::set<std::string> &alterant_node_ip, int type) {
+
+	g_node_channel_manager.Init();
+
+	SyncBrpc syncBrpc;
+	Json::Value root_node;
+	Json::Value paras;
+	root_node["cluster_mgr_request_id"] = "update_instance";
+	root_node["task_spec_info"] = "update_instance";
+	root_node["job_type"] = "update_instance";
+
+	if(type == 0)
+		paras["instance_type"] = "meta_instance";
+	else if(type == 1)
+		paras["instance_type"] = "storage_instance";
+	else if(type == 2)
+		paras["instance_type"] = "computer_instance";
+	root_node["paras"] = paras;
+
+	for(auto node_ip: alterant_node_ip)
+		syncBrpc.syncBrpcToNode(node_ip, root_node);
 }
 
 bool Machine_info::insert_machine_on_meta(Machine *machine)

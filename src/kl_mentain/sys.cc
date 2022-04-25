@@ -1628,7 +1628,7 @@ bool System::get_variable(Json::Value &paras, Json::Value &attachment) {
 bool System::set_variable(Json::Value &paras, Json::Value &attachment) {
   Scopped_mutex sm(mtx);
 
-  std::string variable, hostaddr, result, value_int, value_str;
+  std::string variable, hostaddr, result, type, value;
   int port;
 
   if (!paras.isMember("hostaddr")) {
@@ -1649,20 +1649,28 @@ bool System::set_variable(Json::Value &paras, Json::Value &attachment) {
   }
   variable = paras["variable"].asString();
 
-  if (!paras.isMember("value_int")) {
-    if (!paras.isMember("value_str")) {
-      syslog(Logger::ERROR, "missing `value_int`,`value_str` key-value pair in the request body");
-      return false;
-    }
-    value_str = paras["value_str"].asString();
-  } else {
-    value_int = paras["value_int"].asString();
+  if (!paras.isMember("variable")) {
+    syslog(Logger::ERROR, "missing `variable` key-value pair in the request body");
+    return false;
   }
+  variable = paras["variable"].asString();
+
+  if (!paras.isMember("type")) {
+    syslog(Logger::ERROR, "missing `type` key-value pair in the request body");
+    return false;
+  }
+  type = paras["type"].asString();
+
+  if (!paras.isMember("value")) {
+    syslog(Logger::ERROR, "missing `value` key-value pair in the request body");
+    return false;
+  }
+  value = paras["value"].asString();
 
 /*
   for (auto &node : meta_shard.get_nodes()) {
     if (node->matches_ip_port(ip, port)) {
-      if (node->set_variables(variable, value_int, value_str) == 0){
+      if (node->set_variables(variable, type, value) == 0){
         attachment["result"] = "true";
       }else{
         attachment["result"] = "false";
@@ -1676,7 +1684,7 @@ bool System::set_variable(Json::Value &paras, Json::Value &attachment) {
     for (auto &shard : cluster->storage_shards) {
       for (auto &node : shard->get_nodes()) {
         if (node->matches_ip_port(hostaddr, port)) {
-          if (node->set_variables(variable, value_int, value_str) == 0){
+          if (node->set_variables(variable, type, value) == 0){
             attachment["result"] = "true";
           }else{
             attachment["result"] = "false";
@@ -1688,7 +1696,7 @@ bool System::set_variable(Json::Value &paras, Json::Value &attachment) {
 
     for (auto &comp : cluster->computer_nodes) {
       if (comp->matches_ip_port(hostaddr, port)) {
-        if (comp->set_variables(variable, value_int, value_str) == 0){
+        if (comp->set_variables(variable, type, value) == 0){
           attachment["result"] = "true";
         }else{
           attachment["result"] = "false";

@@ -59,6 +59,7 @@ public:
 		return m_inst;
 	}
 
+	void notify_node_update(std::set<std::string> &alterant_node_ip, int type);
 	bool insert_machine_on_meta(Machine *machine);
 	bool update_machine_on_meta(Machine *machine);
 	bool delete_machine_on_meta(Machine *machine);
