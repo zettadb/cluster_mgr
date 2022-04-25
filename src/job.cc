@@ -5564,7 +5564,7 @@ bool Job::job_backup_shard_node(std::string &cluster_name, std::string &cluster_
 				str_sql += "',when_ended='" + end_time + "' where when_started='" + start_time + "' and cluster_id=" + cluster_id;
 				syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
 
-				if(System::get_instance()->execute_metadate_opertation(SQLCOM_INSERT, str_sql))
+				if(System::get_instance()->execute_metadate_opertation(SQLCOM_UPDATE, str_sql))
 				{
 					syslog(Logger::ERROR, "update cluster_shard_backup_restore_log error");
 					goto end;
@@ -5598,7 +5598,7 @@ end:
 		str_sql = "UPDATE cluster_shard_backup_restore_log set status='failed' where when_started='" + start_time + "' and cluster_id=" + cluster_id;
 		syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
 
-		if(System::get_instance()->execute_metadate_opertation(SQLCOM_INSERT, str_sql))
+		if(System::get_instance()->execute_metadate_opertation(SQLCOM_UPDATE, str_sql))
 		{
 			syslog(Logger::ERROR, "update cluster_shard_backup_restore_log error");
 		}
