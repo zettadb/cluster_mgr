@@ -3441,6 +3441,7 @@ bool Job::job_start_cluster(std::string &cluster_name, std::string &job_id, std:
 		return false;
 	}
 
+	sleep(thread_work_interval * 3);  //wait cluster shard update
 	syslog(Logger::INFO, "cluster start succeed");
 	return true;
 }
