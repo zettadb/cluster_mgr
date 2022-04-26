@@ -106,6 +106,44 @@ void CheckInstanceDelete(ClusterMission *mission, std::string &response) {
   mission->task_incomplete--;
 }
 
+void CheckBackupCluster(ClusterMission *mission, std::string &response, const char *shard_id) {
+  Json::Value root;
+  Json::Reader reader;
+  std::string str_sql,end_time;
+
+  bool ret = reader.parse(response.c_str(), root);
+  if (!ret) {
+    return;
+  }
+  Json::Value array = root["response_array"][0];
+  Json::Value info = array["info"];
+  mission->get_datatime(end_time);
+
+  if(info["status"].asString() == "failed") {
+    syslog(Logger::ERROR, "backup error : %s", info["info"].asString().c_str());
+
+		str_sql = "UPDATE cluster_shard_backup_restore_log set status='failed' where when_started='";
+    str_sql += mission->start_time + "' and shard_id=" + std::string(shard_id);
+		//syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
+
+		if(System::get_instance()->execute_metadate_opertation(SQLCOM_UPDATE, str_sql)) {
+			syslog(Logger::ERROR, "update cluster_shard_backup_restore_log error");
+		}
+    return;
+  } else {
+      str_sql = "UPDATE cluster_shard_backup_restore_log set status='done',shard_backup_path='" + info["info"].asString();
+      str_sql += "',when_ended='" + end_time + "' where when_started='" + mission->start_time + "' and shard_id=" + std::string(shard_id);
+      //syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
+
+      if(System::get_instance()->execute_metadate_opertation(SQLCOM_UPDATE, str_sql)) {
+        syslog(Logger::ERROR, "update cluster_shard_backup_restore_log error");
+        return;
+      }
+  }
+
+  mission->task_incomplete--;
+}
+
 void CreateClusterCallBack(ClusterMission *mission, std::string &response){
   switch (mission->task_step) {
   case ClusterMission::ClusterStep::GET_PATH_SIZE:
@@ -314,6 +352,38 @@ void DeleteCompCallBack(ClusterMission *mission, std::string &response){
   }
 }
 
+void BackupClusterCallBack(ClusterMission *mission, std::string &response, ClusterRemoteTask *task){
+  switch (mission->task_step) {
+  case ClusterMission::ClusterStep::BACKUP_STORAGE:
+    CheckBackupCluster(mission, response, task->get_task_spec_info());
+    mission->task_wait--;
+    if(mission->task_wait == 0) {
+      syslog(Logger::INFO, "task_incomplete = %d", mission->task_incomplete);
+      mission->update_backup();
+    }
+    break;
+
+  default:
+    break;
+  }
+}
+
+void kRestoreNewClusterType(ClusterMission *mission, std::string &response, ClusterRemoteTask *task){
+  switch (mission->task_step) {
+  case ClusterMission::ClusterStep::RESTORE_STORAGE:
+    CheckInstanceDelete(mission, response);
+    mission->task_wait--;
+    if(mission->task_wait == 0) {
+      syslog(Logger::INFO, "task_incomplete = %d", mission->task_incomplete);
+      mission->stop_comp();
+    }
+    break;
+
+  default:
+    break;
+  }
+}
+
 void CLuster_Call_Back(void *cb_context) {
   ClusterRemoteTask *task = static_cast<ClusterRemoteTask *>(cb_context);
   std::string response = task->get_response()->SerializeResponseToStr();
@@ -339,6 +409,13 @@ void CLuster_Call_Back(void *cb_context) {
     break;
   case kunlun::kDeleteCompType:
     DeleteCompCallBack(task->getMission(), response);
+    break;
+
+  case kunlun::kBackupClusterType:
+    BackupClusterCallBack(task->getMission(), response, task);
+    break;
+  case kunlun::kRestoreNewClusterType:
+    //RestoreNewCallBack(task->getMission(), response, task);
     break;
 
   default:
@@ -376,6 +453,13 @@ bool ClusterMission::ArrangeRemoteTask() {
     break;
   case kunlun::kDeleteCompType:
     deleteComp();
+    break;
+
+  case kunlun::kBackupClusterType:
+    backupCluster();
+    break;
+  case kunlun::kRestoreNewClusterType:
+    restoreNewCluster();
     break;
 
   default:
@@ -1134,6 +1218,52 @@ end:
   job_status = "failed";
   syslog(Logger::ERROR, "%s", job_memo.c_str());
   System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+}
+
+void ClusterMission::backupCluster(){
+
+  std::string backup_storage; //no used
+
+  if (!super::get_body_json_document().isMember("paras")) {
+    setExtraErr("missing `paras` key-value pair in the request body");
+    return;
+  }
+  Json::Value paras = super::get_body_json_document()["paras"];
+
+  if (!paras.isMember("backup_cluster_name")) {
+    job_memo = "missing `backup_cluster_name` key-value pair in the request body";
+    goto end;
+  }
+  backup_cluster_name = paras["backup_cluster_name"].asString();
+
+	job_status = "ongoing";
+	job_memo = "backup cluster start";
+  syslog(Logger::INFO, "%s", job_memo.c_str());
+  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+
+  /////////////////////////////////////////////////////////
+	if(!System::get_instance()->check_cluster_name(backup_cluster_name)) {
+		job_memo = "error, backup_cluster_name is no exist";
+		goto end;
+	}
+
+	if(!System::get_instance()->get_backup_storage_string(backup_storage, backup_storage_id, backup_storage_str))	{
+		job_memo = "get_backup_storage error, create_backup_storage first";
+		goto end;
+	}
+
+	backup_cluster();
+  return;
+
+end:
+  missiom_finish = true;
+  job_status = "failed";
+  syslog(Logger::ERROR, "%s", job_memo.c_str());
+  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+}
+
+void ClusterMission::restoreNewCluster(){
+  
 }
 
 void ClusterMission::createStorageInfo() {
@@ -2080,6 +2210,115 @@ void ClusterMission::stop_comp(){
   System::get_instance()->set_cluster_mgr_working(true);
 }
 
+void ClusterMission::update_backup() {
+  std::string str_sql,end_time;
+
+  job_status = "failed";
+  if(task_incomplete){
+    job_memo = "backup cluster error";
+    goto end;
+  }
+
+  get_datatime(end_time);
+  str_sql = "INSERT INTO cluster_backups(storage_id,cluster_id,backup_type,has_comp_node_dump,start_ts,end_ts,name) VALUES(";
+  str_sql += backup_storage_id + "," + cluster_id + ",'storage_shards',0,'" + start_time + "','" + end_time + "','" + shard_names + "')";
+  syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
+
+  if(System::get_instance()->execute_metadate_opertation(SQLCOM_INSERT, str_sql))	{
+    job_memo = "insert cluster_backups error";
+    goto end;
+  }
+
+  job_status = "done";
+  job_memo = "backup cluster succeed";
+  syslog(Logger::INFO, "%s", job_memo.c_str());
+  job_memo = end_time;
+
+end:
+  missiom_finish = true;
+  syslog(Logger::INFO, "%s", job_memo.c_str());
+  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+}
+
+void ClusterMission::backup_cluster() {
+
+  std::vector<Tpye_Shard_Id_Ip_Port_Id> vec_shard_id_ip_port_id;
+	get_datatime(start_time);
+
+	/////////////////////////////////////////////////////////
+	// get one node from erver shard
+	if(!System::get_instance()->get_shard_info_for_backup(backup_cluster_name, cluster_id, vec_shard_id_ip_port_id)){
+		job_memo = "get_shard_info_for_backup error";
+		goto end;
+	}
+
+	///////////////////////////////////////////////////////////////////////////////
+	// backup every shard
+	for(auto &shard_id_ip_port_id: vec_shard_id_ip_port_id)	{
+		if(!backup_shard_node(cluster_id, shard_id_ip_port_id))	{
+			job_memo = "backup_shard_node error";
+			goto end;
+		}
+
+		if(shard_names.length()>0)
+			shard_names += ";";
+		shard_names += std::get<0>(shard_id_ip_port_id);
+	}
+
+  task_step = BACKUP_STORAGE;
+  task_wait = vec_shard_id_ip_port_id.size();
+  task_incomplete = task_wait;
+  return;
+
+end:
+  missiom_finish = true;
+  job_status = "failed";
+  syslog(Logger::INFO, "%s", job_memo.c_str());
+  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+}
+
+bool ClusterMission::backup_shard_node(std::string &cluster_id, Tpye_Shard_Id_Ip_Port_Id &shard_id_ip_port_id) {
+
+  ClusterRemoteTask *cluster_task;
+  Json::Value root_node;
+  Json::Value paras_node;
+  std::string str_sql;
+
+  cluster_task =
+      new ClusterRemoteTask(std::to_string(std::get<1>(shard_id_ip_port_id)).c_str(), job_id.c_str(), this);
+  cluster_task->AddNodeSubChannel(
+      std::get<2>(shard_id_ip_port_id).c_str(),
+      g_node_channel_manager.getNodeChannel(std::get<2>(shard_id_ip_port_id).c_str()));
+
+  root_node["cluster_mgr_request_id"] = job_id;
+  root_node["task_spec_info"] = cluster_task->get_task_spec_info();
+  root_node["job_type"] = "backup_shard";
+
+  paras_node["ip"] = std::get<2>(shard_id_ip_port_id);
+  paras_node["port"] = std::get<3>(shard_id_ip_port_id);
+  paras_node["cluster_name"] = backup_cluster_name;
+  paras_node["shard_name"] = std::get<0>(shard_id_ip_port_id);
+  paras_node["backup_storage"] = backup_storage_str;
+  root_node["paras"] = paras_node;
+
+  cluster_task->SetPara(std::get<2>(shard_id_ip_port_id).c_str(), root_node);
+  get_task_manager()->PushBackTask(cluster_task);
+
+	///////////////////////////////////////////////////////////////////////////////
+	// insert metadata table
+	str_sql = "INSERT INTO cluster_shard_backup_restore_log(storage_id,cluster_id,shard_id,shard_node_id,optype,status,when_started) VALUES(";
+	str_sql += backup_storage_id + "," + cluster_id + "," + std::to_string(std::get<1>(shard_id_ip_port_id)) + "," + std::to_string(std::get<4>(shard_id_ip_port_id));
+	str_sql += ",'backup','ongoing','" + start_time + "')";
+	syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
+
+	if(System::get_instance()->execute_metadate_opertation(SQLCOM_INSERT, str_sql))	{
+		syslog(Logger::ERROR, "insert cluster_shard_backup_restore_log error");
+		return false;
+	}
+
+  return true;
+}
+
 bool ClusterMission::insert_roll_back_record(Json::Value &para) {
 
 	std::string str_sql,roll_info;
@@ -2297,6 +2536,22 @@ void ClusterMission::get_timestamp(std::string &timestamp) {
 	clock_gettime(CLOCK_REALTIME, &ts);
 	snprintf(sysTime, 128, "%lu", ts.tv_sec); 
 	timestamp = sysTime;
+}
+
+void ClusterMission::get_datatime(std::string &datatime)
+{
+	char sysTime[128];
+	struct timespec ts = {0,0};
+	clock_gettime(CLOCK_REALTIME, &ts);
+
+	struct tm *tm;
+	tm = localtime(&ts.tv_sec);
+		 
+	snprintf(sysTime, 128, "%04u-%02u-%02u %02u:%02u:%02u", 
+		tm->tm_year+1900, tm->tm_mon+1,	tm->tm_mday, 
+		tm->tm_hour, tm->tm_min, tm->tm_sec); 
+
+	datatime = sysTime;
 }
 
 bool ClusterMission::save_file(std::string &path, const char *buf) {

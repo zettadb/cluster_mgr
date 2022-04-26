@@ -70,13 +70,23 @@ public:
   int add_shards;
   int add_comps;
 
+  std::string backup_cluster_name;
+  std::string restore_cluster_name;
+  std::string datatime;
+  std::string start_time;
+  std::string shard_names;
+  std::string cluster_id;
+  std::string backup_storage_id;
+  std::string backup_storage_str;
+
   int nodes_select;
   int task_num;
   int task_wait;
   int task_incomplete;
   int task_step;
 
-  enum ClusterStep {GET_PATH_SIZE, INSTALL_STORAGE, INSTALL_COMPUTER, DELETE_INSTANCE};
+  enum ClusterStep {GET_PATH_SIZE, INSTALL_STORAGE, INSTALL_COMPUTER, DELETE_INSTANCE, 
+                    BACKUP_STORAGE, RESTORE_STORAGE, RESTORE_COMPUTER};
 
 public:
   explicit ClusterMission(Json::Value *doc) : super(doc){};
@@ -89,6 +99,8 @@ public:
   void deleteShard();
   void addComps();
   void deleteComp();
+  void backupCluster();
+  void restoreNewCluster();
 
   void createStorageInfo();
   void createComputerInfo();
@@ -111,6 +123,10 @@ public:
   void stop_cluster();
   void stop_shard();
   void stop_comp();
+  void update_backup();
+
+  void backup_cluster();
+  bool backup_shard_node(std::string &cluster_id, Tpye_Shard_Id_Ip_Port_Id &shard_id_ip_port_id);
 
   bool insert_roll_back_record(Json::Value &para);
   bool delete_roll_back_record();
@@ -118,6 +134,7 @@ public:
   bool system_cmd(std::string &cmd);
   void get_uuid(std::string &uuid);
   void get_timestamp(std::string &timestamp);
+  void get_datatime(std::string &datatime);
   bool save_file(std::string &path, const char *buf);
   void generate_cluster_name();
   bool get_cluster_info();
