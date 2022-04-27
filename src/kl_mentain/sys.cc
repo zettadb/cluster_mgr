@@ -463,12 +463,11 @@ bool System::check_machine_hostaddr(std::string &hostaddr) {
 bool System::check_cluster_name(std::string &cluster_name) {
   Scopped_mutex sm(mtx);
 
-  if (meta_shard.check_cluster_name(cluster_name)) {
-    // syslog(Logger::ERROR, "check_cluster_name error");
-    return false;
-  }
+	for (auto &cluster:kl_clusters)
+		if(cluster_name == cluster->get_name())
+			return true;
 
-  return true;
+	return false;
 }
 
 bool System::check_nick_name(std::string &nick_name) {

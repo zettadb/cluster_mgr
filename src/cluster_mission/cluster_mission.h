@@ -71,13 +71,15 @@ public:
   int add_comps;
 
   std::string backup_cluster_name;
-  std::string restore_cluster_name;
-  std::string datatime;
+  std::string timestamp;
   std::string start_time;
   std::string shard_names;
   std::string cluster_id;
   std::string backup_storage_id;
   std::string backup_storage_str;
+  std::vector<std::string> vec_backup_shard_name;
+  std::vector<std::vector<Tpye_Ip_Port>> vec_vec_storage_ip_port;
+  std::vector<Tpye_Ip_Port> vec_computer_ip_port;
 
   int nodes_select;
   int task_num;
@@ -85,8 +87,8 @@ public:
   int task_incomplete;
   int task_step;
 
-  enum ClusterStep {GET_PATH_SIZE, INSTALL_STORAGE, INSTALL_COMPUTER, DELETE_INSTANCE, 
-                    BACKUP_STORAGE, RESTORE_STORAGE, RESTORE_COMPUTER};
+  enum ClusterStep {GET_PATH_SIZE, INSTALL_STORAGE, INSTALL_COMPUTER, 
+                    DELETE_INSTANCE, BACKUP_STORAGE, RESTORE_INSTANCE};
 
 public:
   explicit ClusterMission(Json::Value *doc) : super(doc){};
@@ -127,6 +129,10 @@ public:
 
   void backup_cluster();
   bool backup_shard_node(std::string &cluster_id, Tpye_Shard_Id_Ip_Port_Id &shard_id_ip_port_id);
+  void restoreCluster();
+  bool restore_storage(std::string &shard_name, Tpye_Ip_Port &ip_port);
+  bool restore_computer(std::string &shard_map, std::string &meta_str, Tpye_Ip_Port &ip_port);
+  void updateRestoreInfo();
 
   bool insert_roll_back_record(Json::Value &para);
   bool delete_roll_back_record();
@@ -137,7 +143,7 @@ public:
   void get_datatime(std::string &datatime);
   bool save_file(std::string &path, const char *buf);
   void generate_cluster_name();
-  bool get_cluster_info();
+  bool get_cluster_info(std::string &cluster_name);
   bool create_program_path();
   void get_user_name();
 

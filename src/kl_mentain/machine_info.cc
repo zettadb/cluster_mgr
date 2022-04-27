@@ -42,8 +42,6 @@ Machine_info::~Machine_info()
 
 void Machine_info::notify_node_update(std::set<std::string> &alterant_node_ip, int type) {
 
-	g_node_channel_manager.Init();
-
 	SyncBrpc syncBrpc;
 	Json::Value root_node;
 	Json::Value paras;
