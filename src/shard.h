@@ -574,7 +574,7 @@ public:
 	int update_instance_status(Tpye_Ip_Port &ip_port, std::string &status, int &type);
 	int get_backup_storage_string(std::string &name, std::string &backup_storage_id, std::string &backup_storage_str);
 	int get_backup_storage_list(std::vector<Tpye_string4> &vec_t_string4);
-	int add_shard_nodes(std::string &cluster_name, std::string &shard_name, std::vector<Tpye_Ip_Port_User_Pwd> vec_ip_port_user_pwd);
+	int add_shard_nodes(std::string &cluster_name, std::string &shard_name, std::vector<Tpye_Ip_Port_User_Pwd> &vec_ip_port_user_pwd);
 	int get_roll_info_from_metadata(std::string &job_id, std::vector<std::string> &vec_roll_info);
 	int get_ongoing_job_id_from_metadata(std::vector<std::string> &vec_job_id);
 	int get_ongoing_job_json_from_metadata(std::vector<std::string> &vec_job_json);

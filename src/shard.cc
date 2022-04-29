@@ -2386,7 +2386,7 @@ int MetadataShard::get_backup_storage_list(std::vector<Tpye_string4> &vec_t_stri
   @retval 0 succeed;
   		  1 fail;
 */
-int MetadataShard::add_shard_nodes(std::string &cluster_name, std::string &shard_name, std::vector<Tpye_Ip_Port_User_Pwd> vec_ip_port_user_pwd)
+int MetadataShard::add_shard_nodes(std::string &cluster_name, std::string &shard_name, std::vector<Tpye_Ip_Port_User_Pwd> &vec_ip_port_user_pwd)
 {
 	Scopped_mutex sm(mtx);
 

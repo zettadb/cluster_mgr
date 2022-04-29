@@ -1862,7 +1862,7 @@ bool System::update_variables(std::string &cluster_name, std::string &shard_name
 	return ret;
 }
 
-bool System::add_shard_nodes(std::string &cluster_name, std::string &shard_name, std::vector<Tpye_Ip_Port_User_Pwd> vec_ip_port_user_pwd)
+bool System::add_shard_nodes(std::string &cluster_name, std::string &shard_name, std::vector<Tpye_Ip_Port_User_Pwd> &vec_ip_port_user_pwd)
 {
 	Scopped_mutex sm(mtx);
 
