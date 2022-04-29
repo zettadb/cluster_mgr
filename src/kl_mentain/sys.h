@@ -12,7 +12,7 @@
 #include "shard.h"
 #include "kl_cluster.h"
 #include "machine_info.h"
-#include "cjson.h"
+#include "json/json.h"
 #include <vector>
 #include <map>
 
@@ -94,7 +94,6 @@ public:
 	int get_max_cluster_id(int &cluster_id);
 	int get_max_shard_name_id(std::string &cluster_name, int &shard_id);
 	int get_max_comp_name_id(std::string &cluster_name, int &comp_id);
-	bool get_server_nodes_from_metadata(std::vector<Machine*> &vec_machines);
 	bool get_roll_info_from_metadata(std::string &job_id, std::vector<std::string> &vec_roll_info);
 	bool get_ongoing_job_id_from_metadata(std::vector<std::string> &vec_job_id);
 	bool get_ongoing_job_json_from_metadata(std::vector<std::string> &vec_job_json);
@@ -107,33 +106,25 @@ public:
 	bool check_nick_name(std::string &nick_name);
 	bool rename_cluster(std::string &cluster_name, std::string &nick_name);
 	bool check_meta_ip_port(Tpye_Ip_Port &ip_port);
+	bool check_cluster_shard_ip_port(std::string &cluster_name, std::string &shard_name, Tpye_Ip_Port &ip_port);
 	bool check_cluster_shard_name(std::string &cluster_name, std::string &shard_name);
 	bool check_cluster_comp_name(std::string &cluster_name, std::string &comp_name);
 	bool check_cluster_shard_more(std::string &cluster_name);
 	bool check_cluster_shard_node_more(std::string &cluster_name, std::string &shard_name);
 	bool check_cluster_comp_more(std::string &cluster_name);
+	bool check_cluster_none();
+	bool remove_all_meta();
 	bool get_cluster_shard_name(std::string &cluster_name, std::vector<std::string> &vec_shard_name);
 	bool get_meta_info(std::vector<Tpye_Ip_Port_User_Pwd> &vec_meta);
 	bool get_meta_master(Tpye_Ip_Port_User_Pwd &meta);
-	bool get_machine_instance_port(Machine* machine);
 	bool update_instance_status(Tpye_Ip_Port &ip_port, std::string &status, int &type);
 	bool get_backup_storage_string(std::string &name, std::string &backup_storage_id, std::string &backup_storage_str);
-	bool get_backup_storage_list(cJSON *root, std::string &str_ret);
-	bool get_node_instance(cJSON *root, std::string &str_ret);
-	bool get_meta(cJSON *root, std::string &str_ret);
-	bool get_meta_mode(cJSON *root, std::string &str_ret);
-	bool get_cluster_summary(cJSON *root, std::string &str_ret);
-	bool get_cluster_detail(cJSON *root, std::string &str_ret);
-	bool get_storage(cJSON *root, std::string &str_ret);
-	bool get_computer(cJSON *root, std::string &str_ret);
-	bool get_variable(cJSON *root, std::string &str_ret);
-	bool set_variable(cJSON *root, std::string &str_ret);
 	bool get_shards_ip_port(std::string &cluster_name, std::vector <std::vector<Tpye_Ip_Port>> &vec_vec_shard);
 	bool get_shards_ip_port(std::string &cluster_name, std::string &shard_name, std::vector<Tpye_Ip_Port> &vec_shard);
 	bool get_comps_ip_port(std::string &cluster_name, std::vector<Tpye_Ip_Port> &vec_comp);
 	bool get_comps_ip_port(std::string &cluster_name, std::string &comp_name, std::vector<Tpye_Ip_Port> &vec_comp);
-	bool update_variables(std::string &cluster_name, std::string &shard_name, Tpye_Ip_Port &ip_port, Tpye_string2 &t_string2);
-	bool add_shard_nodes(std::string &cluster_name, std::string &shard_name, std::vector<Tpye_Ip_Port_User_Pwd> vec_ip_port_user_pwd);
+	bool get_meta_ip_port(std::vector<Tpye_Ip_Port> &vec_meta);
+	bool add_shard_nodes(std::string &cluster_name, std::string &shard_name, std::vector<Tpye_Ip_Port_User_Pwd> &vec_ip_port_user_pwd);
 	bool stop_cluster(std::string &cluster_name);
 	bool stop_cluster_shard(std::string &cluster_name, std::string &shard_name);
 	bool stop_cluster_shard_node(std::string &cluster_name, std::string &shard_name, Tpye_Ip_Port &ip_port);
@@ -144,8 +135,20 @@ public:
 	bool get_comps_ip_port_restore(std::string &cluster_name, std::vector<Tpye_Ip_Port> &vec_ip_port);
 	bool get_shard_map_for_restore(std::string &backup_cluster_name, std::string &restore_cluster_name, std::string &shard_map);
 	bool get_cluster_shards_nodes_comps(std::string &cluster_name, int &shards, int &nodes, int &comps);
-	bool get_cluster_mgr_mode(std::string &cluster_name);
+	bool get_cluster_shard_variable(std::string &cluster_name, std::string &shard_name, std::string &variable, std::string &value);
+	bool get_cluster_no_rep_mode(std::string &cluster_name);
 	bool clear_cluster_shard_master(std::string &cluster_name);
 	bool update_instance_cluster_info(std::string &cluster_name);
+	bool update_shard_group_seeds(std::string &cluster_name, std::string &shard_name, std::string &group_seeds);
+	bool get_machine_instance_port(Machine* machine);
+	bool update_server_nodes_from_metadata(std::map<std::string, Machine*> &map_machine);
+	bool update_operation_record(std::string &id, std::string &status, std::string &memo);
+	bool get_meta_mode(Json::Value &attachment);
+	bool get_meta_summary(Json::Value &attachment);
+	bool get_backup_storage(Json::Value &attachment);
+	bool get_cluster_summary(Json::Value &attachment);
+	bool get_cluster_detail(Json::Value &paras, Json::Value &attachment);
+	bool get_variable(Json::Value &paras, Json::Value &attachment);
+	bool set_variable(Json::Value &paras, Json::Value &attachment);
 };
 #endif // !SYS_H

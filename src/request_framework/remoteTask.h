@@ -58,7 +58,7 @@ class TaskManager;
 class RemoteTask : public kunlun::ErrorCup, public kunlun::GlobalErrorNum {
 public:
   explicit RemoteTask(const char *task_name)
-      : task_spec_info_(task_name), call_back_(nullptr), cb_context_(nullptr){};
+      : task_spec_info_(task_name), call_back_(nullptr), cb_context_(nullptr), prev_task_(nullptr){};
   virtual ~RemoteTask(){};
 
 private:
@@ -85,13 +85,19 @@ public:
   void Set_call_back(void (*function)(void *));
   void Set_cb_context(void *context);
   RemoteTaskResponse *get_response();
+  // Dirved Class may override this method to implement different set-para
+  // operation. For instance, current task para generated based on previous
+  // task response
+  virtual void SetParaToRequestBody(brpc::Controller *cntl, std::string node_hostaddr);
+  void set_prev_task(RemoteTask *);
 
 private:
   void set_response_map();
-  void setParaToRequestBody(brpc::Controller *, std::string);
+
+protected:
+  std::string task_spec_info_;
 
 private:
-  std::string task_spec_info_;
   std::map<std::string, brpc::Channel *> channel_map_;
   std::map<std::string, Json::Value> paras_map_;
   RemoteTaskResponse response_;
@@ -99,6 +105,10 @@ private:
 public:
   void (*call_back_)(void *);
   void *cb_context_;
+
+protected:
+  RemoteTask *prev_task_;
+
 };
 
 class TaskManager : public kunlun::ErrorCup {

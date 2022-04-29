@@ -1,0 +1,6 @@
+add_library(cluster_mission OBJECT cluster_mission.cc)
+target_include_directories(cluster_mission INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_include_directories(cluster_mission PUBLIC "${PROJECT_SOURCE_DIR}/src")
+target_include_directories(cluster_mission PUBLIC "${VENDOR_OUTPUT_PATH}/include")
+target_include_directories(cluster_mission PUBLIC "${PROJECT_BINARY_DIR}")
+target_include_directories(cluster_mission PUBLIC "${ZETTALIB_INCLUDE_PATH}")

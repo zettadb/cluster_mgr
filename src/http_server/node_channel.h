@@ -31,6 +31,7 @@ public:
   ~GlobalNodeChannelManager();
 
   bool Init();
+  void removeNodeChannel(const char *);
   brpc::Channel *getNodeChannel(const char *);
   int run();
   kunlun::MysqlConnection *get_meta_conn();

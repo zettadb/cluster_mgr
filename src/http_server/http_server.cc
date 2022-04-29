@@ -9,6 +9,11 @@
 #include "butil/iobuf.h"
 #include "cluster_expand/expand_mission.h"
 #include "example_mission/example_mission.h"
+#include "sync_mission/sync_mission.h"
+#include "machine_mission/machine_mission.h"
+#include "backup_storage/backup_storage.h"
+#include "cluster_mission/cluster_mission.h"
+#include "other_mission/other_mission.h"
 #include "request_framework/missionRequest.h"
 #include "strings.h"
 #include "util_func/error_code.h"
@@ -34,10 +39,8 @@ HttpServiceImpl::MakeErrorInstantResponseBody(const char *error_msg) {
   Json::Value root;
   root["version"] = KUNLUN_JSON_BODY_VERSION;
   root["error_code"] = "0";
-  root["error_info"] = "NULL";
-  root["extra_info"] = error_msg;
+  root["error_info"] = error_msg;
   root["status"] = "failed";
-  root["job_id"] = "";
   Json::Value attachment;
   root["attachment"] = attachment;
 
@@ -52,10 +55,22 @@ HttpServiceImpl::MakeAcceptInstantResponseBody(ClusterRequest *request) {
   root["version"] = KUNLUN_JSON_BODY_VERSION;
   root["error_code"] = EintToStr(EOK);
   root["job_id"] = request->get_request_unique_id();
-  root["job_type"] = request->get_request_body().job_type_str;
   root["status"] = "accept";
   Json::Value attachment;
   root["attachment"] = attachment;
+
+  Json::FastWriter writer;
+  return writer.write(root);
+}
+
+std::string
+HttpServiceImpl::MakeSyncOkResponseBody(ClusterRequest *request) {
+  // Json format
+  Json::Value root;
+  root["version"] = KUNLUN_JSON_BODY_VERSION;
+  root["error_code"] = EintToStr(EOK);
+  root["status"] = "succeed";
+  root["attachment"] = request->get_body_json_attachment();
 
   Json::FastWriter writer;
   return writer.write(root);
@@ -77,32 +92,51 @@ void HttpServiceImpl::Emit(google::protobuf::RpcController *cntl_base,
     return;
   }
 
-  // dispatch the request
-  // this option may block ( request queue may full ),
-  // so we use bthread to invoke it
-  bthread_t bid;
-  // this object will free at AsyncDispatchRequest()
-  AsynArgs *asynargs = new AsynArgs();
-  asynargs->http_serivce_impl = this;
-  asynargs->cluster_request = inner_request;
+  if(inner_request->get_request_type() < kSyncReturnType) { //for aSyncTask
+    // dispatch the request
+    // this option may block ( request queue may full ),
+    // so we use bthread to invoke it
+    bthread_t bid;
+    // this object will free at AsyncDispatchRequest()
+    AsynArgs *asynargs = new AsynArgs();
+    asynargs->http_serivce_impl = this;
+    asynargs->cluster_request = inner_request;
 
-  if (bthread_start_background(&bid, NULL, AsyncDispatchRequest, asynargs) !=
-      0) {
+    if (bthread_start_background(&bid, NULL, AsyncDispatchRequest, asynargs) !=
+        0) {
+      cntl->http_response().set_content_type("text/plain");
+      butil::IOBufBuilder info_buffer;
+      info_buffer << MakeErrorInstantResponseBody(
+                        "Kunlun Cluster deal request faild")
+                  << '\n';
+      info_buffer.move_to(cntl->response_attachment());
+      syslog(Logger::ERROR, "start bthread to dispathc the request failed");
+      return;
+    }
+
+    // TODO: make a wrapper to do this json stuff
     cntl->http_response().set_content_type("text/plain");
     butil::IOBufBuilder info_buffer;
-    info_buffer << MakeErrorInstantResponseBody(
-                       "Kunlun Cluster deal request faild")
-                << '\n';
+    info_buffer << MakeAcceptInstantResponseBody(inner_request) << '\n';
     info_buffer.move_to(cntl->response_attachment());
-    syslog(Logger::ERROR, "start bthread to dispathc the request failed");
-    return;
-  }
+  } else {  //for SyncReturn
 
-  // TODO: make a wrapper to do this json stuff
-  cntl->http_response().set_content_type("text/plain");
-  butil::IOBufBuilder info_buffer;
-  info_buffer << MakeAcceptInstantResponseBody(inner_request) << '\n';
-  info_buffer.move_to(cntl->response_attachment());
+    if(!inner_request->SetUpSyncTaskImpl()){
+      cntl->http_response().set_content_type("text/plain");
+      butil::IOBufBuilder info_buffer;
+      info_buffer << MakeErrorInstantResponseBody(
+                        "SetUpSyncTaskImpl faild")
+                  << '\n';
+      info_buffer.move_to(cntl->response_attachment());
+      return;
+    }
+
+    // TODO: make a wrapper to do this json stuff
+    cntl->http_response().set_content_type("text/plain");
+    butil::IOBufBuilder info_buffer;
+    info_buffer << MakeSyncOkResponseBody(inner_request) << '\n';
+    info_buffer.move_to(cntl->response_attachment());
+  }
 
   // here done_guard will be release and _done->Run() will be invoked
   return;
@@ -125,7 +159,50 @@ MissionRequest *HttpServiceImpl::MissionRequestFactory(Json::Value *doc) {
   case kunlun::kExampleRequestType:
     request = new kunlun::ExampleMission(doc);
     break;
+  case kunlun::kCreateMachineType:
+  case kunlun::kUpdateMachineType:
+  case kunlun::kDeleteMachineType:
+    request = new kunlun::MachineMission(doc);
+    break;
+  case kunlun::kCreateBackupStorageType:
+  case kunlun::kUpdateBackupStorageType:
+  case kunlun::kDeleteBackupStorageType:
+    request = new kunlun::BackupStorage(doc);
+    break;
+  case kunlun::kControlInstanceType:
+  case kunlun::kUpdatePrometheusType:
+  case kunlun::kPostgresExporterType:
+  case kunlun::kMysqldExporterType:
+    request = new kunlun::OtherMission(doc);
+    break;
+  case kunlun::kRenameClusterType:
+  case kunlun::kCreateClusterType:
+  case kunlun::kDeleteClusterType:
+  case kunlun::kAddShardsType:
+  case kunlun::kDeleteShardType:
+  case kunlun::kAddCompsType:
+  case kunlun::kDeleteCompType:
+  case kunlun::kAddNodesType:
+  case kunlun::kDeleteNodeType:
+  case kunlun::kBackupClusterType:
+  case kunlun::kRestoreNewClusterType:
+    request = new kunlun::ClusterMission(doc);
+    break;
     // TODO: Add more above
+
+  //kSyncReturnType
+  case kunlun::kGetStatusType:
+  case kunlun::kGetMetaModeType:
+  case kunlun::kGetMetaSummaryType:
+  case kunlun::kGetBackupStorageType:
+  case kunlun::kGetMachineSummaryType:
+  case kunlun::kGetClusterSummaryType:
+  case kunlun::kGetClusterDetailType:
+  case kunlun::kGetVariableType:
+  case kunlun::kSetVariableType:
+    request = new kunlun::SyncMission(doc);
+    break;
+
   default:
     setErr("Unrecongnized job type");
     break;
@@ -158,16 +235,17 @@ HttpServiceImpl::GenerateRequest(google::protobuf::RpcController *cntl_base) {
   brpc::Controller *cntl = static_cast<brpc::Controller *>(cntl_base);
   brpc::HttpMethod request_method = cntl->http_request().method();
 
-  // parse Body
-  Json::Value body_json_doc;
-  bool ret = ParseBodyToJsonDoc(cntl->request_attachment().to_string(),
-                                &body_json_doc);
-  if (!ret) {
-    return nullptr;
-  }
+  syslog(Logger::INFO, "Http Emit: %s", cntl->request_attachment().to_string().c_str());
 
-  // fetch the unique request id from meta cluster
   if (request_method == brpc::HTTP_METHOD_POST) {
+    // parse Body
+    Json::Value body_json_doc;
+    bool ret = ParseBodyToJsonDoc(cntl->request_attachment().to_string(),
+                                  &body_json_doc);
+    if (!ret) {
+      return nullptr;
+    }
+
     // generate missionRequest
     MissionRequest *mission_request = MissionRequestFactory(&body_json_doc);
     if (!mission_request) {
@@ -175,6 +253,11 @@ HttpServiceImpl::GenerateRequest(google::protobuf::RpcController *cntl_base) {
       // error info buffer has be already filled
       return nullptr;
     }
+
+    //SyncReturn needn't to get request_id
+    if(mission_request->get_request_type() > kSyncReturnType)
+      return mission_request;
+
     // Generate request id here
     std::string request_id = GenerateRequestUniqueId(mission_request);
     if (request_id.empty()) {
@@ -326,7 +409,8 @@ HttpServiceImpl::FetchRelatedIdInSameSession(kunlun::MysqlConnection *conn,
     break;
     // TODO: Add more above
   default:
-    setErr("Undeal job type %s, related_id not set", job_type.c_str());
+    related_id = "0";
+    //setErr("Undeal job type %s, related_id not set", job_type.c_str());
     break;
   }
   return related_id;

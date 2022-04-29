@@ -32,6 +32,7 @@ typedef uint32_t uint;
 
 #define KUNLUN_METADATA_DBNAME "Kunlun_Metadata_DB"
 
+// ha_mode, shards, nodes, comps, storage_size, connections, cpu_cores, innodb_size
 typedef std::tuple<std::string, int, int, int, int, int, int, int> Tpye_cluster_info;
 typedef std::tuple<std::string, int, std::string, std::string> Tpye_Ip_Port_User_Pwd;
 typedef std::tuple<std::string, int, std::vector<std::string>> Tpye_Ip_Port_Paths;

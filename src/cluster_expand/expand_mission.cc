@@ -64,13 +64,17 @@ std::string ExpandClusterMission::MakeDir(std::string nodemgr_address,
   make_dir_task->AddNodeSubChannel(nodemgr_address.c_str(), channel);
 
   Json::Value root;
-  root["command_name"] = "mkdir -p ";
   root["cluster_mgr_request_id"] = get_request_unique_id();
   root["task_spec_info"] = make_dir_task->get_task_spec_info();
-
+  root["job_type"] = "execute_command";
+  
   Json::Value paras;
-  paras.append(path);
-  root["para"] = paras;
+  paras["command_name"] = "mkdir -p ";
+  Json::Value para_json_array;
+  para_json_array.append(path);
+  paras["command_para"] = para_json_array;
+  root["paras"] = paras;
+
   make_dir_task->SetPara(nodemgr_address.c_str(), root);
   get_task_manager()->PushBackTask(make_dir_task);
   return path;
@@ -90,9 +94,12 @@ bool ExpandClusterMission::DumpTable() {
   dump_table_task->AddNodeSubChannel(src_shard_node_address_.c_str(), channel);
 
   Json::Value root;
-  root["command_name"] = "mydumper";
   root["cluster_mgr_request_id"] = get_request_unique_id();
   root["task_spec_info"] = dump_table_task->get_task_spec_info();
+  root["job_type"] = "execute_command";
+  
+  Json::Value paras;
+  paras["command_name"] = "mydumper";
 
   char mydumper_arg_buf[2048] = {'\0'};
   sprintf(mydumper_arg_buf,
@@ -103,9 +110,10 @@ bool ExpandClusterMission::DumpTable() {
           nodemgr_mydumper_path.c_str(), nodemgr_mydumper_path.c_str(),
           table_list_str_storage_.c_str());
 
-  Json::Value paras;
-  paras.append(mydumper_arg_buf);
-  root["para"] = paras;
+  Json::Value para_json_array;
+  para_json_array.append(mydumper_arg_buf);
+  paras["command_para"] = para_json_array;
+  root["paras"] = paras;
   dump_table_task->SetPara(src_shard_node_address_.c_str(), root);
   get_task_manager()->PushBackTask(dump_table_task);
   return true;
@@ -125,18 +133,23 @@ bool ExpandClusterMission::CompressDumpedFile() {
                                                channel);
 
   Json::Value root;
-  root["command_name"] = "tar";
   root["cluster_mgr_request_id"] = get_request_unique_id();
   root["task_spec_info"] = compress_dumped_file_task->get_task_spec_info();
+  root["job_type"] = "execute_command";
+  
+  Json::Value paras;
+  paras["command_name"] = "tar";
 
   char tar_arg_buf[2048] = {'\0'};
   sprintf(tar_arg_buf, " -C %s/../ -czf %s/../mydumper-export-%s.tgz %s ",
           path.c_str(), path.c_str(), get_request_unique_id().c_str(),
           tarball_name_prefix_.c_str());
 
-  Json::Value paras;
-  paras.append(tar_arg_buf);
-  root["para"] = paras;
+  Json::Value para_json_array;
+  para_json_array.append(tar_arg_buf);
+  paras["command_para"] = para_json_array;
+  root["paras"] = paras;
+
   compress_dumped_file_task->SetPara(src_shard_node_address_.c_str(), root);
   get_task_manager()->PushBackTask(compress_dumped_file_task);
   return true;
@@ -161,9 +174,12 @@ bool ExpandClusterMission::TransferFile() {
       "192.168.0.128", g_node_channel_manager.getNodeChannel("192.168.0.128"));
 
   Json::Value root;
-  root["command_name"] = "download_file";
   root["cluster_mgr_request_id"] = get_request_unique_id();
   root["task_spec_info"] = download_file_task->get_task_spec_info();
+  root["job_type"] = "execute_command";
+  
+  Json::Value paras;
+  paras["command_name"] = "download_file";
 
   int64_t node_mgr_listen_port = kunlun::FetchNodeMgrListenPort(
       g_node_channel_manager.get_meta_conn(), src_shard_node_address_.c_str());
@@ -179,9 +195,11 @@ bool ExpandClusterMission::TransferFile() {
           src_shard_node_address_.c_str(), node_mgr_listen_port, buff,
           tarball_name_prefix_.c_str(), nodemgr_path.c_str());
 
-  Json::Value paras;
-  paras.append(download_arg_buf);
-  root["para"] = paras;
+  Json::Value para_json_array;
+  para_json_array.append(download_arg_buf);
+  paras["command_para"] = para_json_array;
+  root["paras"] = paras;
+
   // download_file_task->SetPara(dst_shard_node_address_.c_str(), root);
   download_file_task->SetPara("192.168.0.128", root);
   get_task_manager()->PushBackTask(download_file_task);
@@ -196,16 +214,22 @@ bool ExpandClusterMission::TransferFile() {
       "192.168.0.128", g_node_channel_manager.getNodeChannel("192.168.0.128"));
 
   Json::Value root1;
-  root1["command_name"] = "tar";
   root1["cluster_mgr_request_id"] = get_request_unique_id();
   root1["task_spec_info"] = untar_task->get_task_spec_info();
+  root1["job_type"] = "execute_command";
+  
+  Json::Value paras1;
+  paras1["command_name"] = "tar";
+
   char untar_arg_buff[8192] = {'\0'};
   sprintf(untar_arg_buff, " -C %s -xzf %s/mydumper_output.tgz",
           nodemgr_path.c_str(), nodemgr_path.c_str());
 
-  Json::Value paras1;
-  paras1.append(untar_arg_buff);
-  root1["para"] = paras1;
+  Json::Value para_json_array1;
+  para_json_array1.append(untar_arg_buff);
+  paras1["command_para"] = para_json_array1;
+  root1["paras"] = paras1;
+
   // untar_task->SetPara(dst_shard_node_address_.c_str(), root);
   untar_task->SetPara("192.168.0.128", root1);
   get_task_manager()->PushBackTask(untar_task);
@@ -237,9 +261,12 @@ bool ExpandClusterMission::LoadTable() {
       "192.168.0.128", g_node_channel_manager.getNodeChannel("192.168.0.128"));
 
   Json::Value root;
-  root["command_name"] = "myloader";
   root["cluster_mgr_request_id"] = get_request_unique_id();
   root["task_spec_info"] = load_table_task->get_task_spec_info();
+  root["job_type"] = "execute_command";
+  
+  Json::Value paras;
+  paras["command_name"] = "myloader";
 
   char myloader_arg_buf[2048] = {'\0'};
   sprintf(myloader_arg_buf,
@@ -249,9 +276,11 @@ bool ExpandClusterMission::LoadTable() {
           dst_shard_node_address_.c_str(), dst_shard_node_port_, path.c_str(),
           path.c_str(), table_list_str_storage_.c_str());
 
-  Json::Value paras;
-  paras.append(myloader_arg_buf);
-  root["para"] = paras;
+  Json::Value para_json_array;
+  para_json_array.append(myloader_arg_buf);
+  paras["command_para"] = para_json_array;
+  root["paras"] = paras;
+
   // load_table_task->SetPara(dst_shard_node_address_.c_str(), root);
   load_table_task->SetPara("192.168.0.128", root);
   get_task_manager()->PushBackTask(load_table_task);
@@ -276,9 +305,12 @@ bool ExpandClusterMission::TableCatchUp() {
       "192.168.0.128", g_node_channel_manager.getNodeChannel("192.168.0.128"));
 
   Json::Value root;
-  root["command_name"] = "tablecatchup";
   root["cluster_mgr_request_id"] = get_request_unique_id();
   root["task_spec_info"] = table_catchup_task->get_task_spec_info();
+  root["job_type"] = "execute_command";
+  
+  Json::Value paras;
+  paras["command_name"] = "tablecatchup";
 
   const Json::Value &orig_request = get_body_json_document()["paras"];
   char table_catchup_arg_buf[8192] = {'\0'};
@@ -300,9 +332,11 @@ bool ExpandClusterMission::TableCatchUp() {
       meta_cluster_url_.c_str(), orig_request["cluster_id"].asString().c_str(),
       table_list_str_.c_str(), path.c_str(), get_request_unique_id().c_str(),
       get_request_unique_id().c_str(), related_id_.c_str());
-  Json::Value paras;
-  paras.append(table_catchup_arg_buf);
-  root["para"] = paras;
+  Json::Value para_json_array;
+  para_json_array.append(table_catchup_arg_buf);
+  paras["command_para"] = para_json_array;
+  root["paras"] = paras;
+
   // table_catchup_task->SetPara(dst_shard_node_address_.c_str(), root);
   table_catchup_task->SetPara("192.168.0.128", root);
   get_task_manager()->PushBackTask(table_catchup_task);

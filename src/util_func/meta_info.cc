@@ -41,32 +41,101 @@ ClusterRequestTypes GetReqTypeEnumByStr(const char *type_str) {
   case "example_mission"_hash:
     type_enum = kExampleRequestType;
     break;
-  case "cluster_create"_hash:
+  case "rename_cluster"_hash:
+    type_enum = kRenameClusterType;
+    break;
+  case "create_cluster"_hash:
     type_enum = kCreateClusterType;
     break;
-  case "cluster_drop"_hash:
-    type_enum = kDropClusterType;
+  case "delete_cluster"_hash:
+    type_enum = kDeleteClusterType;
     break;
-  case "comp_node_create"_hash:
-    type_enum = kComputeNodeAddType;
+  case "add_shards"_hash:
+    type_enum = kAddShardsType;
     break;
-  case "comp_node_drop"_hash:
-    type_enum = kComputeNodeDeleteType;
+  case "delete_shard"_hash:
+    type_enum = kDeleteShardType;
     break;
-  case "shard_create"_hash:
-    type_enum = kShardAddType;
+  case "add_comps"_hash:
+    type_enum = kAddCompsType;
     break;
-  case "shard_drop"_hash:
-    type_enum = kShardDropType;
+  case "delete_comp"_hash:
+    type_enum = kDeleteCompType;
     break;
-  case "shard_node_create"_hash:
-    type_enum = kShardNodeAddType;
+  case "add_nodes"_hash:
+    type_enum = kAddNodesType;
     break;
-  case "shard_node_drop"_hash:
-    type_enum = kShardNodeDropType;
+  case "delete_node"_hash:
+    type_enum = kDeleteNodeType;
+    break;
+  case "backup_cluster"_hash:
+    type_enum = kBackupClusterType;
+    break;
+  case "restore_new_cluster"_hash:
+    type_enum = kRestoreNewClusterType;
     break;
   case "expand_cluster"_hash:
     type_enum = kClusterExpandType;
+    break;
+
+  case "create_machine"_hash:
+    type_enum = kCreateMachineType;
+    break;
+  case "update_machine"_hash:
+    type_enum = kUpdateMachineType;
+    break;
+  case "delete_machine"_hash:
+    type_enum = kDeleteMachineType;
+    break;
+  case "create_backup_storage"_hash:
+    type_enum = kCreateBackupStorageType;
+    break;
+  case "update_backup_storage"_hash:
+    type_enum = kUpdateBackupStorageType;
+    break;
+  case "delete_backup_storage"_hash:
+    type_enum = kDeleteBackupStorageType;
+    break;
+
+  case "control_instance"_hash:
+    type_enum = kControlInstanceType;
+    break;
+  case "update_prometheus"_hash:
+    type_enum = kUpdatePrometheusType;
+    break;
+  case "postgres_exporter"_hash:
+    type_enum = kPostgresExporterType;
+    break;
+  case "mysqld_exporter"_hash:
+    type_enum = kMysqldExporterType;
+    break;
+
+  case "get_status"_hash:
+    type_enum = kGetStatusType;
+    break;
+  case "get_meta_mode"_hash:
+    type_enum = kGetMetaModeType;
+    break;
+  case "get_meta_summary"_hash:
+    type_enum = kGetMetaSummaryType;
+    break;
+  case "get_backup_storage"_hash:
+    type_enum = kGetBackupStorageType;
+    break;
+  case "get_machine_summary"_hash:
+    type_enum = kGetMachineSummaryType;
+    break;
+  case "get_cluster_summary"_hash:
+    type_enum = kGetClusterSummaryType;
+    break;
+  case "get_cluster_detail"_hash:
+    type_enum = kGetClusterDetailType;
+    break;
+  case "get_variable"_hash:
+    type_enum = kGetVariableType;
+    break;
+  case "set_variable"_hash:
+    type_enum = kSetVariableType;
     break;
 
   // addtional type convert should add above

@@ -1,0 +1,6 @@
+add_library(sync_mission OBJECT sync_mission.cc)
+target_include_directories(sync_mission INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_include_directories(sync_mission PUBLIC "${PROJECT_SOURCE_DIR}/src")
+target_include_directories(sync_mission PUBLIC "${VENDOR_OUTPUT_PATH}/include")
+target_include_directories(sync_mission PUBLIC "${PROJECT_BINARY_DIR}")
+target_include_directories(sync_mission PUBLIC "${ZETTALIB_INCLUDE_PATH}")

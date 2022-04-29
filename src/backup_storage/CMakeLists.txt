@@ -1,0 +1,6 @@
+add_library(backup_storage OBJECT backup_storage.cc)
+target_include_directories(backup_storage INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_include_directories(backup_storage PUBLIC "${PROJECT_SOURCE_DIR}/src")
+target_include_directories(backup_storage PUBLIC "${VENDOR_OUTPUT_PATH}/include")
+target_include_directories(backup_storage PUBLIC "${PROJECT_BINARY_DIR}")
+target_include_directories(backup_storage PUBLIC "${ZETTALIB_INCLUDE_PATH}")

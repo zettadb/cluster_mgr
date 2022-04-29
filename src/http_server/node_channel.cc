@@ -41,6 +41,14 @@ GlobalNodeChannelManager::get_nodes_channel_map() const {
   return nodes_channel_map_;
 }
 
+void GlobalNodeChannelManager::removeNodeChannel(const char * addr) {
+    auto iter = nodes_channel_map_.find(addr);
+    if(iter != nodes_channel_map_.end()) {
+      delete (iter->second);
+      nodes_channel_map_.erase(iter);
+    }
+}
+
 brpc::Channel *GlobalNodeChannelManager::getNodeChannel(const char *addr) {
   auto iter = nodes_channel_map_.find(addr);
   if (iter == nodes_channel_map_.end()) {
@@ -68,6 +76,10 @@ bool GlobalNodeChannelManager::initNodeChannelMap() {
              node_hostaddr_str);
       continue;
     }
+
+    auto iter = nodes_channel_map_.find(result[i]["hostaddr"]);
+    if(iter != nodes_channel_map_.end())
+      continue;
 
     char url[2048] = {'\0'};
     sprintf(url, "http://%s/HttpService/Emit", node_hostaddr_str);

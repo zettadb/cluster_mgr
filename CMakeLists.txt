@@ -32,6 +32,11 @@ add_subdirectory(src/util_func)
 add_subdirectory(src/cluster_expand)
 add_subdirectory(src/raft_ha)
 add_subdirectory(src/example_mission)
+add_subdirectory(src/sync_mission)
+add_subdirectory(src/machine_mission)
+add_subdirectory(src/backup_storage)
+add_subdirectory(src/cluster_mission)
+add_subdirectory(src/other_mission)
 add_executable(cluster_mgr src/main.cc)
 target_include_directories(cluster_mgr PUBLIC
   "${PROJECT_BINARY_DIR}"
@@ -43,7 +48,12 @@ target_include_directories(cluster_mgr PUBLIC
   "${PROJECT_SOURCE_DIR}/src/util_func"
   "${PROJECT_SOURCE_DIR}/src/cluster_expand"
   "${PROJECT_SOURCE_DIR}/src/raft_ha"
-  "${PROJECT_SOURCE_DIR}/src/example_mission")
+  "${PROJECT_SOURCE_DIR}/src/example_mission"
+  "${PROJECT_SOURCE_DIR}/src/sync_mission"
+  "${PROJECT_SOURCE_DIR}/src/machine_mission"
+  "${PROJECT_SOURCE_DIR}/src/backup_storage"
+  "${PROJECT_SOURCE_DIR}/src/cluster_mission"
+  "${PROJECT_SOURCE_DIR}/src/other_mission")
 target_link_libraries(cluster_mgr 
   kl_mentain
   http_server 
@@ -52,6 +62,11 @@ target_link_libraries(cluster_mgr
   cluster_expand 
   raft_ha
   example_mission
+  sync_mission
+  machine_mission
+  backup_storage
+  cluster_mission
+  other_mission
   libzettalib.a
   libbraft.a
   libbrpc.a 

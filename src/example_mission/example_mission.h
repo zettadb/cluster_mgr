@@ -8,6 +8,44 @@
 #include "request_framework/missionRequest.h"
 
 namespace kunlun {
+
+class ExampleRemoteTask : public ::RemoteTask {
+  typedef ::RemoteTask super;
+
+public:
+  explicit ExampleRemoteTask(const char *task_spec_info, const char *request_id)
+      : super(task_spec_info), unique_request_id_(request_id) {}
+  ~ExampleRemoteTask() {}
+  void SetParaToRequestBody(brpc::Controller *cntl,
+                            std::string node_hostaddr) override {
+    if (prev_task_ == nullptr) {
+      return super::SetParaToRequestBody(cntl, node_hostaddr);
+    }
+
+    Json::Value root;
+    root["cluster_mgr_request_id"] = unique_request_id_;
+    root["task_spec_info"] = task_spec_info_;
+    root["job_type"] = "execute_command";
+
+    Json::Value paras;
+    paras["command_name"] = "echo";
+    Json::Value para_json_array;
+    para_json_array.append(prev_task_->get_response()->SerializeResponseToStr());
+    para_json_array.append(" 1>&2");
+    paras["command_para"] = para_json_array;
+    root["paras"] = paras;
+
+    Json::FastWriter writer;
+    writer.omitEndingLineFeed();
+
+    cntl->request_attachment().append(writer.write(root));
+    cntl->http_request().set_method(brpc::HTTP_METHOD_POST);
+  }
+
+private:
+  std::string unique_request_id_;
+};
+
 class ExampleMission : public ::MissionRequest {
   typedef MissionRequest super;
 
@@ -22,6 +60,37 @@ public:
     for (; iter != node_channle_map.end(); iter++) {
       IfConfig((iter->first).c_str());
     }
+
+    iter = node_channle_map.begin();
+    ExampleRemoteTask *fetch_date =
+        new ExampleRemoteTask("Example_fetch_date", get_request_unique_id().c_str());
+    fetch_date->AddNodeSubChannel(
+        (iter->first).c_str(),
+        g_node_channel_manager.getNodeChannel((iter->first).c_str()));
+
+    Json::Value root;
+    root["cluster_mgr_request_id"] = get_request_unique_id();
+    root["task_spec_info"] = fetch_date->get_task_spec_info();
+    root["job_type"] = "execute_command";
+
+    Json::Value paras;
+    paras["command_name"] = "date";
+    Json::Value para_json_array;
+    para_json_array.append(" 1>&2");
+    paras["command_para"] = para_json_array;
+    root["paras"] = paras;
+
+    fetch_date->SetPara((iter->first).c_str(), root);
+    get_task_manager()->PushBackTask(fetch_date);
+
+    ExampleRemoteTask *echo_prev_date =
+        new ExampleRemoteTask("Example_echo_prev", get_request_unique_id().c_str());
+    echo_prev_date->set_prev_task(fetch_date);
+    echo_prev_date->AddNodeSubChannel(
+        (iter->first).c_str(),
+        g_node_channel_manager.getNodeChannel((iter->first).c_str()));
+    get_task_manager()->PushBackTask(echo_prev_date);
+
     return true;
   }
   virtual bool SetUpMisson() override { return true; }
@@ -38,13 +107,19 @@ public:
     // the special requirment, see the ExpandClusterTask for detail
     RemoteTask *task = new RemoteTask("Example_Ifconfig_info");
     task->AddNodeSubChannel(node_ip, channel);
+
     Json::Value root;
-    root["command_name"] = "ifconfig";
-    root["cluster_mgr_request_id"] = get_request_unique_id();
     root["task_spec_info"] = task->get_task_spec_info();
+    root["cluster_mgr_request_id"] = get_request_unique_id();
+    root["job_type"] = "execute_command";
+    
     Json::Value paras;
-    paras.append("-a 1>&2");
-    root["para"] = paras;
+    paras["command_name"] = "ifconfig";
+    Json::Value para_json_array;
+    para_json_array.append("-a 1>&2");
+    paras["command_para"] = para_json_array;
+    root["paras"] = paras;
+
     task->SetPara(node_ip, root);
     get_task_manager()->PushBackTask(task);
     return true;

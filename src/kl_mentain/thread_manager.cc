@@ -263,6 +263,7 @@ extern "C" void *signal_hander(void *arg) {
 	  	//System::get_instance()->refresh_shards_from_metadata_server();
 		break;
       case SIGTERM:
+	  	break;
       case SIGINT:
       case SIGQUIT:
 	    g_exit_signal = sig;
@@ -344,7 +345,7 @@ extern "C" void *thread_func_storage_sync(void*thrdarg)
 			{
 				commit_log_count = 0;
 				System::get_instance()->truncate_commit_log_from_metadata_server();
-				Machine_info::get_instance()->update_machines_info();
+				//Machine_info::get_instance()->update_machines_info();
 			}
 		}
 

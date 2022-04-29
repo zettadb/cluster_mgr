@@ -42,6 +42,7 @@ public:
 
   std::string MakeErrorInstantResponseBody(const char *);
   std::string MakeAcceptInstantResponseBody(ClusterRequest *);
+  std::string MakeSyncOkResponseBody(ClusterRequest *);
 
   std::string GenerateRequestUniqueId(ClusterRequest *);
   std::string FetchRelatedIdInSameSession(kunlun::MysqlConnection *,

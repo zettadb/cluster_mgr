@@ -12,7 +12,6 @@
 #include "sys.h"
 #include "shard.h"
 #include "os.h"
-#include "job.h"
 #include "kl_cluster.h"
 #include "thread_manager.h"
 #include <unistd.h>
@@ -445,15 +444,10 @@ int Shard_node::connect()
 	return mysql_conn.connect();
 }
 
-bool Shard_node::update_variables(Tpye_string2 &t_string2)
-{
-	std::string str_sql = "set persist " + std::get<0>(t_string2) + "='" + std::get<1>(t_string2) + "'";
-	return send_stmt(SQLCOM_SET_OPTION, str_sql.c_str(), str_sql.length(), stmt_retries);
-}
-
 bool Shard_node::get_variables(std::string &variable, std::string &value)
 {
 	std::string str_sql = "select @@" + variable;
+	syslog(Logger::INFO, "get_variables str_sql=%s", str_sql.c_str());
 	int ret = send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
 	if (ret)
 		return -1;
@@ -461,27 +455,23 @@ bool Shard_node::get_variables(std::string &variable, std::string &value)
     MYSQL_RES *result = get_result();
     MYSQL_ROW row;
     if ((row = mysql_fetch_row(result)))
-    {
 		value = row[0];
-	}
 	else
-	{
 		ret = -1;
-	}
-
 	free_mysql_result();
+
 	return ret;
 }
 
-bool Shard_node::set_variables(std::string &variable, std::string &value_int, std::string &value_str)
+bool Shard_node::set_variables(std::string &variable, std::string &type, std::string &value)
 {
 	std::string str_sql;
 
-	if(value_int.length())
-		str_sql = "set persist " + variable + "=" + value_int;
+	if(type == "int")
+		str_sql = "set persist " + variable + "=" + value;
 	else
-		str_sql = "set persist " + variable + "='" + value_str + "'";
-	syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
+		str_sql = "set persist " + variable + "='" + value + "'";
+	syslog(Logger::INFO, "set_variables str_sql=%s", str_sql.c_str());
 
 	return send_stmt(SQLCOM_SET_OPTION, str_sql.c_str(), str_sql.length(), stmt_retries);
 }
@@ -887,8 +877,8 @@ int Shard::check_mgr_cluster()
 					max_stat = n.second;
 				}
 
-			Assert((max_sn != NULL && max_pos > 0 && max_stat != Shard_node::MEMBER_END) ||
-				   (max_sn == NULL && max_pos == 0 && max_stat == Shard_node::MEMBER_END));
+			//Assert(max_sn != NULL && max_pos > 0 && max_stat != Shard_node::MEMBER_END)
+			//Assert(max_sn == NULL && max_pos == 0 && max_stat == Shard_node::MEMBER_END);
 			if (!max_sn) goto out1; // it's likely that MGR isn't activated in the cluster.
 
 			max_sn->get_ip_port(top_ip, top_port);
@@ -1572,7 +1562,7 @@ int MetadataShard::refresh_shards(std::vector<KunlunCluster *> &kl_clusters)
 	}
 
 	if(alterant_node_ip.size() != 0)
-		Job::get_instance()->notify_node_update(alterant_node_ip, 1);
+		Machine_info::get_instance()->notify_node_update(alterant_node_ip, 1);
 
 	return 0;
 }
@@ -1673,7 +1663,7 @@ int MetadataShard::refresh_computers(std::vector<KunlunCluster *> &kl_clusters)
 	}
 
 	if(alterant_node_ip.size() != 0)
-		Job::get_instance()->notify_node_update(alterant_node_ip, 2);
+		Machine_info::get_instance()->notify_node_update(alterant_node_ip, 2);
 
 	return 0;
 }
@@ -2124,141 +2114,6 @@ int MetadataShard::delete_cluster_comp_from_metadata(std::string &cluster_name, 
 }
 
 /*
-  get server_nodes from metadata table
-  @retval 0 succeed;
-  		  1 fail;
-*/
-int MetadataShard::get_server_nodes_from_metadata(std::vector<Machine*> &vec_machines)
-{
-	Scopped_mutex sm(mtx);
-
-	if(cur_master == NULL)
-		return 1;
-
-	std::string str_sql = "select hostaddr,rack_id,datadir,logdir,wal_log_dir,comp_datadir,total_mem,total_cpu_cores from server_nodes";
-	int ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
-	if (ret==0)
-	{
-		MYSQL_RES *result = cur_master->get_result();
-		MYSQL_ROW row;
-		while ((row = mysql_fetch_row(result)))
-		{
-			bool is_null = false;
-			for(int i=0; i<8; i++)
-			{
-				if(row[i] == NULL)
-				{
-					is_null = true;
-					break;
-				}
-			}
-
-			if(!is_null)
-			{
-				std::string hostaddr = row[0];
-				std::vector<std::string> vec_paths;
-				vec_paths.emplace_back(row[2]);
-				vec_paths.emplace_back(row[3]);
-				vec_paths.emplace_back(row[4]);
-				vec_paths.emplace_back(row[5]);
-				Tpye_string3 t_string3 = std::make_tuple(row[1],row[6],row[7]);
-				Machine *machine = new Machine(hostaddr, vec_paths, t_string3);
-				vec_machines.emplace_back(machine);
-			}
-		}
-		cur_master->free_mysql_result();
-	}
-
-	return ret;
-}
-
-/*
-  get_meta_instance from metadata table
-  @retval 0 succeed;
-  		  1 fail;
-*/
-int MetadataShard::get_meta_instance(Machine* machine)
-{
-	Scopped_mutex sm(mtx);
-
-	if(cur_master == NULL)
-		return 1;
-
-	std::string str_sql = "select port from meta_db_nodes where hostaddr='" + machine->ip + "'";
-	int ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
-	if (ret==0)
-	{
-		MYSQL_RES *result = cur_master->get_result();
-		machine->instance_storage += (int)mysql_num_rows(result);
-		cur_master->free_mysql_result();
-	}
-
-	return ret;
-}
-
-/*
-  get_storage_instance_port from metadata table
-  @retval 0 succeed;
-  		  1 fail;
-*/
-int MetadataShard::get_storage_instance_port(Machine* machine)
-{
-	Scopped_mutex sm(mtx);
-
-	if(cur_master == NULL)
-		return 1;
-
-	std::string str_sql = "select port from shard_nodes where hostaddr='" + machine->ip + "'";
-	int ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
-	if (ret==0)
-	{
-		MYSQL_RES *result = cur_master->get_result();
-		machine->instance_storage += (int)mysql_num_rows(result);
-		MYSQL_ROW row;
-		while ((row = mysql_fetch_row(result)))
-		{
-			int port = atoi(row[0]);
-			if(port > machine->port_storage)
-				machine->port_storage = port;
-		}
-		cur_master->free_mysql_result();
-	}
-
-	return ret;
-}
-
-/*
-  get_computer_instance_port from metadata table
-  @retval 0 succeed;
-  		  1 fail;
-*/
-int MetadataShard::get_computer_instance_port(Machine* machine)
-{
-	Scopped_mutex sm(mtx);
-
-	if(cur_master == NULL)
-		return 1;
-
-	std::string str_sql = "select port from comp_nodes where hostaddr='" + machine->ip + "'";
-	int ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
-	if (ret==0)
-	{
-		MYSQL_RES *result = cur_master->get_result();
-		machine->instance_computer += (int)mysql_num_rows(result);
-		MYSQL_ROW row;
-		while ((row = mysql_fetch_row(result)))
-		{
-			int port = atoi(row[0]);
-			if(port > machine->port_computer)
-				machine->port_computer = port;
-		}
-		cur_master->free_mysql_result();
-	}
-
-	return ret;
-}
-
-/*
   update_instance_status to metadata table
   @retval 0 succeed;
   		  1 fail;
@@ -2386,7 +2241,7 @@ int MetadataShard::get_backup_storage_list(std::vector<Tpye_string4> &vec_t_stri
   @retval 0 succeed;
   		  1 fail;
 */
-int MetadataShard::add_shard_nodes(std::string &cluster_name, std::string &shard_name, std::vector<Tpye_Ip_Port_User_Pwd> vec_ip_port_user_pwd)
+int MetadataShard::add_shard_nodes(std::string &cluster_name, std::string &shard_name, std::vector<Tpye_Ip_Port_User_Pwd> &vec_ip_port_user_pwd)
 {
 	Scopped_mutex sm(mtx);
 
@@ -3134,6 +2989,109 @@ int MetadataShard::check_cluster_comp_more(std::string &cluster_name)
 }
 
 /*
+  check cluster cluster_comp_more from metadata table 
+  @retval 0 succeed;
+  		  1 fail;
+*/
+int MetadataShard::check_cluster_none()
+{
+	Scopped_mutex sm(mtx);
+
+	if(cur_master == NULL)
+		return 1;
+
+	std::string str_sql = "select count(*) from db_clusters";
+	int ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+
+		ret = 1;
+		if ((row = mysql_fetch_row(result)))
+		{
+			if(row[0] != NULL)
+			{
+				if(atoi(row[0]) == 0)
+					ret = 0;
+			}
+		}
+		cur_master->free_mysql_result();
+	}
+
+	return ret;
+}
+
+/*
+  update_server_nodes_from_metadata 
+  @retval 0 succeed;
+  		  1 fail;
+*/
+int MetadataShard::update_server_nodes_from_metadata(std::map<std::string, Machine*> &map_machine)
+{
+	Scopped_mutex sm(mtx);
+
+	if(cur_master == NULL)
+		return 1;
+
+	std::string str_sql = "select hostaddr,rack_id,datadir,logdir,wal_log_dir,comp_datadir,total_mem,total_cpu_cores from server_nodes";
+	int ret = cur_master->send_stmt(SQLCOM_SELECT, str_sql.c_str(), str_sql.length(), stmt_retries);
+	if (ret==0)
+	{
+		MYSQL_RES *result = cur_master->get_result();
+		MYSQL_ROW row;
+		while ((row = mysql_fetch_row(result)))
+		{
+			if(strcmp(row[0], "pseudo_server_useless") == 0)
+				continue;
+
+			auto iter = map_machine.find(row[0]);
+			if(iter != map_machine.end())
+			{
+				if(row[1] != NULL)
+					iter->second->rack_id = row[1];
+				if(row[2] != NULL && row[3] != NULL && row[4] != NULL && row[5] != NULL)
+				{
+					iter->second->vec_paths.clear();
+					iter->second->vec_paths.emplace_back(row[2]);
+					iter->second->vec_paths.emplace_back(row[3]);
+					iter->second->vec_paths.emplace_back(row[4]);
+					iter->second->vec_paths.emplace_back(row[5]);
+				}
+				if(row[6] != NULL)
+					iter->second->total_mem = atoi(row[6]);
+				if(row[7] != NULL)
+					iter->second->total_cpu_cores = atoi(row[7]);
+			}
+			else
+			{
+				Machine *machine = new Machine();
+				machine->hostaddr = row[0];
+
+				if(row[1] != NULL)
+					machine->rack_id = row[1];
+				if(row[2] != NULL && row[3] != NULL && row[4] != NULL && row[5] != NULL)
+				{
+					machine->vec_paths.emplace_back(row[2]);
+					machine->vec_paths.emplace_back(row[3]);
+					machine->vec_paths.emplace_back(row[4]);
+					machine->vec_paths.emplace_back(row[5]);
+				}
+				if(row[6] != NULL)
+					machine->total_mem = atoi(row[6]);
+				if(row[7] != NULL)
+					machine->total_cpu_cores = atoi(row[7]);
+
+				map_machine[machine->hostaddr] = machine;
+			}
+		}
+		cur_master->free_mysql_result();
+	}
+
+	return ret;
+}
+
+/*
   Query meta shard node sn to fetch all meta shard nodes from its
   meta_db_nodes table, and refresh the shard nodes contained in this object.
   This method is can be called repeatedly to refresh metashard nodes periodically.
@@ -3238,7 +3196,7 @@ int MetadataShard::fetch_meta_shard_nodes(Shard_node *sn, bool is_master,
 	}
 
 	if(alterant_node_ip.size() != 0)
-		Job::get_instance()->notify_node_update(alterant_node_ip, 0);
+		Machine_info::get_instance()->notify_node_update(alterant_node_ip, 0);
 
 	return 0;
 }

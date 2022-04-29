@@ -157,9 +157,8 @@ public:
 		return mysql_conn.ip == ip && mysql_conn.port == port;
 	}
 
-	bool update_variables(Tpye_string2 &t_string2);
 	bool get_variables(std::string &variable, std::string &value);
-	bool set_variables(std::string &variable, std::string &value_int, std::string &value_str);
+	bool set_variables(std::string &variable, std::string &type, std::string &value);
 	bool update_instance_cluster_info();
 	int start_mgr(Group_member_status st, bool as_master);
 	
@@ -567,14 +566,10 @@ public:
 	int delete_cluster_shard_from_metadata(std::string &cluster_name, std::string &shard_name);
 	int delete_cluster_shard_node_from_metadata(std::string &cluster_name, std::string &shard_name, Tpye_Ip_Port &ip_port);
 	int delete_cluster_comp_from_metadata(std::string &cluster_name, std::string &comp_name);
-	int get_server_nodes_from_metadata(std::vector<Machine*> &vec_machines);
-	int get_meta_instance(Machine* machine);
-	int get_storage_instance_port(Machine* machine);
-	int get_computer_instance_port(Machine* machine);
 	int update_instance_status(Tpye_Ip_Port &ip_port, std::string &status, int &type);
 	int get_backup_storage_string(std::string &name, std::string &backup_storage_id, std::string &backup_storage_str);
 	int get_backup_storage_list(std::vector<Tpye_string4> &vec_t_string4);
-	int add_shard_nodes(std::string &cluster_name, std::string &shard_name, std::vector<Tpye_Ip_Port_User_Pwd> vec_ip_port_user_pwd);
+	int add_shard_nodes(std::string &cluster_name, std::string &shard_name, std::vector<Tpye_Ip_Port_User_Pwd> &vec_ip_port_user_pwd);
 	int get_roll_info_from_metadata(std::string &job_id, std::vector<std::string> &vec_roll_info);
 	int get_ongoing_job_id_from_metadata(std::vector<std::string> &vec_job_id);
 	int get_ongoing_job_json_from_metadata(std::vector<std::string> &vec_job_json);
@@ -591,6 +586,8 @@ public:
 	int check_cluster_shard_more(std::string &cluster_name);
 	int check_cluster_shard_node_more(std::string &cluster_name, std::string &shard_name);
 	int check_cluster_comp_more(std::string &cluster_name);
+	int check_cluster_none();
+	int update_server_nodes_from_metadata(std::map<std::string, Machine*> &map_machine);
 };
 
 #endif // !SHARD_H
