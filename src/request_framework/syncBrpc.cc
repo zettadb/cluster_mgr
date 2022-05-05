@@ -13,7 +13,7 @@
 static void CallBC(brpc::Controller *cntl, SyncBrpc *syncBrpc) {
   if (!cntl->Failed()) {
     syncBrpc->response = cntl->response_attachment().to_string();
-	syncBrpc->result = true;
+    syncBrpc->result = true;
     return;
   }else
 	  syncBrpc->result = false;

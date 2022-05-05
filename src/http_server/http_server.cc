@@ -81,12 +81,19 @@ void HttpServiceImpl::Emit(google::protobuf::RpcController *cntl_base,
                            google::protobuf::Closure *done) {
   brpc::ClosureGuard done_gurad(done);
 
+  butil::IOBufBuilder info_buffer;
   ClusterRequest *inner_request = GenerateRequest(cntl_base);
   brpc::Controller *cntl = static_cast<brpc::Controller *>(cntl_base);
 
+  syslog(Logger::INFO, "Http Emit: %s", cntl->request_attachment().to_string().c_str());
+  cntl->http_response().set_content_type("text/plain");
+  cntl->http_response().AppendHeader("Access-Control-Max-Age", "3600");
+  cntl->http_response().AppendHeader("Access-Control-Allow-Origin", "*");
+  cntl->http_response().AppendHeader("Access-Control-Allow-Headers", "*");
+  cntl->http_response().AppendHeader("Access-Control-Allow-Credentials", "true");
+  cntl->http_response().AppendHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
+
   if (!inner_request) {
-    cntl->http_response().set_content_type("text/plain");
-    butil::IOBufBuilder info_buffer;
     info_buffer << MakeErrorInstantResponseBody(getErr()) << '\n';
     info_buffer.move_to(cntl->response_attachment());
     return;
@@ -104,8 +111,6 @@ void HttpServiceImpl::Emit(google::protobuf::RpcController *cntl_base,
 
     if (bthread_start_background(&bid, NULL, AsyncDispatchRequest, asynargs) !=
         0) {
-      cntl->http_response().set_content_type("text/plain");
-      butil::IOBufBuilder info_buffer;
       info_buffer << MakeErrorInstantResponseBody(
                         "Kunlun Cluster deal request faild")
                   << '\n';
@@ -115,8 +120,6 @@ void HttpServiceImpl::Emit(google::protobuf::RpcController *cntl_base,
     }
 
     // TODO: make a wrapper to do this json stuff
-    cntl->http_response().set_content_type("text/plain");
-    butil::IOBufBuilder info_buffer;
     info_buffer << MakeAcceptInstantResponseBody(inner_request) << '\n';
     info_buffer.move_to(cntl->response_attachment());
   } else {  //for SyncReturn
@@ -132,8 +135,6 @@ void HttpServiceImpl::Emit(google::protobuf::RpcController *cntl_base,
     }
 
     // TODO: make a wrapper to do this json stuff
-    cntl->http_response().set_content_type("text/plain");
-    butil::IOBufBuilder info_buffer;
     info_buffer << MakeSyncOkResponseBody(inner_request) << '\n';
     info_buffer.move_to(cntl->response_attachment());
   }
@@ -234,8 +235,6 @@ HttpServiceImpl::GenerateRequest(google::protobuf::RpcController *cntl_base) {
 
   brpc::Controller *cntl = static_cast<brpc::Controller *>(cntl_base);
   brpc::HttpMethod request_method = cntl->http_request().method();
-
-  syslog(Logger::INFO, "Http Emit: %s", cntl->request_attachment().to_string().c_str());
 
   if (request_method == brpc::HTTP_METHOD_POST) {
     // parse Body

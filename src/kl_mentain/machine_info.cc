@@ -289,6 +289,37 @@ bool Machine_info::check_machines_path(std::vector<Machine*> &vec_machine)
 	return bPathOk;
 }
 
+bool Machine_info::check_machine_port_idle(std::string &ip, int &port, int step)
+{
+	Json::Reader reader;
+	Json::Value root_node,root_ret,info_ret;
+	Json::Value paras;
+	root_node["cluster_mgr_request_id"] = "check_port_idle";
+	root_node["task_spec_info"] = "check_port_idle";
+	root_node["job_type"] = "check_port_idle";
+
+	paras["port"] = port;
+	paras["step"] = step;
+	root_node["paras"] = paras;
+
+	SyncBrpc syncBrpc;
+	syncBrpc.syncBrpcToNode(ip, root_node);
+
+	syslog(Logger::INFO, "check_machine_port_idle=%s", syncBrpc.response.c_str());
+
+	bool ret = reader.parse(syncBrpc.response.c_str(), root_ret);
+	if (ret) {
+		std::string status = root_ret["status"].asString();
+		if(status == "failed")
+			return false;
+	}
+
+	info_ret = root_ret["info"];
+	port = info_ret["port"].asInt();
+
+	return true;
+}
+
 bool Machine_info::get_storage_nodes(int nodes, int &nodes_select, 
 	std::vector<Tpye_Ip_Port_Paths> &vec_ip_port_paths, std::vector<Machine*> &vec_machine)
 {
@@ -306,10 +337,8 @@ bool Machine_info::get_storage_nodes(int nodes, int &nodes_select,
 		vec_paths.emplace_back(std::get<0>(vec_machine[node_allocate]->vec_vec_path_used_free[1][0]));
 		vec_paths.emplace_back(std::get<0>(vec_machine[node_allocate]->vec_vec_path_used_free[2][0]));
 
-		std::vector<int> vec_port;
-		vec_port.emplace_back(vec_machine[node_allocate]->port_storage);
-		vec_port.emplace_back(vec_machine[node_allocate]->port_storage+1);
-		vec_port.emplace_back(vec_machine[node_allocate]->port_storage+2);
+		check_machine_port_idle(vec_machine[node_allocate]->hostaddr,
+									vec_machine[node_allocate]->port_storage, 3);
 		vec_ip_port_paths.emplace_back(std::make_tuple(vec_machine[node_allocate]->hostaddr, 
 									vec_machine[node_allocate]->port_storage, vec_paths));
 
@@ -344,8 +373,8 @@ bool Machine_info::get_computer_nodes(int nodes, int &nodes_select,
 		std::vector<std::string> vec_paths;
 		vec_paths.emplace_back(std::get<0>(vec_machine[node_allocate]->vec_vec_path_used_free[3][0]));
 
-		std::vector<int> vec_port;
-		vec_port.emplace_back(vec_machine[node_allocate]->port_computer);
+		check_machine_port_idle(vec_machine[node_allocate]->hostaddr,
+									vec_machine[node_allocate]->port_computer, 1);
 		vec_ip_port_paths.emplace_back(std::make_tuple(vec_machine[node_allocate]->hostaddr, 
 									vec_machine[node_allocate]->port_computer, vec_paths));
 		

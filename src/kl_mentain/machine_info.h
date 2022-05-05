@@ -66,6 +66,7 @@ public:
 	bool update_machine_path_space(Machine *machine, Json::Value &json_info);
 	bool get_machines_info(std::vector<Machine*> &vec_machine, std::set<std::string> &set_machine);
 	bool check_machines_path(std::vector<Machine*> &vec_machine);
+	bool check_machine_port_idle(std::string &ip, int &port, int step);
 	bool get_storage_nodes(int nodes, int &nodes_select, 
 			std::vector<Tpye_Ip_Port_Paths> &vec_ip_port_paths, std::vector<Machine*> &vec_machine);
 	bool get_computer_nodes(int nodes, int &nodes_select, 
