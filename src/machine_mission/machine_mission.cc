@@ -177,7 +177,7 @@ void MachineMission::CreateMachine() {
   g_node_channel_manager.Init();
 
 	//////////////////////////////////////////////////////////
-	if(System::get_instance()->check_machine_hostaddr(machine.hostaddr))	{
+	if(System::get_instance()->check_machine_hostaddr(machine.hostaddr)) {
 		job_error_info = "error, machine_hostaddr is exist";
 		goto end;
 	}
@@ -389,10 +389,10 @@ bool MachineMission::ArrangeRemoteTask() {
 
   switch (request_type) {
   case kunlun::kCreateMachineType:
-    // CreateMachine(); // update port and paths by node_mgr
+    CreateMachine(); // update port and paths by node_mgr
     break;
   case kunlun::kUpdateMachineType:
-    // UpdateMachine(); // update port and paths by node_mgr
+    UpdateMachine(); // update port and paths by node_mgr
     break;
   case kunlun::kDeleteMachineType:
     DeleteMachine();
