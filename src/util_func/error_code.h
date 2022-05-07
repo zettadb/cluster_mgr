@@ -11,14 +11,17 @@
 namespace kunlun
 {
 
-#define EERROR_NUM_START (70000)
+#define EERROR_NUM_START (0)
 
 #define EOFFSET(offset) (EERROR_NUM_START) + (offset)
 
 #define EOK EOFFSET(0)
+#define EFAIL EOFFSET(1)
 #define EIVALID_REQUEST_PROTOCAL EOFFSET(1)
 #define EIVALID_RESPONSE_PROTOCAL EOFFSET(2)
 #define ENODE_UNREACHEABLE EOFFSET(3)
+
+
 
 // New item should add above
 #define EUNDEFINED_ERROR EOFFSET(1000)

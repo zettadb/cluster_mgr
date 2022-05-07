@@ -42,15 +42,22 @@ class MachineMission : public ::MissionRequest {
 public:
   ClusterRequestTypes request_type;
   std::string job_id;
+	std::string job_status;
+	std::string job_error_code;
+  std::string job_error_info;
+
   Machine machine;
 
 public:
   explicit MachineMission(Json::Value *doc) : super(doc){};
   ~MachineMission(){};
 
+  void CreateMachineCallBack(std::string &response);
+  void UpdateMachineCallBack(std::string &response);
   void CreateMachine();
   void UpdateMachine();
   void DeleteMachine();
+  bool update_operation_record();
   virtual bool ArrangeRemoteTask() override final;
   virtual bool SetUpMisson() override { return true; }
   virtual bool TearDownMission() override { return true; }

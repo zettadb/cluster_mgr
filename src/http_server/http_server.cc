@@ -38,7 +38,7 @@ HttpServiceImpl::MakeErrorInstantResponseBody(const char *error_msg) {
   // Json format
   Json::Value root;
   root["version"] = KUNLUN_JSON_BODY_VERSION;
-  root["error_code"] = "0";
+  root["error_code"] = EintToStr(EFAIL);
   root["error_info"] = error_msg;
   root["status"] = "failed";
   Json::Value attachment;
@@ -54,8 +54,9 @@ HttpServiceImpl::MakeAcceptInstantResponseBody(ClusterRequest *request) {
   Json::Value root;
   root["version"] = KUNLUN_JSON_BODY_VERSION;
   root["error_code"] = EintToStr(EOK);
-  root["job_id"] = request->get_request_unique_id();
+  root["error_info"] = "";
   root["status"] = "accept";
+  root["job_id"] = request->get_request_unique_id();
   Json::Value attachment;
   root["attachment"] = attachment;
 
@@ -66,12 +67,29 @@ HttpServiceImpl::MakeAcceptInstantResponseBody(ClusterRequest *request) {
 std::string
 HttpServiceImpl::MakeSyncOkResponseBody(ClusterRequest *request) {
   // Json format
-  Json::Value root;
+  Json::Value root,attachment;
+  attachment = request->get_body_json_attachment();
   root["version"] = KUNLUN_JSON_BODY_VERSION;
-  root["error_code"] = EintToStr(EOK);
-  root["status"] = "succeed";
-  root["attachment"] = request->get_body_json_attachment();
 
+  if (attachment.isMember("error_code")) {
+    root["error_code"] = attachment["error_code"].asString();
+    attachment.removeMember("error_code");
+  }else
+    root["error_code"] = EintToStr(EOK);
+
+  if (attachment.isMember("error_info")) {
+    root["error_info"] = attachment["error_info"].asString();
+    attachment.removeMember("error_info");
+  }else
+    root["error_info"] = "";
+
+  if (attachment.isMember("status")) {
+    root["status"] = attachment["status"].asString();
+    attachment.removeMember("status");
+  }else
+    root["status"] = "not_started";
+  
+  root["attachment"] = attachment;
   Json::FastWriter writer;
   return writer.write(root);
 }
@@ -85,7 +103,6 @@ void HttpServiceImpl::Emit(google::protobuf::RpcController *cntl_base,
   ClusterRequest *inner_request = GenerateRequest(cntl_base);
   brpc::Controller *cntl = static_cast<brpc::Controller *>(cntl_base);
 
-  syslog(Logger::INFO, "Http Emit: %s", cntl->request_attachment().to_string().c_str());
   cntl->http_response().set_content_type("text/plain");
   cntl->http_response().AppendHeader("Access-Control-Max-Age", "3600");
   cntl->http_response().AppendHeader("Access-Control-Allow-Origin", "*");
@@ -252,6 +269,9 @@ HttpServiceImpl::GenerateRequest(google::protobuf::RpcController *cntl_base) {
       // error info buffer has be already filled
       return nullptr;
     }
+
+    if(mission_request->get_request_type() != kGetStatusType)
+      syslog(Logger::INFO, "Http post: %s", cntl->request_attachment().to_string().c_str());
 
     //SyncReturn needn't to get request_id
     if(mission_request->get_request_type() > kSyncReturnType)

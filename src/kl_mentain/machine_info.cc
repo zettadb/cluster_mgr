@@ -264,6 +264,16 @@ bool Machine_info::get_machines_info(std::vector<Machine*> &vec_machine, std::se
 	sort(vec_machine.begin(), vec_machine.end(), 
 			[](Machine *a, Machine *b){return a->instances < b->instances;});
 
+	//reset the max port of port_computer for every node
+	int port_computer_max = 0;
+	for(auto &machine: vec_machine)
+	{
+		if(machine->port_computer > port_computer_max)
+			port_computer_max = machine->port_computer;
+	}
+	for(auto &machine: vec_machine)
+		machine->port_computer = port_computer_max;
+
 	return true;
 }
 

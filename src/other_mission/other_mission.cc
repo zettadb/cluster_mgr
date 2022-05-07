@@ -9,15 +9,32 @@
 std::string prometheus_path;
 int64_t prometheus_port_start;
 
-void ControlInstanceCallBack(OtherMission *mission, std::string &response){
+void Other_Call_Back(void *cb_context) {
+  OtherRemoteTask *task = static_cast<OtherRemoteTask *>(cb_context);
+  OtherMission *mission = task->getMission();
+  std::string response = task->get_response()->SerializeResponseToStr();
+
+  switch (mission->request_type) {
+  case kunlun::kControlInstanceType:
+    mission->ControlInstanceCallBack(response);
+    break;
+  case kunlun::kUpdatePrometheusType:
+    mission->UpdatePrometheusCallBack(response);
+    break;
+
+  default:
+    break;
+  }
+}
+
+void OtherMission::ControlInstanceCallBack(std::string &response){
   Json::Value root,array,info;
   Json::Reader reader;
-  std::string job_status,job_memo;
 
   job_status = "failed";
   bool ret = reader.parse(response.c_str(), root);
   if (!ret) {
-    job_memo = "JSON parse error: " + response;
+    job_error_info = "JSON parse error: " + response;
     goto end;
   }
   array = root["response_array"][0];
@@ -25,138 +42,97 @@ void ControlInstanceCallBack(OtherMission *mission, std::string &response){
 
   job_status = info["status"].asString();
   if(job_status == "failed") {
-    job_memo = info["info"].asString();
+    job_error_info = info["info"].asString();
     goto end;
   }
 
   job_status = "done";
-  job_memo = "control instance succeed";
+  job_error_code = EintToStr(EOK);
+  job_error_info = "control instance successfully";
 
 end:
-  syslog(Logger::INFO, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(mission->job_id, job_status, job_memo);
+  syslog(Logger::INFO, "%s", job_error_info.c_str());
+  update_operation_record();
   System::get_instance()->set_cluster_mgr_working(true);
 }
 
-void UpdatePrometheusCallBack(OtherMission *mission, std::string &response){
-  Json::Value root,array,info;
-  Json::Reader reader;
-  std::string job_status,job_memo;
+void OtherMission::UpdatePrometheusCallBack(std::string &response){
+	Json::Value root,array,info;
+	Json::Reader reader;
 
-  mission->task_wait--;
+	task_wait--;
 
-  job_status = "failed";
-  bool ret = reader.parse(response.c_str(), root);
-  if (!ret) {
-    job_memo = "JSON parse error: " + response;
-	syslog(Logger::INFO, "%s", job_memo.c_str());
-    return;
-  }
-  array = root["response_array"][0];
-  info = array["info"];
+	job_status = "failed";
+	bool ret = reader.parse(response.c_str(), root);
+	if (!ret) {
+		job_error_info = "JSON parse error: " + response;
+		syslog(Logger::INFO, "%s", job_error_info.c_str());
+		goto end;
+	}
+	array = root["response_array"][0];
+	info = array["info"];
 
-  job_status = info["status"].asString();
-  if(job_status == "failed") {
-    job_memo = info["info"].asString();
-    syslog(Logger::INFO, "%s", job_memo.c_str());
-	return;
-  }
+	job_status = info["status"].asString();
+	if(job_status == "failed") {
+		job_error_info = info["info"].asString();
+		syslog(Logger::INFO, "%s", job_error_info.c_str());
+		goto end;
+	}
 
-  mission->task_incomplete--;
-}
+	task_incomplete--;
 
-void OTHER_Call_Back(void *cb_context) {
-  OtherRemoteTask *task = static_cast<OtherRemoteTask *>(cb_context);
-  std::string response = task->get_response()->SerializeResponseToStr();
-
-  switch (task->getMission()->request_type) {
-  case kunlun::kControlInstanceType:
-    ControlInstanceCallBack(task->getMission(), response);
-    break;
-  case kunlun::kUpdatePrometheusType:
-    UpdatePrometheusCallBack(task->getMission(), response);
-	if(task->getMission()->task_wait == 0){
-		std::string job_status,job_memo;
-		if(task->getMission()->task_incomplete == 0){
+end:
+	if(task_wait == 0){
+		if(task_incomplete == 0){
 			job_status = "done";
-			job_memo = "update prometheus succeed";
+			job_error_code = EintToStr(EOK);
+			job_error_info = "update prometheus successfully";
 		}else{
 			job_status = "failed";
-			job_memo = "update prometheus failed";
+			job_error_info = "update prometheus failed";
 		}
-		syslog(Logger::INFO, "%s", job_memo.c_str());
-		System::get_instance()->update_operation_record(task->getMission()->job_id, job_status, job_memo);
+		syslog(Logger::INFO, "%s", job_error_info.c_str());
+		update_operation_record();
 	}
-    break;
-
-  default:
-    break;
-  }
-}
-
-bool OtherMission::ArrangeRemoteTask() {
-  request_type = get_request_type();
-  job_id = get_request_unique_id();
-
-  switch (request_type) {
-  case kunlun::kControlInstanceType:
-    ControlInstance();
-    break;
-  case kunlun::kUpdatePrometheusType:
-    UpdatePrometheus();
-    break;
-  case kunlun::kPostgresExporterType:
-    PostgresExporter();
-    break;
-  case kunlun::kMysqldExporterType:
-    MysqldExporter();
-    break;
-
-  default:
-    break;
-  }
-
-  return true;
 }
 
 void OtherMission::ControlInstance() {
-	std::string job_status;
-	std::string job_memo;
   OtherRemoteTask *task;
   Json::Value root_node;
   Json::Value paras_node;
+  Json::Value paras;
   std::string hostaddr,control,instance_status,type;
   int port,instance_type;
   Tpye_Ip_Port ip_port;
 
   if (!super::get_body_json_document().isMember("paras")) {
-    setExtraErr("missing `paras` key-value pair in the request body");
-    return;
+    job_error_info = "missing `paras` key-value pair in the request body";
+    goto end;
   }
-  Json::Value paras = super::get_body_json_document()["paras"];
+  paras = super::get_body_json_document()["paras"];
 
   if (!paras.isMember("hostaddr")) {
-    job_memo = "missing `hostaddr` key-value pair in the request body";
+    job_error_info = "missing `hostaddr` key-value pair in the request body";
     goto end;
   }
   hostaddr = paras["hostaddr"].asString();
 
   if (!paras.isMember("port")) {
-    job_memo = "missing `port` key-value pair in the request body";
+    job_error_info = "missing `port` key-value pair in the request body";
     goto end;
   }
   port = stoi(paras["port"].asString());
 
   if (!paras.isMember("control")) {
-    job_memo = "missing `control` key-value pair in the request body";
+    job_error_info = "missing `control` key-value pair in the request body";
     goto end;
   }
   control = paras["control"].asString();
 
-	job_status = "not_started";
-	job_memo = "control instance start";
-  syslog(Logger::INFO, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  job_status = "not_started";
+  job_error_info = "control instance start";
+  syslog(Logger::INFO, "%s", job_error_info.c_str());
+  update_operation_record();
 
   System::get_instance()->set_cluster_mgr_working(false);
 
@@ -170,13 +146,13 @@ void OtherMission::ControlInstance() {
 	else if(control == "start" || control == "restart")
 		instance_status = "active";
 	else {
-		job_memo = "control type error";
+		job_error_info = "control type error";
 		goto end;
 	}
 
 	ip_port = std::make_pair(hostaddr, port);
 	if(!System::get_instance()->update_instance_status(ip_port, instance_status, instance_type)) {
-		job_memo = "update_instance_status error";
+		job_error_info = "update_instance_status error";
 		goto end;
 	}
 
@@ -187,7 +163,7 @@ void OtherMission::ControlInstance() {
 	else if(instance_type == 2)
 		type = "computer";
 	else {
-		job_memo = "instance ip_port no find";
+		job_error_info = "instance ip_port no find";
 		goto end;
 	}
 
@@ -214,131 +190,127 @@ void OtherMission::ControlInstance() {
   return;
 
 end:
-	job_status = "failed";
-	syslog(Logger::ERROR, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  job_status = "failed";
+  syslog(Logger::ERROR, "%s", job_error_info.c_str());
+  update_operation_record();
 }
 
 void OtherMission::UpdatePrometheus(){
-	std::string job_status;
-	std::string job_memo;
 
 	job_status = "not_started";
-	job_memo = "update prometheus start";
-	syslog(Logger::INFO, "%s", job_memo.c_str());
-	System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+	job_error_info = "update prometheus start";
+	syslog(Logger::INFO, "%s", job_error_info.c_str());
+	update_operation_record();
 
 	//init channel again
 	g_node_channel_manager.Init();
 
 	if(!update_prometheus()) {
-		job_memo = "update prometheus error";
+		job_error_info = "update prometheus error";
 		goto end;
 	}
 
-	job_memo = "update prometheus working";
-	syslog(Logger::INFO, "%s", job_memo.c_str());
-	System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+	job_error_info = "update prometheus working";
+	syslog(Logger::INFO, "%s", job_error_info.c_str());
+	update_operation_record();
 	return;
 
 end:
 	job_status = "failed";
-	syslog(Logger::ERROR, "%s", job_memo.c_str());
-	System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+	syslog(Logger::ERROR, "%s", job_error_info.c_str());
+	update_operation_record();
 }
 
 void OtherMission::PostgresExporter() {
-	std::string job_status;
-	std::string job_memo;
-
+	Json::Value paras;
 	std::string hostaddr;
 	int port;
 
 	if (!super::get_body_json_document().isMember("paras")) {
-		setExtraErr("missing `paras` key-value pair in the request body");
-		return;
+		job_error_info = "missing `paras` key-value pair in the request body";
+		goto end;
 	}
-	Json::Value paras = super::get_body_json_document()["paras"];
+	paras = super::get_body_json_document()["paras"];
 
 	if (!paras.isMember("hostaddr")) {
-		job_memo = "missing `hostaddr` key-value pair in the request body";
+		job_error_info = "missing `hostaddr` key-value pair in the request body";
 		goto end;
 	}
 	hostaddr = paras["hostaddr"].asString();
 
 	if (!paras.isMember("port")) {
-		job_memo = "missing `port` key-value pair in the request body";
+		job_error_info = "missing `port` key-value pair in the request body";
 		goto end;
 	}
 	port = stoi(paras["port"].asString());
 
 	job_status = "not_started";
-	job_memo = "postgres exporter start";
-	syslog(Logger::INFO, "%s", job_memo.c_str());
-	System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+	job_error_info = "postgres exporter start";
+	syslog(Logger::INFO, "%s", job_error_info.c_str());
+	update_operation_record();
 
 	if(!restart_postgres_exporter(hostaddr, port)) {
-		job_memo = "restart_postgres_exporter error";
+		job_error_info = "restart_postgres_exporter error";
 		goto end;
 	}
 
 	job_status = "done";
-	job_memo = "postgres exporter succeed";
-	syslog(Logger::INFO, "%s", job_memo.c_str());
-	System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+	job_error_code = EintToStr(EOK);
+	job_error_info = "postgres exporter successfully";
+	syslog(Logger::INFO, "%s", job_error_info.c_str());
+	update_operation_record();
 	return;
 
 end:
 	job_status = "failed";
-	syslog(Logger::ERROR, "%s", job_memo.c_str());
-	System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+	syslog(Logger::ERROR, "%s", job_error_info.c_str());
+	update_operation_record();
 }
 
 void OtherMission::MysqldExporter() {
-	std::string job_status;
-	std::string job_memo;
-
+	Json::Value paras;
 	std::string hostaddr;
 	int port;
 
 	if (!super::get_body_json_document().isMember("paras")) {
-		setExtraErr("missing `paras` key-value pair in the request body");
-		return;
+		job_error_info = "missing `paras` key-value pair in the request body";
+		goto end;
 	}
-	Json::Value paras = super::get_body_json_document()["paras"];
+	paras = super::get_body_json_document()["paras"];
 
 	if (!paras.isMember("hostaddr")) {
-		job_memo = "missing `hostaddr` key-value pair in the request body";
+		job_error_info = "missing `hostaddr` key-value pair in the request body";
 		goto end;
 	}
 	hostaddr = paras["hostaddr"].asString();
 
 	if (!paras.isMember("port")) {
-		job_memo = "missing `port` key-value pair in the request body";
+		job_error_info = "missing `port` key-value pair in the request body";
 		goto end;
 	}
 	port = stoi(paras["port"].asString());
 
 	job_status = "not_started";
-	job_memo = "mysql exporter start";
-	syslog(Logger::INFO, "%s", job_memo.c_str());
-	System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+	job_error_info = "mysql exporter start";
+	syslog(Logger::INFO, "%s", job_error_info.c_str());
+	update_operation_record();
 
 	if(!restart_mysql_exporter(hostaddr, port)) {
-		job_memo = "restart_mysql_exporter error";
+		job_error_info = "restart_mysql_exporter error";
 		goto end;
 	}
 
 	job_status = "done";
-	job_memo = "mysql exporter succeed";
-	syslog(Logger::INFO, "%s", job_memo.c_str());
-	System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+	job_error_code = EintToStr(EOK);
+	job_error_info = "mysql exporter successfully";
+	syslog(Logger::INFO, "%s", job_error_info.c_str());
+	update_operation_record();
 	return;
 
 end:
 	job_status = "failed";
-	syslog(Logger::ERROR, "%s", job_memo.c_str());
-	System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+	syslog(Logger::ERROR, "%s", job_error_info.c_str());
+	update_operation_record();
 }
 
 bool OtherMission::restart_node_exporter(std::vector<std::string> &vec_node) {
@@ -645,4 +617,54 @@ bool OtherMission::save_file(std::string &path, char* buf) {
 	fclose(pfd);
 	
 	return true;
+}
+
+bool OtherMission::update_operation_record(){
+	std::string str_sql,memo;
+  Json::Value memo_json;
+  Json::FastWriter writer;
+
+  memo_json["error_code"] = job_error_code;
+  memo_json["error_info"] = job_error_info;
+  writer.omitEndingLineFeed();
+  memo = writer.write(memo_json);
+
+	str_sql = "UPDATE cluster_general_job_log set status='" + job_status + "',memo='" + memo;
+	str_sql += "',when_ended=current_timestamp(6) where id=" + job_id;
+	//syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
+
+	if(System::get_instance()->execute_metadate_opertation(SQLCOM_UPDATE, str_sql)) {
+		syslog(Logger::ERROR, "execute_metadate_opertation error");
+		return false;
+	}
+
+	return true;
+}
+
+bool OtherMission::ArrangeRemoteTask() {
+  request_type = get_request_type();
+  job_id = get_request_unique_id();
+  job_status = "not_started";
+  job_error_code = EintToStr(EOK);
+  job_error_info = "";
+
+  switch (request_type) {
+  case kunlun::kControlInstanceType:
+    ControlInstance();
+    break;
+  case kunlun::kUpdatePrometheusType:
+    UpdatePrometheus();
+    break;
+  case kunlun::kPostgresExporterType:
+    PostgresExporter();
+    break;
+  case kunlun::kMysqldExporterType:
+    MysqldExporter();
+    break;
+
+  default:
+    break;
+  }
+
+  return true;
 }

@@ -16,7 +16,10 @@ class BackupStorage : public ::MissionRequest {
 
 private:
   ClusterRequestTypes request_type_;
-  std::string job_id_;
+  std::string job_id;
+	std::string job_status;
+	std::string job_error_code;
+  std::string job_error_info;
 
 public:
   explicit BackupStorage(Json::Value *doc) : super(doc){};
@@ -25,6 +28,7 @@ public:
   void CreateBackupStorage();
   void UpdateBackupStorage();
   void DeleteBackupStorage();
+  bool update_operation_record();
   virtual bool ArrangeRemoteTask() override final;
   virtual bool SetUpMisson() override { return true; }
   virtual bool TearDownMission() override { return true; }

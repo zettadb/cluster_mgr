@@ -72,6 +72,11 @@ public:
 		pwd = gpsql_conn.pwd;
 	}
 
+	uint get_id() const
+	{
+		return id;
+	}
+
 	const std::string &get_name() const
 	{
 		return name;

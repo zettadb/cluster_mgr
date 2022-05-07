@@ -17,7 +17,54 @@ int g_cluster_id = 0;
 int g_comps_id_seq = 0;
 std::mutex mutex_cluster;
 
-void UpdateMachinePathSize(std::vector<Machine*> &vec_machine, std::string &response) {
+void CLuster_Call_Back(void *cb_context) {
+  ClusterRemoteTask *task = static_cast<ClusterRemoteTask *>(cb_context);
+  ClusterMission *mission = task->getMission();
+  std::string response = task->get_response()->SerializeResponseToStr();
+  //syslog(Logger::INFO, "response=%s", response.c_str());
+
+  switch (mission->request_type) {
+  case kunlun::kCreateClusterType:
+    mission->CreateClusterCallBack(response);
+    break;
+  case kunlun::kDeleteClusterType:
+    mission->DeleteClusterCallBack(response);
+    break;
+
+  case kunlun::kAddShardsType:
+    mission->AddShardsCallBack(response);
+    break;
+  case kunlun::kDeleteShardType:
+    mission->DeleteShardCallBack(response);
+    break;
+
+  case kunlun::kAddCompsType:
+    mission->AddCompsCallBack(response);
+    break;
+  case kunlun::kDeleteCompType:
+    mission->DeleteCompCallBack(response);
+    break;
+
+  case kunlun::kAddNodesType:
+    mission->AddNodesCallBack(response);
+    break;
+  case kunlun::kDeleteNodeType:
+    mission->DeleteNodeCallBack(response);
+    break;
+
+  case kunlun::kBackupClusterType:
+    mission->BackupClusterCallBack(response);
+    break;
+  case kunlun::kRestoreNewClusterType:
+    mission->RestoreNewCallBack(response);
+    break;
+
+  default:
+    break;
+  }
+}
+
+void ClusterMission::UpdateMachinePathSize(std::vector<Machine*> &vec_machine, std::string &response) {
   Json::Value root;
   Json::Reader reader;
   std::string hostaddr;
@@ -68,7 +115,7 @@ void UpdateMachinePathSize(std::vector<Machine*> &vec_machine, std::string &resp
   machine->available = true;
 }
 
-void CheckInstanceInstall(ClusterMission *mission, std::string &response) {
+void ClusterMission::CheckInstanceInstall(std::string &response) {
   Json::Value root;
   Json::Reader reader;
 
@@ -84,10 +131,10 @@ void CheckInstanceInstall(ClusterMission *mission, std::string &response) {
     return;
   }
 
-  mission->task_incomplete--;
+  task_incomplete--;
 }
 
-void CheckInstanceDelete(ClusterMission *mission, std::string &response) {
+void ClusterMission::CheckInstanceDelete(std::string &response) {
   Json::Value root;
   Json::Reader reader;
 
@@ -103,10 +150,10 @@ void CheckInstanceDelete(ClusterMission *mission, std::string &response) {
     return;
   }
 
-  mission->task_incomplete--;
+  task_incomplete--;
 }
 
-void CheckBackupCluster(ClusterMission *mission, std::string &response) {
+void ClusterMission::CheckBackupCluster(std::string &response) {
   Json::Value root;
   Json::Reader reader;
   std::string str_sql,end_time;
@@ -123,9 +170,9 @@ void CheckBackupCluster(ClusterMission *mission, std::string &response) {
     return;
   } else {
     Json::Value info2 = info["info"];
-    mission->get_datatime(end_time);
+    get_datatime(end_time);
     str_sql = "UPDATE cluster_shard_backup_restore_log set status='done',shard_backup_path='" + info2["path"].asString();
-    str_sql += "',when_ended='" + end_time + "' where when_started='" + mission->start_time + "' and shard_id=" + info2["shard_id"].asString();
+    str_sql += "',when_ended='" + end_time + "' where when_started='" + start_time + "' and shard_id=" + info2["shard_id"].asString();
     //syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
 
     if(System::get_instance()->execute_metadate_opertation(SQLCOM_UPDATE, str_sql)) {
@@ -134,10 +181,10 @@ void CheckBackupCluster(ClusterMission *mission, std::string &response) {
     }
   }
 
-  mission->task_incomplete--;
+  task_incomplete--;
 }
 
-void CheckInstanceRestore(ClusterMission *mission, std::string &response) {
+void ClusterMission::CheckInstanceRestore(std::string &response) {
   Json::Value root;
   Json::Reader reader;
 
@@ -153,64 +200,64 @@ void CheckInstanceRestore(ClusterMission *mission, std::string &response) {
     return;
   }
 
-  mission->task_incomplete--;
+  task_incomplete--;
 }
 
-void CreateClusterCallBack(ClusterMission *mission, std::string &response){
-  switch (mission->task_step) {
+void ClusterMission::CreateClusterCallBack(std::string &response) {
+  switch (task_step) {
   case ClusterMission::ClusterStep::GET_PATH_SIZE:
-    UpdateMachinePathSize(mission->vec_machine, response);
-    mission->task_wait--;
-    if(mission->task_wait == 0) {
-      auto iter = mission->vec_machine.begin();
-      for(; iter != mission->vec_machine.end(); ){
+    UpdateMachinePathSize(vec_machine, response);
+    task_wait--;
+    if(task_wait == 0) {
+      auto iter = vec_machine.begin();
+      for(; iter != vec_machine.end(); ){
         if((*iter)->available){
           iter++;
         }else{
-          iter = mission->vec_machine.erase(iter);
+          iter = vec_machine.erase(iter);
         }
       }
 
-      if(mission->vec_machine.size() > 0){
-        mission->createStorageInfo();
+      if(vec_machine.size() > 0){
+        createStorageInfo();
       }else{
-        mission->missiom_finish = true;
-        mission->job_status = "failed";
-        mission->job_memo = "error, no available machine";
-        syslog(Logger::ERROR, "job_memo=%s", mission->job_memo.c_str());
-        System::get_instance()->update_operation_record(mission->job_id, mission->job_status, mission->job_memo);
+        missiom_finish = true;
+        job_status = "failed";
+        job_error_info = "error, no available machine";
+        syslog(Logger::ERROR, "job_error_info=%s", job_error_info.c_str());
+        update_operation_record();
       }
     }
     break;
 
   case ClusterMission::ClusterStep::INSTALL_STORAGE:
-    CheckInstanceInstall(mission, response);
-    mission->task_wait--;
-    if(mission->task_wait == 0) {
-      syslog(Logger::INFO, "INSTALL_STORAGE task_incomplete = %d", mission->task_incomplete);
-      if(mission->task_incomplete == 0){
-        mission->createComputerInfo();
+    CheckInstanceInstall(response);
+    task_wait--;
+    if(task_wait == 0) {
+      syslog(Logger::INFO, "INSTALL_STORAGE task_incomplete = %d", task_incomplete);
+      if(task_incomplete == 0){
+        createComputerInfo();
       } else {
-        mission->job_memo = "install storage error";
-        syslog(Logger::ERROR, "job_memo=%s", mission->job_memo.c_str());
-        System::get_instance()->update_operation_record(mission->job_id, mission->job_status, mission->job_memo);
-        mission->roll_back_record();
+        job_error_info = "install storage error";
+        syslog(Logger::ERROR, "job_error_info=%s", job_error_info.c_str());
+        update_operation_record();
+        roll_back_record();
       }
     }
     break;
 
   case ClusterMission::ClusterStep::INSTALL_COMPUTER:
-    CheckInstanceInstall(mission, response);
-    mission->task_wait--;
-    if(mission->task_wait == 0) {
-      syslog(Logger::INFO, "INSTALL_COMPUTER task_incomplete = %d", mission->task_incomplete);
-      if(mission->task_incomplete == 0){
-        mission->startClusterInfo();
+    CheckInstanceInstall(response);
+    task_wait--;
+    if(task_wait == 0) {
+      syslog(Logger::INFO, "INSTALL_COMPUTER task_incomplete = %d", task_incomplete);
+      if(task_incomplete == 0){
+        startClusterInfo();
       } else {
-        mission->job_memo = "install computer error";
-        syslog(Logger::ERROR, "job_memo=%s", mission->job_memo.c_str());
-        System::get_instance()->update_operation_record(mission->job_id, mission->job_status, mission->job_memo);
-        mission->roll_back_record();
+        job_error_info = "install computer error";
+        syslog(Logger::ERROR, "job_error_info=%s", job_error_info.c_str());
+        update_operation_record();
+        roll_back_record();
       }
     }
     break;
@@ -220,14 +267,14 @@ void CreateClusterCallBack(ClusterMission *mission, std::string &response){
   }
 }
 
-void DeleteClusterCallBack(ClusterMission *mission, std::string &response){
-  switch (mission->task_step) {
+void ClusterMission::DeleteClusterCallBack(std::string &response) {
+  switch (task_step) {
   case ClusterMission::ClusterStep::DELETE_INSTANCE:
-    CheckInstanceDelete(mission, response);
-    mission->task_wait--;
-    if(mission->task_wait == 0) {
-      syslog(Logger::INFO, "DELETE_INSTANCE task_incomplete = %d", mission->task_incomplete);
-      mission->stop_cluster();
+    CheckInstanceDelete(response);
+    task_wait--;
+    if(task_wait == 0) {
+      syslog(Logger::INFO, "DELETE_INSTANCE task_incomplete = %d", task_incomplete);
+      stop_cluster();
     }
     break;
 
@@ -236,45 +283,45 @@ void DeleteClusterCallBack(ClusterMission *mission, std::string &response){
   }
 }
 
-void AddShardsCallBack(ClusterMission *mission, std::string &response){
-  switch (mission->task_step) {
+void ClusterMission::AddShardsCallBack(std::string &response) {
+  switch (task_step) {
   case ClusterMission::ClusterStep::GET_PATH_SIZE:
-    UpdateMachinePathSize(mission->vec_machine, response);
-    mission->task_wait--;
-    if(mission->task_wait == 0) {
-      auto iter = mission->vec_machine.begin();
-      for(; iter != mission->vec_machine.end(); ){
+    UpdateMachinePathSize(vec_machine, response);
+    task_wait--;
+    if(task_wait == 0) {
+      auto iter = vec_machine.begin();
+      for(; iter != vec_machine.end(); ){
         if((*iter)->available){
           iter++;
         }else{
-          iter = mission->vec_machine.erase(iter);
+          iter = vec_machine.erase(iter);
         }
       }
 
-      if(mission->vec_machine.size() > 0){
-        mission->addShardsInfo();
+      if(vec_machine.size() > 0){
+        addShardsInfo();
       }else{
-        mission->missiom_finish = true;
-        mission->job_status = "failed";
-        mission->job_memo = "error, no available machine";
-        syslog(Logger::ERROR, "job_memo=%s", mission->job_memo.c_str());
-        System::get_instance()->update_operation_record(mission->job_id, mission->job_status, mission->job_memo);
+        missiom_finish = true;
+        job_status = "failed";
+        job_error_info = "error, no available machine";
+        syslog(Logger::ERROR, "job_error_info=%s", job_error_info.c_str());
+        update_operation_record();
       }
     }
     break;
 
   case ClusterMission::ClusterStep::INSTALL_STORAGE:
-    CheckInstanceInstall(mission, response);
-    mission->task_wait--;
-    if(mission->task_wait == 0) {
-      syslog(Logger::INFO, "INSTALL_STORAGE task_incomplete = %d", mission->task_incomplete);
-      if(mission->task_incomplete == 0){
-        mission->startShardsInfo();
+    CheckInstanceInstall(response);
+    task_wait--;
+    if(task_wait == 0) {
+      syslog(Logger::INFO, "INSTALL_STORAGE task_incomplete = %d", task_incomplete);
+      if(task_incomplete == 0){
+        startShardsInfo();
       } else {
-        mission->job_memo = "install storage error";
-        syslog(Logger::ERROR, "job_memo=%s", mission->job_memo.c_str());
-        System::get_instance()->update_operation_record(mission->job_id, mission->job_status, mission->job_memo);
-        mission->roll_back_record();
+        job_error_info = "install storage error";
+        syslog(Logger::ERROR, "job_error_info=%s", job_error_info.c_str());
+        update_operation_record();
+        roll_back_record();
       }
     }
     break;
@@ -284,14 +331,14 @@ void AddShardsCallBack(ClusterMission *mission, std::string &response){
   }
 }
 
-void DeleteShardCallBack(ClusterMission *mission, std::string &response){
-  switch (mission->task_step) {
+void ClusterMission::DeleteShardCallBack(std::string &response) {
+  switch (task_step) {
   case ClusterMission::ClusterStep::DELETE_INSTANCE:
-    CheckInstanceDelete(mission, response);
-    mission->task_wait--;
-    if(mission->task_wait == 0) {
-      syslog(Logger::INFO, "DELETE_INSTANCE task_incomplete = %d", mission->task_incomplete);
-      mission->stop_shard();
+    CheckInstanceDelete(response);
+    task_wait--;
+    if(task_wait == 0) {
+      syslog(Logger::INFO, "DELETE_INSTANCE task_incomplete = %d", task_incomplete);
+      stop_shard();
     }
     break;
 
@@ -300,45 +347,45 @@ void DeleteShardCallBack(ClusterMission *mission, std::string &response){
   }
 }
 
-void AddCompsCallBack(ClusterMission *mission, std::string &response){
-  switch (mission->task_step) {
+void ClusterMission::AddCompsCallBack(std::string &response) {
+  switch (task_step) {
   case ClusterMission::ClusterStep::GET_PATH_SIZE:
-    UpdateMachinePathSize(mission->vec_machine, response);
-    mission->task_wait--;
-    if(mission->task_wait == 0) {
-      auto iter = mission->vec_machine.begin();
-      for(; iter != mission->vec_machine.end(); ){
+    UpdateMachinePathSize(vec_machine, response);
+    task_wait--;
+    if(task_wait == 0) {
+      auto iter = vec_machine.begin();
+      for(; iter != vec_machine.end(); ){
         if((*iter)->available){
           iter++;
         }else{
-          iter = mission->vec_machine.erase(iter);
+          iter = vec_machine.erase(iter);
         }
       }
 
-      if(mission->vec_machine.size() > 0){
-        mission->addCompsInfo();
+      if(vec_machine.size() > 0){
+        addCompsInfo();
       }else{
-        mission->missiom_finish = true;
-        mission->job_status = "failed";
-        mission->job_memo = "error, no available machine";
-        syslog(Logger::ERROR, "job_memo=%s", mission->job_memo.c_str());
-        System::get_instance()->update_operation_record(mission->job_id, mission->job_status, mission->job_memo);
+        missiom_finish = true;
+        job_status = "failed";
+        job_error_info = "error, no available machine";
+        syslog(Logger::ERROR, "job_error_info=%s", job_error_info.c_str());
+        update_operation_record();
       }
     }
     break;
 
   case ClusterMission::ClusterStep::INSTALL_COMPUTER:
-    CheckInstanceInstall(mission, response);
-    mission->task_wait--;
-    if(mission->task_wait == 0) {
-      syslog(Logger::INFO, "INSTALL_COMPUTER task_incomplete = %d", mission->task_incomplete);
-      if(mission->task_incomplete == 0){
-        mission->startCompsInfo();
+    CheckInstanceInstall(response);
+    task_wait--;
+    if(task_wait == 0) {
+      syslog(Logger::INFO, "INSTALL_COMPUTER task_incomplete = %d", task_incomplete);
+      if(task_incomplete == 0){
+        startCompsInfo();
       } else {
-        mission->job_memo = "install computer error";
-        syslog(Logger::ERROR, "job_memo=%s", mission->job_memo.c_str());
-        System::get_instance()->update_operation_record(mission->job_id, mission->job_status, mission->job_memo);
-        mission->roll_back_record();
+        job_error_info = "install computer error";
+        syslog(Logger::ERROR, "job_error_info=%s", job_error_info.c_str());
+        update_operation_record();
+        roll_back_record();
       }
     }
     break;
@@ -348,14 +395,14 @@ void AddCompsCallBack(ClusterMission *mission, std::string &response){
   }
 }
 
-void DeleteCompCallBack(ClusterMission *mission, std::string &response){
-  switch (mission->task_step) {
+void ClusterMission::DeleteCompCallBack(std::string &response) {
+  switch (task_step) {
   case ClusterMission::ClusterStep::DELETE_INSTANCE:
-    CheckInstanceDelete(mission, response);
-    mission->task_wait--;
-    if(mission->task_wait == 0) {
-      syslog(Logger::INFO, "DELETE_INSTANCE task_incomplete = %d", mission->task_incomplete);
-      mission->stop_comp();
+    CheckInstanceDelete(response);
+    task_wait--;
+    if(task_wait == 0) {
+      syslog(Logger::INFO, "DELETE_INSTANCE task_incomplete = %d", task_incomplete);
+      stop_comp();
     }
     break;
 
@@ -364,70 +411,70 @@ void DeleteCompCallBack(ClusterMission *mission, std::string &response){
   }
 }
 
-void AddNodesCallBack(ClusterMission *mission, std::string &response, ClusterRemoteTask *task){
-  switch (mission->task_step) {
+void ClusterMission::AddNodesCallBack(std::string &response) {
+  switch (task_step) {
   case ClusterMission::ClusterStep::GET_PATH_SIZE:
-    UpdateMachinePathSize(mission->vec_machine, response);
-    mission->task_wait--;
-    if(mission->task_wait == 0) {
-      auto iter = mission->vec_machine.begin();
-      for(; iter != mission->vec_machine.end(); ){
+    UpdateMachinePathSize(vec_machine, response);
+    task_wait--;
+    if(task_wait == 0) {
+      auto iter = vec_machine.begin();
+      for(; iter != vec_machine.end(); ){
         if((*iter)->available){
           iter++;
         }else{
-          iter = mission->vec_machine.erase(iter);
+          iter = vec_machine.erase(iter);
         }
       }
 
-      if(mission->vec_machine.size() > 0){
-        mission->backup_nodes();
+      if(vec_machine.size() > 0){
+        backup_nodes();
       }else{
-        mission->missiom_finish = true;
-        mission->job_status = "failed";
-        mission->job_memo = "error, no available machine";
-        syslog(Logger::ERROR, "job_memo=%s", mission->job_memo.c_str());
-        System::get_instance()->update_operation_record(mission->job_id, mission->job_status, mission->job_memo);
+        missiom_finish = true;
+        job_status = "failed";
+        job_error_info = "error, no available machine";
+        syslog(Logger::ERROR, "job_error_info=%s", job_error_info.c_str());
+        update_operation_record();
       }
     }
     break;
 
   case ClusterMission::ClusterStep::BACKUP_STORAGE:
-    CheckBackupCluster(mission, response);
-    mission->task_wait--;
-    if(mission->task_wait == 0) {
-      syslog(Logger::INFO, "BACKUP_STORAGE task_incomplete = %d", mission->task_incomplete);
-      mission->update_backup_nodes();
+    CheckBackupCluster(response);
+    task_wait--;
+    if(task_wait == 0) {
+      syslog(Logger::INFO, "BACKUP_STORAGE task_incomplete = %d", task_incomplete);
+      update_backup_nodes();
     }
     break;
 
   case ClusterMission::ClusterStep::INSTALL_STORAGE:
-    CheckInstanceInstall(mission, response);
-    mission->task_wait--;
-    if(mission->task_wait == 0) {
-      syslog(Logger::INFO, "INSTALL_STORAGE task_incomplete = %d", mission->task_incomplete);
-      if(mission->task_incomplete == 0){
-        mission->restoreNodes();
+    CheckInstanceInstall(response);
+    task_wait--;
+    if(task_wait == 0) {
+      syslog(Logger::INFO, "INSTALL_STORAGE task_incomplete = %d", task_incomplete);
+      if(task_incomplete == 0){
+        restoreNodes();
       } else {
-        mission->job_memo = "install storage error";
-        syslog(Logger::ERROR, "job_memo=%s", mission->job_memo.c_str());
-        System::get_instance()->update_operation_record(mission->job_id, mission->job_status, mission->job_memo);
-        mission->roll_back_record();
+        job_error_info = "install storage error";
+        syslog(Logger::ERROR, "job_error_info=%s", job_error_info.c_str());
+        update_operation_record();
+        roll_back_record();
       }
     }
     break;
 
   case ClusterMission::ClusterStep::RESTORE_INSTANCE:
-    CheckInstanceRestore(mission, response);
-    mission->task_wait--;
-    if(mission->task_wait == 0) {
-      syslog(Logger::INFO, "RESTORE_INSTANCE task_incomplete = %d", mission->task_incomplete);
-      if(mission->task_incomplete == 0){
-        mission->updateRestoreNodesInfo();
+    CheckInstanceRestore(response);
+    task_wait--;
+    if(task_wait == 0) {
+      syslog(Logger::INFO, "RESTORE_INSTANCE task_incomplete = %d", task_incomplete);
+      if(task_incomplete == 0){
+        updateRestoreNodesInfo();
       } else {
-        mission->job_memo = "restore instance error";
-        syslog(Logger::ERROR, "job_memo=%s", mission->job_memo.c_str());
-        System::get_instance()->update_operation_record(mission->job_id, mission->job_status, mission->job_memo);
-        mission->roll_back_record();
+        job_error_info = "restore instance error";
+        syslog(Logger::ERROR, "job_error_info=%s", job_error_info.c_str());
+        update_operation_record();
+        roll_back_record();
       }
     }
     break;
@@ -437,18 +484,18 @@ void AddNodesCallBack(ClusterMission *mission, std::string &response, ClusterRem
   }
 }
 
-void DeleteNodeCallBack(ClusterMission *mission, std::string &response){
-  switch (mission->task_step) {
+void ClusterMission::DeleteNodeCallBack(std::string &response) {
+  switch (task_step) {
   case ClusterMission::ClusterStep::DELETE_INSTANCE:
-    CheckInstanceDelete(mission, response);
-    mission->task_wait--;
-    if(mission->task_wait == 0) {
-      syslog(Logger::INFO, "DELETE_INSTANCE task_incomplete = %d", mission->task_incomplete);
-      mission->missiom_finish = true;
-      mission->job_status = "done";
-      mission->job_memo = "delete node succeed";
-      syslog(Logger::INFO, "%s", mission->job_memo.c_str());
-      System::get_instance()->update_operation_record(mission->job_id, mission->job_status, mission->job_memo);
+    CheckInstanceDelete(response);
+    task_wait--;
+    if(task_wait == 0) {
+      syslog(Logger::INFO, "DELETE_INSTANCE task_incomplete = %d", task_incomplete);
+      missiom_finish = true;
+      job_status = "done";
+      job_error_info = "delete node successfully";
+      syslog(Logger::INFO, "%s", job_error_info.c_str());
+      update_operation_record();
       System::get_instance()->set_cluster_mgr_working(true);
     }
     break;
@@ -458,14 +505,14 @@ void DeleteNodeCallBack(ClusterMission *mission, std::string &response){
   }
 }
 
-void BackupClusterCallBack(ClusterMission *mission, std::string &response, ClusterRemoteTask *task){
-  switch (mission->task_step) {
+void ClusterMission::BackupClusterCallBack(std::string &response) {
+  switch (task_step) {
   case ClusterMission::ClusterStep::BACKUP_STORAGE:
-    CheckBackupCluster(mission, response);
-    mission->task_wait--;
-    if(mission->task_wait == 0) {
-      syslog(Logger::INFO, "BACKUP_STORAGE task_incomplete = %d", mission->task_incomplete);
-      mission->update_backup_cluster();
+    CheckBackupCluster(response);
+    task_wait--;
+    if(task_wait == 0) {
+      syslog(Logger::INFO, "BACKUP_STORAGE task_incomplete = %d", task_incomplete);
+      update_backup_cluster();
     }
     break;
 
@@ -474,77 +521,77 @@ void BackupClusterCallBack(ClusterMission *mission, std::string &response, Clust
   }
 }
 
-void RestoreNewCallBack(ClusterMission *mission, std::string &response, ClusterRemoteTask *task){
-  switch (mission->task_step) {
+void ClusterMission::RestoreNewCallBack(std::string &response) {
+  switch (task_step) {
   case ClusterMission::ClusterStep::GET_PATH_SIZE:
-    UpdateMachinePathSize(mission->vec_machine, response);
-    mission->task_wait--;
-    if(mission->task_wait == 0) {
-      auto iter = mission->vec_machine.begin();
-      for(; iter != mission->vec_machine.end(); ){
+    UpdateMachinePathSize(vec_machine, response);
+    task_wait--;
+    if(task_wait == 0) {
+      auto iter = vec_machine.begin();
+      for(; iter != vec_machine.end(); ){
         if((*iter)->available){
           iter++;
         }else{
-          iter = mission->vec_machine.erase(iter);
+          iter = vec_machine.erase(iter);
         }
       }
 
-      if(mission->vec_machine.size() > 0){
-        mission->createStorageInfo();
+      if(vec_machine.size() > 0){
+        createStorageInfo();
       }else{
-        mission->missiom_finish = true;
-        mission->job_status = "failed";
-        mission->job_memo = "error, no available machine";
-        syslog(Logger::ERROR, "job_memo=%s", mission->job_memo.c_str());
-        System::get_instance()->update_operation_record(mission->job_id, mission->job_status, mission->job_memo);
+        missiom_finish = true;
+        job_status = "failed";
+        job_error_info = "error, no available machine";
+        syslog(Logger::ERROR, "job_error_info=%s", job_error_info.c_str());
+        update_operation_record();
       }
     }
     break;
 
   case ClusterMission::ClusterStep::INSTALL_STORAGE:
-    CheckInstanceInstall(mission, response);
-    mission->task_wait--;
-    if(mission->task_wait == 0) {
-      syslog(Logger::INFO, "INSTALL_STORAGE task_incomplete = %d", mission->task_incomplete);
-      if(mission->task_incomplete == 0){
-        mission->createComputerInfo();
+    CheckInstanceInstall(response);
+    task_wait--;
+    if(task_wait == 0) {
+      syslog(Logger::INFO, "INSTALL_STORAGE task_incomplete = %d", task_incomplete);
+      if(task_incomplete == 0){
+        createComputerInfo();
       } else {
-        mission->job_memo = "install storage error";
-        syslog(Logger::ERROR, "job_memo=%s", mission->job_memo.c_str());
-        System::get_instance()->update_operation_record(mission->job_id, mission->job_status, mission->job_memo);
-        mission->roll_back_record();
+        job_error_info = "install storage error";
+        syslog(Logger::ERROR, "job_error_info=%s", job_error_info.c_str());
+        update_operation_record();
+        roll_back_record();
       }
     }
     break;
 
   case ClusterMission::ClusterStep::INSTALL_COMPUTER:
-    CheckInstanceInstall(mission, response);
-    mission->task_wait--;
-    if(mission->task_wait == 0) {
-      syslog(Logger::INFO, "INSTALL_COMPUTER task_incomplete = %d", mission->task_incomplete);
-      if(mission->task_incomplete == 0){
-        mission->startClusterInfo();
+    CheckInstanceInstall(response);
+    task_wait--;
+    if(task_wait == 0) {
+      syslog(Logger::INFO, "INSTALL_COMPUTER task_incomplete = %d", task_incomplete);
+      if(task_incomplete == 0){
+        startClusterInfo();
       } else {
-        mission->job_memo = "install computer error";
-        syslog(Logger::ERROR, "job_memo=%s", mission->job_memo.c_str());
-        System::get_instance()->update_operation_record(mission->job_id, mission->job_status, mission->job_memo);
-        mission->roll_back_record();
+        job_error_info = "install computer error";
+        syslog(Logger::ERROR, "job_error_info=%s", job_error_info.c_str());
+        update_operation_record();
+        roll_back_record();
       }
     }
     break;
 
   case ClusterMission::ClusterStep::RESTORE_INSTANCE:
-    CheckInstanceRestore(mission, response);
-    mission->task_wait--;
-    if(mission->task_wait == 0) {
-      syslog(Logger::INFO, "RESTORE_INSTANCE task_incomplete = %d", mission->task_incomplete);
-      if(mission->task_incomplete == 0){
-        mission->updateRestoreInfo();
+    CheckInstanceRestore(response);
+    task_wait--;
+    if(task_wait == 0) {
+      syslog(Logger::INFO, "RESTORE_INSTANCE task_incomplete = %d", task_incomplete);
+      if(task_incomplete == 0){
+        updateRestoreInfo();
       } else {
-        mission->job_memo = "restore instance error";
-        syslog(Logger::ERROR, "job_memo=%s", mission->job_memo.c_str());
-        System::get_instance()->update_operation_record(mission->job_id, mission->job_status, mission->job_memo);
-        mission->roll_back_record();
+        job_error_info = "restore instance error";
+        syslog(Logger::ERROR, "job_error_info=%s", job_error_info.c_str());
+        update_operation_record();
+        roll_back_record();
       }
     }
     break;
@@ -554,226 +601,128 @@ void RestoreNewCallBack(ClusterMission *mission, std::string &response, ClusterR
   }
 }
 
-void CLuster_Call_Back(void *cb_context) {
-  ClusterRemoteTask *task = static_cast<ClusterRemoteTask *>(cb_context);
-  std::string response = task->get_response()->SerializeResponseToStr();
-  //syslog(Logger::INFO, "response=%s", response.c_str());
-
-  switch (task->getMission()->request_type) {
-  case kunlun::kCreateClusterType:
-    CreateClusterCallBack(task->getMission(), response);
-    break;
-  case kunlun::kDeleteClusterType:
-    DeleteClusterCallBack(task->getMission(), response);
-    break;
-
-  case kunlun::kAddShardsType:
-    AddShardsCallBack(task->getMission(), response);
-    break;
-  case kunlun::kDeleteShardType:
-    DeleteShardCallBack(task->getMission(), response);
-    break;
-
-  case kunlun::kAddCompsType:
-    AddCompsCallBack(task->getMission(), response);
-    break;
-  case kunlun::kDeleteCompType:
-    DeleteCompCallBack(task->getMission(), response);
-    break;
-
-  case kunlun::kAddNodesType:
-    AddNodesCallBack(task->getMission(), response, task);
-    break;
-  case kunlun::kDeleteNodeType:
-    DeleteNodeCallBack(task->getMission(), response);
-    break;
-
-  case kunlun::kBackupClusterType:
-    BackupClusterCallBack(task->getMission(), response, task);
-    break;
-  case kunlun::kRestoreNewClusterType:
-    RestoreNewCallBack(task->getMission(), response, task);
-    break;
-
-  default:
-    break;
-  }
-}
-
-bool ClusterMission::ArrangeRemoteTask() {
-  request_type = get_request_type();
-  job_id = get_request_unique_id();
-  nodes_select = 0;
-  missiom_finish = false;
-  job_status = "ongoing";
-
-  switch (request_type) {
-  case kunlun::kRenameClusterType:
-    renameCluster();
-    break;
-  case kunlun::kCreateClusterType:
-    createCluster();
-    break;
-  case kunlun::kDeleteClusterType:
-    deleteCluster();
-    break;
-
-  case kunlun::kAddShardsType:
-    addShards();
-    break;
-  case kunlun::kDeleteShardType:
-    // deleteShard(); // no support now
-    break;
-
-  case kunlun::kAddCompsType:
-    addComps();
-    break;
-  case kunlun::kDeleteCompType:
-    deleteComp();
-    break;
-
-  case kunlun::kAddNodesType:
-    addNodes();
-    break;
-  case kunlun::kDeleteNodeType:
-    deleteNode();
-    break;
-
-  case kunlun::kBackupClusterType:
-    backupCluster();
-    break;
-  case kunlun::kRestoreNewClusterType:
-    restoreNewCluster();
-    break;
-
-  default:
-    break;
-  }
-
-  return true;
-}
-
 void ClusterMission::renameCluster() {
+  Json::Value paras;
 
   if (!super::get_body_json_document().isMember("paras")) {
-    setExtraErr("missing `paras` key-value pair in the request body");
-    return;
+    job_error_info = "missing `paras` key-value pair in the request body";
+    goto end;
   }
-  Json::Value paras = super::get_body_json_document()["paras"];
+  paras = super::get_body_json_document()["paras"];
 
   if (!paras.isMember("cluster_name")) {
-    job_memo = "missing `cluster_name` key-value pair in the request body";
+    job_error_info = "missing `cluster_name` key-value pair in the request body";
     goto end;
   }
   cluster_name = paras["cluster_name"].asString();
 
   if (!paras.isMember("nick_name")) {
-    job_memo = "missing `nick_name` key-value pair in the request body";
+    job_error_info = "missing `nick_name` key-value pair in the request body";
     goto end;
   }
   nick_name = paras["nick_name"].asString();
 
 	//////////////////////////////////////////////////////////
 	if(System::get_instance()->check_nick_name(nick_name)) {
-		job_memo = "new nick_name have existed";
+		job_error_info = "new nick_name have existed";
 		goto end;
 	}
 
 	//////////////////////////////////////////////////////////
 	if(!System::get_instance()->rename_cluster(cluster_name, nick_name)) {
-		job_memo = "rename cluster error";
+		job_error_info = "rename cluster error";
 		goto end;
 	}
 
   missiom_finish = true;
   job_status = "done";
-  job_memo = "rename cluster succeed";
-  syslog(Logger::ERROR, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  job_error_info = "rename cluster successfully";
+  syslog(Logger::ERROR, "%s", job_error_info.c_str());
+  update_operation_record();
   return;
 
 end:
   missiom_finish = true;
   job_status = "failed";
-  syslog(Logger::ERROR, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  syslog(Logger::ERROR, "%s", job_error_info.c_str());
+  update_operation_record();
 }
 
 void ClusterMission::createCluster() {
-
+  Json::Value paras;
 	std::set<std::string> set_machine;
 
   if (!super::get_body_json_document().isMember("paras")) {
-    setExtraErr("missing `paras` key-value pair in the request body");
-    return;
+    job_error_info = "missing `paras` key-value pair in the request body";
+    goto end;
   }
-  Json::Value paras = super::get_body_json_document()["paras"];
+  paras = super::get_body_json_document()["paras"];
 
   if (paras.isMember("nick_name")) {
     nick_name = paras["nick_name"].asString();
   }
 
   if (!paras.isMember("ha_mode")) {
-    job_memo = "missing `ha_mode` key-value pair in the request body";
+    job_error_info = "missing `ha_mode` key-value pair in the request body";
     goto end;
   }
   std::get<0>(cluster_info) = paras["ha_mode"].asString();
 
   if (!paras.isMember("shards")) {
-    job_memo = "missing `shards` key-value pair in the request body";
+    job_error_info = "missing `shards` key-value pair in the request body";
     goto end;
   }
   std::get<1>(cluster_info) = stoi(paras["shards"].asString());
 	if(std::get<1>(cluster_info)<1 || std::get<1>(cluster_info)>256) {
-		job_memo = "shards error(must in 1-256)";
+		job_error_info = "shards error(must in 1-256)";
 		goto end;
 	}
 
   if (!paras.isMember("nodes")) {
-    job_memo = "missing `nodes` key-value pair in the request body";
+    job_error_info = "missing `nodes` key-value pair in the request body";
     goto end;
   }
   std::get<2>(cluster_info) = stoi(paras["nodes"].asString());
 	if(std::get<2>(cluster_info)<1 || std::get<2>(cluster_info)>256) {
-		job_memo = "nodes error(must in 1-256)";
+		job_error_info = "nodes error(must in 1-256)";
 		goto end;
 	}
 
   if (!paras.isMember("comps")) {
-    job_memo = "missing `comps` key-value pair in the request body";
+    job_error_info = "missing `comps` key-value pair in the request body";
     goto end;
   }
   std::get<3>(cluster_info) = stoi(paras["comps"].asString());
 	if(std::get<3>(cluster_info)<1 || std::get<3>(cluster_info)>256) {
-		job_memo = "comps error(must in 1-256)";
+		job_error_info = "comps error(must in 1-256)";
 		goto end;
 	}
 
   if (!paras.isMember("max_storage_size")) {
-    job_memo = "missing `max_storage_size` key-value pair in the request body";
+    job_error_info = "missing `max_storage_size` key-value pair in the request body";
     goto end;
   }
   std::get<4>(cluster_info) = stoi(paras["max_storage_size"].asString());
 
   if (!paras.isMember("max_connections")) {
-    job_memo = "missing `max_connections` key-value pair in the request body";
+    job_error_info = "missing `max_connections` key-value pair in the request body";
     goto end;
   }
   std::get<5>(cluster_info) = stoi(paras["max_connections"].asString());
 
   if (!paras.isMember("cpu_cores")) {
-    job_memo = "missing `cpu_cores` key-value pair in the request body";
+    job_error_info = "missing `cpu_cores` key-value pair in the request body";
     goto end;
   }
   std::get<6>(cluster_info) = stoi(paras["cpu_cores"].asString());
 
   if (!paras.isMember("innodb_size")) {
-    job_memo = "missing `innodb_size` key-value pair in the request body";
+    job_error_info = "missing `innodb_size` key-value pair in the request body";
     goto end;
   }
   std::get<7>(cluster_info) = stoi(paras["innodb_size"].asString());
 	if(std::get<7>(cluster_info)<1)	{
-		job_memo = "innodb_size error(must > 0)";
+		job_error_info = "innodb_size error(must > 0)";
 		goto end;
 	}
 
@@ -788,30 +737,30 @@ void ClusterMission::createCluster() {
 	/////////////////////////////////////////////////////////
 	if(std::get<0>(cluster_info) == "no_rep")	{
 		if(std::get<2>(cluster_info)!=1) {
-			job_memo = "error, nodes=1 in no_rep mode";
+			job_error_info = "error, nodes=1 in no_rep mode";
 			goto end;
 		}
 	}	else if(std::get<0>(cluster_info) == "mgr")	{
 		if(std::get<2>(cluster_info)<3 || std::get<2>(cluster_info)>256) {
-			job_memo = "error, nodes>=3 && nodes<=256 in mgr mode";
+			job_error_info = "error, nodes>=3 && nodes<=256 in mgr mode";
 			goto end;
 		}
 	}	else if(std::get<0>(cluster_info) == "rbr")	{
 		if(std::get<2>(cluster_info)<3 || std::get<2>(cluster_info)>256) {
-			job_memo = "error, nodes>=3 && nodes<=256 in rbr mode";
+			job_error_info = "error, nodes>=3 && nodes<=256 in rbr mode";
 			goto end;
 		}
 	}
 
   job_status = "ongoing";
-  job_memo = "create cluster start";
-  syslog(Logger::INFO, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  job_error_info = "create cluster start";
+  syslog(Logger::INFO, "%s", job_error_info.c_str());
+  update_operation_record();
 
   /////////////////////////////////////////////////////////
   // for install cluster cmd
 	if(!create_program_path()) {
-		job_memo = "create_cmd_path error";
+		job_error_info = "create_cmd_path error";
 		goto end;
 	}
 
@@ -825,13 +774,13 @@ void ClusterMission::createCluster() {
 	/////////////////////////////////////////////////////////
   //get machine and info
   if(!Machine_info::get_instance()->get_machines_info(vec_machine, set_machine)) {
-    job_memo = "error, no machine to install";
+    job_error_info = "error, no machine to install";
     goto end;
   }
 
   //check machine path
   if(!Machine_info::get_instance()->check_machines_path(vec_machine)) {
-    job_memo = "error, machine path must set first";
+    job_error_info = "error, machine path must set first";
     goto end;
   }
 
@@ -874,7 +823,7 @@ void ClusterMission::createCluster() {
     }
 
     if(!bGetTask){
-      job_memo = "error, no task to update machine path size";
+      job_error_info = "error, no task to update machine path size";
 			goto end;
     }
 
@@ -898,43 +847,44 @@ void ClusterMission::createCluster() {
     cluster_task->SetPara(vec_machine[i]->hostaddr.c_str(), root_node);
   }
 
-  job_memo = "update machine path size start";
-  syslog(Logger::INFO, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  job_error_info = "update machine path size start";
+  syslog(Logger::INFO, "%s", job_error_info.c_str());
+  update_operation_record();
   return;
 
 end:
   missiom_finish = true;
   job_status = "failed";
-  syslog(Logger::ERROR, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  syslog(Logger::ERROR, "%s", job_error_info.c_str());
+  update_operation_record();
 }
 
 void ClusterMission::deleteCluster() {
+  Json::Value paras;
 
   if (!super::get_body_json_document().isMember("paras")) {
-    setExtraErr("missing `paras` key-value pair in the request body");
-    return;
+    job_error_info = "missing `paras` key-value pair in the request body";
+    goto end;
   }
-  Json::Value paras = super::get_body_json_document()["paras"];
+  paras = super::get_body_json_document()["paras"];
 
   if (!paras.isMember("cluster_name")) {
-    job_memo = "missing `cluster_name` key-value pair in the request body";
+    job_error_info = "missing `cluster_name` key-value pair in the request body";
     goto end;
   }
   cluster_name = paras["cluster_name"].asString();
 
 	job_status = "ongoing";
-	job_memo = "delete cluster start";
-  syslog(Logger::INFO, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+	job_error_info = "delete cluster start";
+  syslog(Logger::INFO, "%s", job_error_info.c_str());
+  update_operation_record();
 
 	/////////////////////////////////////////////////////////
   //stop cluster working
 	System::get_instance()->set_cluster_mgr_working(false);
 	
 	if(!System::get_instance()->check_cluster_name(cluster_name))	{
-		job_memo = "error, cluster_name is no exist";
+		job_error_info = "error, cluster_name is no exist";
 		goto end;
 	}
 
@@ -944,28 +894,28 @@ void ClusterMission::deleteCluster() {
 end:
   missiom_finish = true;
   job_status = "failed";
-  syslog(Logger::ERROR, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  syslog(Logger::ERROR, "%s", job_error_info.c_str());
+  update_operation_record();
 }
 
 void ClusterMission::addShards() {
-
+  Json::Value paras;
 	std::set<std::string> set_machine;
 
   if (!super::get_body_json_document().isMember("paras")) {
-    setExtraErr("missing `paras` key-value pair in the request body");
-    return;
+    job_error_info = "missing `paras` key-value pair in the request body";
+    goto end;
   }
-  Json::Value paras = super::get_body_json_document()["paras"];
+  paras = super::get_body_json_document()["paras"];
 
   if (!paras.isMember("cluster_name")) {
-    job_memo = "missing `cluster_name` key-value pair in the request body";
+    job_error_info = "missing `cluster_name` key-value pair in the request body";
     goto end;
   }
   cluster_name = paras["cluster_name"].asString();
 
   if (!paras.isMember("shards")) {
-    job_memo = "missing `shards` key-value pair in the request body";
+    job_error_info = "missing `shards` key-value pair in the request body";
     goto end;
   }
   add_shards = stoi(paras["shards"].asString());
@@ -979,26 +929,26 @@ void ClusterMission::addShards() {
   }
 
   job_status = "ongoing";
-  job_memo = "add shards start";
-  syslog(Logger::INFO, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  job_error_info = "add shards start";
+  syslog(Logger::INFO, "%s", job_error_info.c_str());
+  update_operation_record();
 
 	if(!System::get_instance()->check_cluster_name(cluster_name))	{
-		job_memo = "error, cluster_name is no exist";
+		job_error_info = "error, cluster_name is no exist";
 		goto end;
 	}
 
 	/////////////////////////////////////////////////////////
 	// get cluster_info
 	if(!get_cluster_info(cluster_name))	{
-		job_memo = "get_cluster_info error";
+		job_error_info = "get_cluster_info error";
 		goto end;
 	}
 
   /////////////////////////////////////////////////////////
   // for install cluster cmd
 	if(!create_program_path()) {
-		job_memo = "create_cmd_path error";
+		job_error_info = "create_cmd_path error";
 		goto end;
 	}
 
@@ -1010,13 +960,13 @@ void ClusterMission::addShards() {
 	/////////////////////////////////////////////////////////
   //get machine and info
   if(!Machine_info::get_instance()->get_machines_info(vec_machine, set_machine)) {
-    job_memo = "error, no machine to install";
+    job_error_info = "error, no machine to install";
     goto end;
   }
 
   //check machine path
   if(!Machine_info::get_instance()->check_machines_path(vec_machine)) {
-    job_memo = "error, machine path must set first";
+    job_error_info = "error, machine path must set first";
     goto end;
   }
 
@@ -1057,7 +1007,7 @@ void ClusterMission::addShards() {
     }
 
     if(!bGetTask){
-      job_memo = "error, no task to update machine path size";
+      job_error_info = "error, no task to update machine path size";
 			goto end;
     }
 
@@ -1081,68 +1031,68 @@ void ClusterMission::addShards() {
     cluster_task->SetPara(vec_machine[i]->hostaddr.c_str(), root_node);
   }
 
-  job_memo = "update machine path size start";
-  syslog(Logger::INFO, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  job_error_info = "update machine path size start";
+  syslog(Logger::INFO, "%s", job_error_info.c_str());
+  update_operation_record();
   return;
 
 end:
   missiom_finish = true;
   job_status = "failed";
-  syslog(Logger::ERROR, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  syslog(Logger::ERROR, "%s", job_error_info.c_str());
+  update_operation_record();
 }
 
 void ClusterMission::deleteShard() {
-
+  Json::Value paras;
   std::vector<Tpye_Ip_Port> vec_storage_ip_port;
 
   if (!super::get_body_json_document().isMember("paras")) {
-    setExtraErr("missing `paras` key-value pair in the request body");
-    return;
+    job_error_info = "missing `paras` key-value pair in the request body";
+    goto end;
   }
-  Json::Value paras = super::get_body_json_document()["paras"];
+  paras = super::get_body_json_document()["paras"];
 
   if (!paras.isMember("cluster_name")) {
-    job_memo = "missing `cluster_name` key-value pair in the request body";
+    job_error_info = "missing `cluster_name` key-value pair in the request body";
     goto end;
   }
   cluster_name = paras["cluster_name"].asString();
 
   if (!paras.isMember("shard_name")) {
-    job_memo = "missing `shard_name` key-value pair in the request body";
+    job_error_info = "missing `shard_name` key-value pair in the request body";
     goto end;
   }
   shard_name = paras["shard_name"].asString();
 
 	job_status = "ongoing";
-	job_memo = "delete shard start";
-  syslog(Logger::INFO, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+	job_error_info = "delete shard start";
+  syslog(Logger::INFO, "%s", job_error_info.c_str());
+  update_operation_record();
 
 	/////////////////////////////////////////////////////////
   //stop cluster working
 	System::get_instance()->set_cluster_mgr_working(false);
 
 	if(!System::get_instance()->check_cluster_name(cluster_name))	{
-		job_memo = "error, cluster_name is no exist";
+		job_error_info = "error, cluster_name is no exist";
 		goto end;
 	}
 
 	if(!System::get_instance()->check_cluster_shard_name(cluster_name, shard_name))	{
-		job_memo = "error, shard_name is no exist";
+		job_error_info = "error, shard_name is no exist";
 		goto end;
 	}
 
 	if(!System::get_instance()->check_cluster_shard_more(cluster_name))	{
-		job_memo = "error, shard <= 1";
+		job_error_info = "error, shard <= 1";
 		goto end;
 	}
 
 	/////////////////////////////////////////////////////////
 	// get shards_ip_port by cluster_name and shard_name
 	if(!System::get_instance()->get_shards_ip_port(cluster_name, shard_name, vec_storage_ip_port)) {
-		job_memo = "get_shards_ip_port error";
+		job_error_info = "get_shards_ip_port error";
 		goto end;
 	}
 
@@ -1173,28 +1123,28 @@ void ClusterMission::deleteShard() {
 end:
   missiom_finish = true;
   job_status = "failed";
-  syslog(Logger::ERROR, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  syslog(Logger::ERROR, "%s", job_error_info.c_str());
+  update_operation_record();
 }
 
 void ClusterMission::addComps() {
-
+  Json::Value paras;
 	std::set<std::string> set_machine;
 
   if (!super::get_body_json_document().isMember("paras")) {
-    setExtraErr("missing `paras` key-value pair in the request body");
-    return;
+    job_error_info = "missing `paras` key-value pair in the request body";
+    goto end;
   }
-  Json::Value paras = super::get_body_json_document()["paras"];
+  paras = super::get_body_json_document()["paras"];
 
   if (!paras.isMember("cluster_name")) {
-    job_memo = "missing `cluster_name` key-value pair in the request body";
+    job_error_info = "missing `cluster_name` key-value pair in the request body";
     goto end;
   }
   cluster_name = paras["cluster_name"].asString();
 
   if (!paras.isMember("comps")) {
-    job_memo = "missing `comps` key-value pair in the request body";
+    job_error_info = "missing `comps` key-value pair in the request body";
     goto end;
   }
   add_comps = stoi(paras["comps"].asString());
@@ -1208,26 +1158,26 @@ void ClusterMission::addComps() {
   }
 
   job_status = "ongoing";
-  job_memo = "add comps start";
-  syslog(Logger::INFO, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  job_error_info = "add comps start";
+  syslog(Logger::INFO, "%s", job_error_info.c_str());
+  update_operation_record();
 
 	if(!System::get_instance()->check_cluster_name(cluster_name))	{
-		job_memo = "error, cluster_name is no exist";
+		job_error_info = "error, cluster_name is no exist";
 		goto end;
 	}
 
 	/////////////////////////////////////////////////////////
 	// get cluster_info
 	if(!get_cluster_info(cluster_name))	{
-		job_memo = "get_cluster_info error";
+		job_error_info = "get_cluster_info error";
 		goto end;
 	}
 
   /////////////////////////////////////////////////////////
   // for install cluster cmd
 	if(!create_program_path()) {
-		job_memo = "create_cmd_path error";
+		job_error_info = "create_cmd_path error";
 		goto end;
 	}
 
@@ -1237,13 +1187,13 @@ void ClusterMission::addComps() {
 	/////////////////////////////////////////////////////////
   //get machine and info
   if(!Machine_info::get_instance()->get_machines_info(vec_machine, set_machine)) {
-    job_memo = "error, no machine to install";
+    job_error_info = "error, no machine to install";
     goto end;
   }
 
   //check machine path
   if(!Machine_info::get_instance()->check_machines_path(vec_machine)) {
-    job_memo = "error, machine path must set first";
+    job_error_info = "error, machine path must set first";
     goto end;
   }
 
@@ -1284,7 +1234,7 @@ void ClusterMission::addComps() {
     }
 
     if(!bGetTask){
-      job_memo = "error, no task to update machine path size";
+      job_error_info = "error, no task to update machine path size";
 			goto end;
     }
 
@@ -1308,68 +1258,68 @@ void ClusterMission::addComps() {
     cluster_task->SetPara(vec_machine[i]->hostaddr.c_str(), root_node);
   }
 
-  job_memo = "update machine path size start";
-  syslog(Logger::INFO, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  job_error_info = "update machine path size start";
+  syslog(Logger::INFO, "%s", job_error_info.c_str());
+  update_operation_record();
   return;
 
 end:
   missiom_finish = true;
   job_status = "failed";
-  syslog(Logger::ERROR, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  syslog(Logger::ERROR, "%s", job_error_info.c_str());
+  update_operation_record();
 }
 
 void ClusterMission::deleteComp() {
-
+  Json::Value paras;
   std::vector<Tpye_Ip_Port> vec_comps_ip_port;
 
   if (!super::get_body_json_document().isMember("paras")) {
-    setExtraErr("missing `paras` key-value pair in the request body");
-    return;
+    job_error_info = "missing `paras` key-value pair in the request body";
+    goto end;
   }
-  Json::Value paras = super::get_body_json_document()["paras"];
+  paras = super::get_body_json_document()["paras"];
 
   if (!paras.isMember("cluster_name")) {
-    job_memo = "missing `cluster_name` key-value pair in the request body";
+    job_error_info = "missing `cluster_name` key-value pair in the request body";
     goto end;
   }
   cluster_name = paras["cluster_name"].asString();
 
   if (!paras.isMember("comp_name")) {
-    job_memo = "missing `comp_name` key-value pair in the request body";
+    job_error_info = "missing `comp_name` key-value pair in the request body";
     goto end;
   }
   comp_name = paras["comp_name"].asString();
 
 	job_status = "ongoing";
-	job_memo = "delete comp start";
-  syslog(Logger::INFO, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+	job_error_info = "delete comp start";
+  syslog(Logger::INFO, "%s", job_error_info.c_str());
+  update_operation_record();
 
 	/////////////////////////////////////////////////////////
   //stop cluster working
 	System::get_instance()->set_cluster_mgr_working(false);
 
 	if(!System::get_instance()->check_cluster_name(cluster_name))	{
-		job_memo = "error, cluster_name is no exist";
+		job_error_info = "error, cluster_name is no exist";
 		goto end;
 	}
 
 	if(!System::get_instance()->check_cluster_comp_name(cluster_name, comp_name)) {
-		job_memo = "error, comp_name is no exist";
+		job_error_info = "error, comp_name is no exist";
 		goto end;
 	}
 
 	if(!System::get_instance()->check_cluster_comp_more(cluster_name)) {
-		job_memo = "error, comp <= 1";
+		job_error_info = "error, comp <= 1";
 		goto end;
 	}
 
 	/////////////////////////////////////////////////////////
 	// get comps_ip_port by cluster_name  and comp_name
 	if(!System::get_instance()->get_comps_ip_port(cluster_name, comp_name, vec_comps_ip_port)) {
-		job_memo = "get_comps_ip_port error";
+		job_error_info = "get_comps_ip_port error";
 		goto end;
 	}
 
@@ -1400,24 +1350,24 @@ void ClusterMission::deleteComp() {
 end:
   missiom_finish = true;
   job_status = "failed";
-  syslog(Logger::ERROR, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  syslog(Logger::ERROR, "%s", job_error_info.c_str());
+  update_operation_record();
 }
 
 void ClusterMission::addNodes() {
-
+  Json::Value paras;
   std::set<std::string> set_machine;
   std::string backup_storage; //no used
   std::string shard_uuid;
 
   if (!super::get_body_json_document().isMember("paras")) {
-    setExtraErr("missing `paras` key-value pair in the request body");
-    return;
+    job_error_info = "missing `paras` key-value pair in the request body";
+    goto end;
   }
-  Json::Value paras = super::get_body_json_document()["paras"];
+  paras = super::get_body_json_document()["paras"];
 
   if (!paras.isMember("cluster_name")) {
-    job_memo = "missing `cluster_name` key-value pair in the request body";
+    job_error_info = "missing `cluster_name` key-value pair in the request body";
     goto end;
   }
   cluster_name = paras["cluster_name"].asString();
@@ -1430,12 +1380,12 @@ void ClusterMission::addNodes() {
   }
 
   if (!paras.isMember("nodes")) {
-    job_memo = "missing `nodes` key-value pair in the request body";
+    job_error_info = "missing `nodes` key-value pair in the request body";
     goto end;
   }
   add_nodes = stoi(paras["nodes"].asString());
 	if(add_nodes<1 || add_nodes>256) {
-		job_memo = "nodes error(must in 1-256)";
+		job_error_info = "nodes error(must in 1-256)";
 		goto end;
 	}
 
@@ -1448,24 +1398,24 @@ void ClusterMission::addNodes() {
   }
 
   job_status = "ongoing";
-  job_memo = "add nodes start";
-  syslog(Logger::INFO, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  job_error_info = "add nodes start";
+  syslog(Logger::INFO, "%s", job_error_info.c_str());
+  update_operation_record();
 
 	if(!System::get_instance()->check_cluster_name(cluster_name))	{
-		job_memo = "error, cluster_name is no exist";
+		job_error_info = "error, cluster_name is no exist";
 		goto end;
 	}
 
 	if(System::get_instance()->get_cluster_no_rep_mode(cluster_name)) {
-		job_memo = "error, add nodes must not in no_rep mode";
+		job_error_info = "error, add nodes must not in no_rep mode";
 		goto end;
 	}
 
 	/////////////////////////////////////////////////////////
 	// get cluster_info
 	if(!get_cluster_info(cluster_name))	{
-		job_memo = "get_cluster_info error";
+		job_error_info = "get_cluster_info error";
 		goto end;
 	}
 
@@ -1473,19 +1423,19 @@ void ClusterMission::addNodes() {
 	if(all_shard)	{
 		// get every shard_name
 		if(!System::get_instance()->get_cluster_shard_name(cluster_name, vec_shard_name)) {
-			job_memo = "get_cluster_shard_name error";
+			job_error_info = "get_cluster_shard_name error";
 			goto end;
 		}
 	}	else {
 		if(!System::get_instance()->check_cluster_shard_name(cluster_name, shard_name)) {
-			job_memo = "error, shard_name is no exist";
+			job_error_info = "error, shard_name is no exist";
 			goto end;
 		}
 		vec_shard_name.emplace_back(shard_name);
 	}
 
 	if(!System::get_instance()->get_backup_storage_string(backup_storage, backup_storage_id, backup_storage_str)) {
-		job_memo = "get_backup_storage error, create_backup_storage first";
+		job_error_info = "get_backup_storage error, create_backup_storage first";
 		goto end;
 	}
 
@@ -1497,13 +1447,13 @@ void ClusterMission::addNodes() {
 	/////////////////////////////////////////////////////////
   //get machine and info
   if(!Machine_info::get_instance()->get_machines_info(vec_machine, set_machine)) {
-    job_memo = "error, no machine to install";
+    job_error_info = "error, no machine to install";
     goto end;
   }
 
   //check machine path
   if(!Machine_info::get_instance()->check_machines_path(vec_machine)) {
-    job_memo = "error, machine path must set first";
+    job_error_info = "error, machine path must set first";
     goto end;
   }
 
@@ -1546,7 +1496,7 @@ void ClusterMission::addNodes() {
     }
 
     if(!bGetTask){
-      job_memo = "error, no task to update machine path size";
+      job_error_info = "error, no task to update machine path size";
 			goto end;
     }
 
@@ -1570,20 +1520,20 @@ void ClusterMission::addNodes() {
     cluster_task->SetPara(vec_machine[i]->hostaddr.c_str(), root_node);
   }
 
-  job_memo = "update machine path size start";
-  syslog(Logger::INFO, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  job_error_info = "update machine path size start";
+  syslog(Logger::INFO, "%s", job_error_info.c_str());
+  update_operation_record();
   return;
 
 end:
   missiom_finish = true;
   job_status = "failed";
-  syslog(Logger::ERROR, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  syslog(Logger::ERROR, "%s", job_error_info.c_str());
+  update_operation_record();
 }
 
 void ClusterMission::deleteNode() {
-
+  Json::Value paras;
   std::string strtmp;
   std::string group_seeds;
   std::size_t pos,len;
@@ -1591,61 +1541,61 @@ void ClusterMission::deleteNode() {
   ClusterRemoteTask *cluster_task;
 
   if (!super::get_body_json_document().isMember("paras")) {
-    setExtraErr("missing `paras` key-value pair in the request body");
-    return;
+    job_error_info = "missing `paras` key-value pair in the request body";
+    goto end;
   }
-  Json::Value paras = super::get_body_json_document()["paras"];
+  paras = super::get_body_json_document()["paras"];
 
   if (!paras.isMember("cluster_name")) {
-    job_memo = "missing `cluster_name` key-value pair in the request body";
+    job_error_info = "missing `cluster_name` key-value pair in the request body";
     goto end;
   }
   cluster_name = paras["cluster_name"].asString();
 
   if (!paras.isMember("shard_name")) {
-    job_memo = "missing `shard_name` key-value pair in the request body";
+    job_error_info = "missing `shard_name` key-value pair in the request body";
     goto end;
   }
   shard_name = paras["shard_name"].asString();
 
   if (!paras.isMember("hostaddr")) {
-    job_memo = "missing `hostaddr` key-value pair in the request body";
+    job_error_info = "missing `hostaddr` key-value pair in the request body";
     goto end;
   }
   ip_port.first = paras["hostaddr"].asString();
 
   if (!paras.isMember("port")) {
-    job_memo = "missing `shard_name` key-value pair in the request body";
+    job_error_info = "missing `shard_name` key-value pair in the request body";
     goto end;
   }
   ip_port.second = stoi(paras["port"].asString());
 
 	job_status = "ongoing";
-	job_memo = "delete node start";
-  syslog(Logger::INFO, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+	job_error_info = "delete node start";
+  syslog(Logger::INFO, "%s", job_error_info.c_str());
+  update_operation_record();
 
 	/////////////////////////////////////////////////////////
   //stop cluster working
 	System::get_instance()->set_cluster_mgr_working(false);
 
 	if(!System::get_instance()->check_cluster_name(cluster_name))	{
-		job_memo = "error, cluster_name is no exist";
+		job_error_info = "error, cluster_name is no exist";
 		goto end;
 	}
 
 	if(System::get_instance()->get_cluster_no_rep_mode(cluster_name)) {
-		job_memo = "error, delete node must not in no_rep mode";
+		job_error_info = "error, delete node must not in no_rep mode";
 		goto end;
 	}
 
 	if(!System::get_instance()->check_cluster_shard_name(cluster_name, shard_name))	{
-		job_memo = "error, shard_name is no exist";
+		job_error_info = "error, shard_name is no exist";
 		goto end;
 	}
 
 	if(!System::get_instance()->check_cluster_shard_node_more(cluster_name, shard_name)) {
-		job_memo = "error, node <= 1";
+		job_error_info = "error, node <= 1";
 		goto end;
 	}
 
@@ -1672,45 +1622,45 @@ void ClusterMission::deleteNode() {
 end:
   missiom_finish = true;
   job_status = "failed";
-  syslog(Logger::ERROR, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  syslog(Logger::ERROR, "%s", job_error_info.c_str());
+  update_operation_record();
 }
 
 void ClusterMission::backupCluster(){
-
+  Json::Value paras;
   std::string backup_storage; //no used
 
   if (!super::get_body_json_document().isMember("paras")) {
-    setExtraErr("missing `paras` key-value pair in the request body");
-    return;
+    job_error_info = "missing `paras` key-value pair in the request body";
+    goto end;
   }
-  Json::Value paras = super::get_body_json_document()["paras"];
+  paras = super::get_body_json_document()["paras"];
 
   if (!paras.isMember("backup_cluster_name")) {
-    job_memo = "missing `backup_cluster_name` key-value pair in the request body";
+    job_error_info = "missing `backup_cluster_name` key-value pair in the request body";
     goto end;
   }
   backup_cluster_name = paras["backup_cluster_name"].asString();
 
 	job_status = "ongoing";
-	job_memo = "backup cluster start";
-  syslog(Logger::INFO, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+	job_error_info = "backup cluster start";
+  syslog(Logger::INFO, "%s", job_error_info.c_str());
+  update_operation_record();
 
   /////////////////////////////////////////////////////////
 	if(!System::get_instance()->check_cluster_name(backup_cluster_name)) {
-		job_memo = "error, backup_cluster_name is no exist";
+		job_error_info = "error, backup_cluster_name is no exist";
 		goto end;
 	}
 
 	if(!System::get_instance()->get_backup_storage_string(backup_storage, backup_storage_id, backup_storage_str))	{
-		job_memo = "get_backup_storage error, create_backup_storage first";
+		job_error_info = "get_backup_storage error, create_backup_storage first";
 		goto end;
 	}
 
   // get every shard_name
   if(!System::get_instance()->get_cluster_shard_name(backup_cluster_name, vec_shard_name)) {
-    job_memo = "get_cluster_shard_name error";
+    job_error_info = "get_cluster_shard_name error";
     goto end;
   }
 
@@ -1733,35 +1683,35 @@ void ClusterMission::backupCluster(){
 end:
   missiom_finish = true;
   job_status = "failed";
-  syslog(Logger::ERROR, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  syslog(Logger::ERROR, "%s", job_error_info.c_str());
+  update_operation_record();
 }
 
 void ClusterMission::restoreNewCluster(){
-
+  Json::Value paras;
   std::string backup_storage; //no used
   std::set<std::string> set_machine;
 
   if (!super::get_body_json_document().isMember("paras")) {
-    setExtraErr("missing `paras` key-value pair in the request body");
-    return;
+    job_error_info = "missing `paras` key-value pair in the request body";
+    goto end;
   }
-  Json::Value paras = super::get_body_json_document()["paras"];
+  paras = super::get_body_json_document()["paras"];
 
   if (!paras.isMember("backup_cluster_name")) {
-    job_memo = "missing `backup_cluster_name` key-value pair in the request body";
+    job_error_info = "missing `backup_cluster_name` key-value pair in the request body";
     goto end;
   }
   backup_cluster_name = paras["backup_cluster_name"].asString();
 
   if (!paras.isMember("nick_name")) {
-    job_memo = "missing `nick_name` key-value pair in the request body";
+    job_error_info = "missing `nick_name` key-value pair in the request body";
     goto end;
   }
   nick_name = paras["nick_name"].asString();
 
   if (!paras.isMember("timestamp")) {
-    job_memo = "missing `timestamp` key-value pair in the request body";
+    job_error_info = "missing `timestamp` key-value pair in the request body";
     goto end;
   }
   timestamp = paras["timestamp"].asString();
@@ -1775,32 +1725,32 @@ void ClusterMission::restoreNewCluster(){
   }
 
 	job_status = "ongoing";
-	job_memo = "restore new cluster start";
-  syslog(Logger::INFO, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+	job_error_info = "restore new cluster start";
+  syslog(Logger::INFO, "%s", job_error_info.c_str());
+  update_operation_record();
 
   /////////////////////////////////////////////////////////
 	if(!System::get_instance()->check_cluster_name(backup_cluster_name)) {
-		job_memo = "error, backup_cluster_name is no exist";
+		job_error_info = "error, backup_cluster_name is no exist";
 		goto end;
 	}
 
 	if(!System::get_instance()->get_backup_storage_string(backup_storage, backup_storage_id, backup_storage_str))	{
-		job_memo = "get_backup_storage error, create_backup_storage first";
+		job_error_info = "get_backup_storage error, create_backup_storage first";
 		goto end;
 	}
 
 	/////////////////////////////////////////////////////////
 	// get backup_info from metadata
 	if(!System::get_instance()->get_backup_info_from_metadata(backup_cluster_name, timestamp, vec_backup_shard_name))	{
-		job_memo = "get_backup_info error, maybe timestamp too early";
+		job_error_info = "get_backup_info error, maybe timestamp too early";
 		goto end;
 	}
 
 	/////////////////////////////////////////////////////////
 	// get cluster_info
 	if(!get_cluster_info(backup_cluster_name))	{
-		job_memo = "get_cluster_info error";
+		job_error_info = "get_cluster_info error";
 		goto end;
 	}
 	std::get<1>(cluster_info) = vec_backup_shard_name.size();
@@ -1808,7 +1758,7 @@ void ClusterMission::restoreNewCluster(){
   /////////////////////////////////////////////////////////
   // for install cluster cmd
 	if(!create_program_path()) {
-		job_memo = "create_cmd_path error";
+		job_error_info = "create_cmd_path error";
 		goto end;
 	}
 
@@ -1822,13 +1772,13 @@ void ClusterMission::restoreNewCluster(){
 	/////////////////////////////////////////////////////////
   //get machine and info
   if(!Machine_info::get_instance()->get_machines_info(vec_machine, set_machine)) {
-    job_memo = "error, no machine to install";
+    job_error_info = "error, no machine to install";
     goto end;
   }
 
   //check machine path
   if(!Machine_info::get_instance()->check_machines_path(vec_machine)) {
-    job_memo = "error, machine path must set first";
+    job_error_info = "error, machine path must set first";
     goto end;
   }
 
@@ -1871,7 +1821,7 @@ void ClusterMission::restoreNewCluster(){
     }
 
     if(!bGetTask){
-      job_memo = "error, no task to update machine path size";
+      job_error_info = "error, no task to update machine path size";
 			goto end;
     }
 
@@ -1895,16 +1845,16 @@ void ClusterMission::restoreNewCluster(){
     cluster_task->SetPara(vec_machine[i]->hostaddr.c_str(), root_node);
   }
 
-  job_memo = "update machine path size start";
-  syslog(Logger::INFO, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  job_error_info = "update machine path size start";
+  syslog(Logger::INFO, "%s", job_error_info.c_str());
+  update_operation_record();
   return;
 
 end:
   missiom_finish = true;
   job_status = "failed";
-  syslog(Logger::ERROR, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  syslog(Logger::ERROR, "%s", job_error_info.c_str());
+  update_operation_record();
 }
 
 void ClusterMission::createStorageInfo() {
@@ -1919,7 +1869,7 @@ void ClusterMission::createStorageInfo() {
 	for(int i=0; i<shards; i++)	{
 		std::vector<Tpye_Ip_Port_Paths> vec_storage_ip_port_paths;
 		if(!Machine_info::get_instance()->get_storage_nodes(nodes, nodes_select, vec_storage_ip_port_paths, vec_machine))	{
-			job_memo = "Machine_info, no available machine";
+			job_error_info = "Machine_info, no available machine";
 			goto end;
 		}
 		vec_shard_storage_ip_port_paths.emplace_back(vec_storage_ip_port_paths);
@@ -1935,14 +1885,14 @@ void ClusterMission::createStorageInfo() {
   task_wait = shards*nodes;
   task_incomplete = task_wait;
 
-	job_memo = "install storage start";
-  syslog(Logger::INFO, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+	job_error_info = "install storage start";
+  syslog(Logger::INFO, "%s", job_error_info.c_str());
+  update_operation_record();
   return;
 
 end:
-  syslog(Logger::ERROR, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  syslog(Logger::ERROR, "%s", job_error_info.c_str());
+  update_operation_record();
   roll_back_record();
 }
 
@@ -1964,7 +1914,7 @@ void ClusterMission::createComputerInfo() {
 	///////////////////////////////////////////////////////////////////////////////
 	// get computer 
 	if(!Machine_info::get_instance()->get_computer_nodes(comps, nodes_select, vec_comps_ip_port_paths, vec_machine)) {
-		job_memo = "Machine_info, no available machine";
+		job_error_info = "Machine_info, no available machine";
 		goto end;
 	}
 	for(int i=0; i<comps; i++)
@@ -1979,14 +1929,14 @@ void ClusterMission::createComputerInfo() {
   task_incomplete = task_wait;
 
   job_status = "ongoing";
-	job_memo = "install computer start";
-  syslog(Logger::INFO, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+	job_error_info = "install computer start";
+  syslog(Logger::INFO, "%s", job_error_info.c_str());
+  update_operation_record();
   return;
 
 end:
-  syslog(Logger::ERROR, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  syslog(Logger::ERROR, "%s", job_error_info.c_str());
+  update_operation_record();
   roll_back_record();
 }
 
@@ -2041,7 +1991,7 @@ void ClusterMission::startClusterInfo() {
 	//create meta json
 	std::vector<Tpye_Ip_Port_User_Pwd> meta;
 	if(!System::get_instance()->get_meta_info(meta)) {
-		job_memo = "get_meta_info error";
+		job_error_info = "get_meta_info error";
 		goto end;
 	}
 
@@ -2077,7 +2027,7 @@ void ClusterMission::startClusterInfo() {
 
 	pfd = popen(cmd.c_str(), "r");
 	if(!pfd) {
-		job_memo = "startClusterInfo start cmd error";
+		job_error_info = "startClusterInfo start cmd error";
 		goto end;
 	}
 	while(fgets(buf, 256, pfd)!=NULL)	{
@@ -2096,19 +2046,19 @@ void ClusterMission::startClusterInfo() {
 	}
 
 	if(retry<0)	{
-		job_memo = "cluster start error";
+		job_error_info = "cluster start error";
 		goto end;
 	}
 
 	/////////////////////////////////////////////////////////
 	// update cluster info
 	if(!updateClusterInfo()) {
-		job_memo = "update cluster info error";
+		job_error_info = "update cluster info error";
 		goto end;
 	}
 
   sleep(thread_work_interval * 3);  //wait cluster shard update
-  syslog(Logger::INFO, "create cluster succeed : %s", cluster_name.c_str());
+  syslog(Logger::INFO, "create cluster successfully : %s", cluster_name.c_str());
 
   if(request_type == kRestoreNewClusterType) {
     restoreCluster();
@@ -2117,14 +2067,15 @@ void ClusterMission::startClusterInfo() {
 
   missiom_finish = true;
   job_status = "done";
-  job_memo = cluster_name;
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  job_error_info = "create cluster successfully";
+  System::get_instance()->get_cluster_info(cluster_name, job_memo_json);
+  update_operation_record();
   delete_roll_back_record();
   return;
 
 end:
-  syslog(Logger::ERROR, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  syslog(Logger::ERROR, "%s", job_error_info.c_str());
+  update_operation_record();
   roll_back_record();
 }
 
@@ -2181,7 +2132,7 @@ void ClusterMission::addShardsInfo() {
 	for(int i=0; i<add_shards; i++)	{
 		std::vector<Tpye_Ip_Port_Paths> vec_storage_ip_port_paths;
 		if(!Machine_info::get_instance()->get_storage_nodes(nodes, nodes_select, vec_storage_ip_port_paths, vec_machine))	{
-			job_memo = "Machine_info, no available machine";
+			job_error_info = "Machine_info, no available machine";
 			goto end;
 		}
 		vec_shard_storage_ip_port_paths.emplace_back(vec_storage_ip_port_paths);
@@ -2197,14 +2148,14 @@ void ClusterMission::addShardsInfo() {
   task_wait = add_shards*nodes;
   task_incomplete = task_wait;
 
-	job_memo = "install storage start";
-  syslog(Logger::INFO, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+	job_error_info = "install storage start";
+  syslog(Logger::INFO, "%s", job_error_info.c_str());
+  update_operation_record();
   return;
 
 end:
-  syslog(Logger::ERROR, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  syslog(Logger::ERROR, "%s", job_error_info.c_str());
+  update_operation_record();
   roll_back_record();
 }
 
@@ -2254,7 +2205,7 @@ void ClusterMission::startShardsInfo() {
 	//create meta json
 	std::vector<Tpye_Ip_Port_User_Pwd> meta;
 	if(!System::get_instance()->get_meta_info(meta)) {
-		job_memo = "get_meta_info error";
+		job_error_info = "get_meta_info error";
 		goto end;
 	}
 
@@ -2293,7 +2244,7 @@ void ClusterMission::startShardsInfo() {
 
 	pfd = popen(cmd.c_str(), "r");
 	if(!pfd) {
-		job_memo = "startShardsInfo start cmd error";
+		job_error_info = "startShardsInfo start cmd error";
 		goto end;
 	}
 	while(fgets(buf, 256, pfd)!=NULL)	{
@@ -2320,27 +2271,29 @@ void ClusterMission::startShardsInfo() {
 	}
 
 	if(retry<0)	{
-		job_memo = "shard start error";
+		job_error_info = "shard start error";
 		goto end;
 	}
 
   missiom_finish = true;
   job_status = "done";
-	job_memo = "";
+  job_error_info = "";
 	for(auto &shard_name: vec_shard_name)
 	{
-		if(job_memo.length()>0)
-			job_memo += ";";
-		job_memo += shard_name;
+		if(job_error_info.length()>0)
+			job_error_info += ";";
+		job_error_info += shard_name;
 	}
-  syslog(Logger::INFO, "add shards succeed : %s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  syslog(Logger::INFO, "add shards successfully: %s", job_error_info.c_str());
+  job_error_info = "add shards successfully";
+  System::get_instance()->get_cluster_shard_info(cluster_name, vec_shard_name, job_memo_json);
+  update_operation_record();
   delete_roll_back_record();
   return;
 
 end:
-  syslog(Logger::ERROR, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  syslog(Logger::ERROR, "%s", job_error_info.c_str());
+  update_operation_record();
   roll_back_record();
 }
 
@@ -2367,7 +2320,7 @@ void ClusterMission::addCompsInfo() {
 	///////////////////////////////////////////////////////////////////////////////
 	// get computer 
 	if(!Machine_info::get_instance()->get_computer_nodes(add_comps, nodes_select, vec_comps_ip_port_paths, vec_machine)) {
-		job_memo = "Machine_info, no available machine";
+		job_error_info = "Machine_info, no available machine";
 		goto end;
 	}
 	for(int i=0; i<add_comps; i++)
@@ -2382,14 +2335,14 @@ void ClusterMission::addCompsInfo() {
   task_incomplete = task_wait;
 
   job_status = "ongoing";
-	job_memo = "install computer start";
-  syslog(Logger::INFO, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+	job_error_info = "install computer start";
+  syslog(Logger::INFO, "%s", job_error_info.c_str());
+  update_operation_record();
   return;
 
 end:
-  syslog(Logger::ERROR, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  syslog(Logger::ERROR, "%s", job_error_info.c_str());
+  update_operation_record();
   roll_back_record();
 }
 
@@ -2417,7 +2370,7 @@ void ClusterMission::startCompsInfo() {
 	//create meta json
 	std::vector<Tpye_Ip_Port_User_Pwd> meta;
 	if(!System::get_instance()->get_meta_info(meta)) {
-		job_memo = "get_meta_info error";
+		job_error_info = "get_meta_info error";
 		goto end;
 	}
 
@@ -2456,7 +2409,7 @@ void ClusterMission::startCompsInfo() {
 
 	pfd = popen(cmd.c_str(), "r");
 	if(!pfd) {
-		job_memo = "startCompsInfo start cmd error";
+		job_error_info = "startCompsInfo start cmd error";
 		goto end;
 	}
 	while(fgets(buf, 256, pfd)!=NULL)	{
@@ -2483,27 +2436,29 @@ void ClusterMission::startCompsInfo() {
 	}
 
 	if(retry<0)	{
-		job_memo = "comps start error";
+		job_error_info = "comps start error";
 		goto end;
 	}
 
   missiom_finish = true;
   job_status = "done";
-	job_memo = "";
+	job_error_info = "";
 	for(auto &comp_name: vec_comp_name)
 	{
-		if(job_memo.length()>0)
-			job_memo += ";";
-		job_memo += comp_name;
+		if(job_error_info.length()>0)
+			job_error_info += ";";
+		job_error_info += comp_name;
 	}
-  syslog(Logger::INFO, "add comps succeed : %s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  syslog(Logger::INFO, "add comps successfully: %s", job_error_info.c_str());
+  job_error_info = "add comps successfully";
+  System::get_instance()->get_cluster_comp_info(cluster_name, vec_comp_name, job_memo_json);
+  update_operation_record();
   delete_roll_back_record();
   return;
 
 end:
-  syslog(Logger::ERROR, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  syslog(Logger::ERROR, "%s", job_error_info.c_str());
+  update_operation_record();
   roll_back_record();
 }
 
@@ -2574,8 +2529,8 @@ void ClusterMission::create_shard_nodes(std::vector<Tpye_Ip_Port_Paths> &storage
 	// get shard_uuid
   strtmp = "group_replication_group_name";
 	if(!System::get_instance()->get_cluster_shard_variable(cluster_name, shard_name, strtmp, shard_uuid))	{
-		job_memo = "get_cluster_shard_variable error";
-    syslog(Logger::ERROR, "%s", job_memo.c_str());
+		job_error_info = "get_cluster_shard_variable error";
+    syslog(Logger::ERROR, "%s", job_error_info.c_str());
     return;
 	}
 
@@ -2939,9 +2894,9 @@ void ClusterMission::stop_cluster() {
 
   missiom_finish = true;
   job_status = "done";
-  job_memo = "delete cluster succeed";
-  syslog(Logger::INFO, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  job_error_info = "delete cluster successfully";
+  syslog(Logger::INFO, "%s", job_error_info.c_str());
+  update_operation_record();
   System::get_instance()->set_cluster_mgr_working(true);
 }
 
@@ -2954,9 +2909,9 @@ void ClusterMission::stop_shard(){
 
   missiom_finish = true;
   job_status = "done";
-  job_memo = "delete shard succeed";
-  syslog(Logger::INFO, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  job_error_info = "delete shard successfully";
+  syslog(Logger::INFO, "%s", job_error_info.c_str());
+  update_operation_record();
   System::get_instance()->set_cluster_mgr_working(true);
 }
 
@@ -2969,9 +2924,9 @@ void ClusterMission::stop_comp(){
 
   missiom_finish = true;
   job_status = "done";
-  job_memo = "delete comp succeed";
-  syslog(Logger::INFO, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  job_error_info = "delete comp successfully";
+  syslog(Logger::INFO, "%s", job_error_info.c_str());
+  update_operation_record();
   System::get_instance()->set_cluster_mgr_working(true);
 }
 
@@ -2982,7 +2937,7 @@ void ClusterMission::update_backup_cluster() {
 
   job_status = "failed";
   if(task_incomplete){
-    job_memo = "backup cluster error";
+    job_error_info = "backup cluster error";
     goto end;
   }
 
@@ -2992,21 +2947,22 @@ void ClusterMission::update_backup_cluster() {
   syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
 
   if(System::get_instance()->execute_metadate_opertation(SQLCOM_INSERT, str_sql))	{
-    job_memo = "insert cluster_backups error";
+    job_error_info = "insert cluster_backups error";
     goto end;
   }
 
   missiom_finish = true;
   job_status = "done";
-  syslog(Logger::INFO, "backup cluster succeed: %s", timestamp.c_str());
-  job_memo = timestamp;
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  syslog(Logger::INFO, "backup cluster successfully: %s", timestamp.c_str());
+  job_error_info = "backup cluster successfully";
+  job_memo_json["timestamp"] = timestamp;
+  update_operation_record();
   return;
 
 end:
   missiom_finish = true;
-  syslog(Logger::INFO, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  syslog(Logger::INFO, "%s", job_error_info.c_str());
+  update_operation_record();
 }
 
 void ClusterMission::update_backup_nodes(){
@@ -3016,7 +2972,7 @@ void ClusterMission::update_backup_nodes(){
 
   job_status = "failed";
   if(task_incomplete){
-    job_memo = "backup nodes error";
+    job_error_info = "backup nodes error";
     goto end;
   }
 
@@ -3027,7 +2983,7 @@ void ClusterMission::update_backup_nodes(){
     syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
 
     if(System::get_instance()->execute_metadate_opertation(SQLCOM_INSERT, str_sql))	{
-      job_memo = "insert cluster_backups error";
+      job_error_info = "insert cluster_backups error";
       goto end;
     }
   }
@@ -3036,7 +2992,7 @@ void ClusterMission::update_backup_nodes(){
 		std::vector<Tpye_Ip_Port_Paths> vec_storage_ip_port_paths;
 		//get storage ip and port
 		if(!Machine_info::get_instance()->get_storage_nodes(add_nodes, nodes_select, vec_storage_ip_port_paths, vec_machine))	{
-			job_memo = "Machine_info, no available machine";
+			job_error_info = "Machine_info, no available machine";
 			goto end;
 		}
 		vec_shard_storage_ip_port_paths.emplace_back(vec_storage_ip_port_paths);
@@ -3051,15 +3007,15 @@ void ClusterMission::update_backup_nodes(){
   task_wait = vec_shard_name.size()*add_nodes;
   task_incomplete = task_wait;
 
-	job_memo = "install storage start";
-  syslog(Logger::INFO, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+	job_error_info = "install storage start";
+  syslog(Logger::INFO, "%s", job_error_info.c_str());
+  update_operation_record();
   return;
 
 end:
   missiom_finish = true;
-  syslog(Logger::INFO, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  syslog(Logger::INFO, "%s", job_error_info.c_str());
+  update_operation_record();
 }
 
 void ClusterMission::backup_cluster() {
@@ -3070,7 +3026,7 @@ void ClusterMission::backup_cluster() {
 	/////////////////////////////////////////////////////////
 	// get one node from erver shard
 	if(!System::get_instance()->get_shard_info_for_backup(backup_cluster_name, cluster_id, vec_shard_id_ip_port_id)){
-		job_memo = "get_shard_info_for_backup error";
+		job_error_info = "get_shard_info_for_backup error";
 		goto end;
 	}
 
@@ -3078,7 +3034,7 @@ void ClusterMission::backup_cluster() {
 	// backup every shard
 	for(auto &shard_id_ip_port_id: vec_shard_id_ip_port_id)	{
 		if(!backup_shard_node(cluster_id, shard_id_ip_port_id))	{
-			job_memo = "backup_shard_node error";
+			job_error_info = "backup_shard_node error";
 			goto end;
 		}
 
@@ -3095,8 +3051,8 @@ void ClusterMission::backup_cluster() {
 end:
   missiom_finish = true;
   job_status = "failed";
-  syslog(Logger::INFO, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  syslog(Logger::INFO, "%s", job_error_info.c_str());
+  update_operation_record();
 }
 
 void ClusterMission::backup_nodes() {
@@ -3105,29 +3061,29 @@ void ClusterMission::backup_nodes() {
 	get_datatime(start_time);
 
 	if(all_shard)	{
-    job_memo = "backup cluster working";
+    job_error_info = "backup cluster working";
     // get one node from erver shard
     if(!System::get_instance()->get_shard_info_for_backup(cluster_name, cluster_id, vec_shard_id_ip_port_id)){
-      job_memo = "get_shard_info_for_backup error";
+      job_error_info = "get_shard_info_for_backup error";
       goto end;
     }
 	}	else {
     Tpye_Shard_Id_Ip_Port_Id shard_id_ip_port_id;
-		job_memo = "backup shard working";
+		job_error_info = "backup shard working";
     // get one node from a shard
 		if(!System::get_instance()->get_node_info_for_backup(cluster_name, shard_name, cluster_id, shard_id_ip_port_id)) {
-      job_memo = "get_node_info_for_backup error";
+      job_error_info = "get_node_info_for_backup error";
       goto end;
     }
     vec_shard_id_ip_port_id.emplace_back(shard_id_ip_port_id);
 	}
-  syslog(Logger::INFO, "%s", job_memo.c_str());
+  syslog(Logger::INFO, "%s", job_error_info.c_str());
 
 	///////////////////////////////////////////////////////////////////////////////
 	// backup every shard
 	for(auto &shard_id_ip_port_id: vec_shard_id_ip_port_id)	{
 		if(!backup_shard_node(cluster_id, shard_id_ip_port_id))	{
-			job_memo = "backup_shard_node error";
+			job_error_info = "backup_shard_node error";
 			goto end;
 		}
 
@@ -3144,8 +3100,8 @@ void ClusterMission::backup_nodes() {
 end:
   missiom_finish = true;
   job_status = "failed";
-  syslog(Logger::INFO, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  syslog(Logger::INFO, "%s", job_error_info.c_str());
+  update_operation_record();
 }
 
 bool ClusterMission::backup_shard_node(std::string &cluster_id, Tpye_Shard_Id_Ip_Port_Id &shard_id_ip_port_id) {
@@ -3212,22 +3168,22 @@ void ClusterMission::restoreCluster() {
   std::string shard_map, meta_str;
   Tpye_Ip_Port_User_Pwd meta_ip_port;
 
-  job_memo = "restoreCluster start";
-  syslog(Logger::INFO, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  job_error_info = "restoreCluster start";
+  syslog(Logger::INFO, "%s", job_error_info.c_str());
+  update_operation_record();
 	System::get_instance()->set_cluster_mgr_working(false);
 
 	/////////////////////////////////////////////////////////
 	// get all storage nodes from erver shard
 	if(!System::get_instance()->get_shard_ip_port_restore(cluster_name, vec_vec_storage_ip_port))	{
-		job_memo = "get get_shard_ip_port_restore error";
+		job_error_info = "get get_shard_ip_port_restore error";
 		goto end;
 	}
 
 	/////////////////////////////////////////////////////////
 	// get all comps
 	if(!System::get_instance()->get_comps_ip_port_restore(cluster_name, vec_computer_ip_port)) {
-		job_memo = "get comps_ip_port_restore error";
+		job_error_info = "get comps_ip_port_restore error";
 		goto end;
 	}
 
@@ -3235,7 +3191,7 @@ void ClusterMission::restoreCluster() {
 	// get shard map
 	if(!System::get_instance()->get_shard_map_for_restore(backup_cluster_name, cluster_name, shard_map))
 	{
-		job_memo = "get_shard_map_for_restore error";
+		job_error_info = "get_shard_map_for_restore error";
 		goto end;
 	}
 
@@ -3243,7 +3199,7 @@ void ClusterMission::restoreCluster() {
 	// get master meta
 	if(!System::get_instance()->get_meta_master(meta_ip_port))
 	{
-		job_memo = "get_meta_master error";
+		job_error_info = "get_meta_master error";
 		goto end;
 	}
   meta_str = "pgx:pgx_pwd@\\(" + std::get<0>(meta_ip_port) + ":" 
@@ -3252,13 +3208,13 @@ void ClusterMission::restoreCluster() {
 	/////////////////////////////////////////////////////////
 	// restore every shard
 	for(int i=0; i<vec_vec_storage_ip_port.size(); i++) {
-		job_memo = "restore " + vec_backup_shard_name[i] + " working";
-		syslog(Logger::INFO, "%s", job_memo.c_str());
+		job_error_info = "restore " + vec_backup_shard_name[i] + " working";
+		syslog(Logger::INFO, "%s", job_error_info.c_str());
 
 		for(auto &ip_port: vec_vec_storage_ip_port[i]) {
 			syslog(Logger::INFO, "restore shard node working");
 			if(!restore_storage(vec_backup_shard_name[i], ip_port)) {
-				job_memo = "job_restore_storage error";
+				job_error_info = "job_restore_storage error";
 				goto end;
 			}
 		}
@@ -3269,7 +3225,7 @@ void ClusterMission::restoreCluster() {
 	for(auto &ip_port: vec_computer_ip_port) {
 		syslog(Logger::INFO, "restore computer node working");
 		if(!restore_computer(shard_map, meta_str, ip_port)) {
-			job_memo = "job_restore_computer error";
+			job_error_info = "job_restore_computer error";
 			goto end;
 		}
 	}
@@ -3280,8 +3236,8 @@ void ClusterMission::restoreCluster() {
   return;
 
 end:
-  syslog(Logger::ERROR, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  syslog(Logger::ERROR, "%s", job_error_info.c_str());
+  update_operation_record();
   roll_back_record();
 }
 
@@ -3391,21 +3347,22 @@ void ClusterMission::updateRestoreInfo() {
 	}
 
 	if(retry<0) {
-		job_memo = "update_instance_cluster_info timeout";
+		job_error_info = "update_instance_cluster_info timeout";
 		goto end;
 	}
 
   missiom_finish = true;
 	job_status = "done";
-  syslog(Logger::INFO, "restore new cluster succeed: %s", cluster_name.c_str());
-  job_memo = cluster_name;
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  syslog(Logger::INFO, "restore new cluster successfully: %s", cluster_name.c_str());
+  job_error_info = "restore new cluster successfully";
+  System::get_instance()->get_cluster_info(cluster_name, job_memo_json);
+  update_operation_record();
   delete_roll_back_record();
   return;
 
 end:
-  syslog(Logger::ERROR, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  syslog(Logger::ERROR, "%s", job_error_info.c_str());
+  update_operation_record();
   roll_back_record();
 }
 
@@ -3415,7 +3372,7 @@ void ClusterMission::restoreNodes() {
 		for(auto &ip_port_paths: vec_shard_storage_ip_port_paths[i]) {
 			Tpye_Ip_Port ip_port = std::make_pair(std::get<0>(ip_port_paths), std::get<1>(ip_port_paths));
 			if(!restore_storage(vec_shard_name[i], ip_port)){
-				job_memo = "restore_storage error";
+				job_error_info = "restore_storage error";
 				goto end;
 			}
 		}
@@ -3425,14 +3382,14 @@ void ClusterMission::restoreNodes() {
   task_wait = vec_shard_storage_ip_port_paths.size()*vec_shard_storage_ip_port_paths[0].size();
   task_incomplete = task_wait;
 
-	job_memo = "restore storage start";
-  syslog(Logger::INFO, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+	job_error_info = "restore storage start";
+  syslog(Logger::INFO, "%s", job_error_info.c_str());
+  update_operation_record();
   return;
 
 end:
-  syslog(Logger::ERROR, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  syslog(Logger::ERROR, "%s", job_error_info.c_str());
+  update_operation_record();
   roll_back_record();
 }
 
@@ -3448,8 +3405,7 @@ void ClusterMission::updateRestoreNodesInfo() {
     roll_back["job_type"] = "add_nodes";
     roll_back["cluster_name"] = cluster_name;
     roll_back["shard_name"] = vec_shard_name[i];
-  	for(int j=0; j<vec_shard_storage_ip_port_paths[i].size(); j++)
-		{
+  	for(int j=0; j<vec_shard_storage_ip_port_paths[i].size(); j++) {
 			strtmp = "ip" + std::to_string(j);
       roll_back[strtmp] = std::get<0>(vec_shard_storage_ip_port_paths[i][j]);
 			strtmp = "port" + std::to_string(j);
@@ -3460,7 +3416,7 @@ void ClusterMission::updateRestoreNodesInfo() {
     // get old group_seeds
     strtmp = "group_replication_group_seeds";
     if(!System::get_instance()->get_cluster_shard_variable(cluster_name, vec_shard_name[i], strtmp, group_seeds)) {
-      job_memo = "get_cluster_shard_variable error";
+      job_error_info = "get_cluster_shard_variable error";
       goto end;
     }
 
@@ -3472,7 +3428,7 @@ void ClusterMission::updateRestoreNodesInfo() {
 
     // add new nodes to shard
     if(!System::get_instance()->add_shard_nodes(cluster_name, vec_shard_name[i], vec_ip_port_user_pwd)) {
-      job_memo = "job_add_shard_node error";
+      job_error_info = "job_add_shard_node error";
       goto end;
     }
 
@@ -3487,14 +3443,14 @@ void ClusterMission::updateRestoreNodesInfo() {
       }
 
       if(retry<0) {
-        job_memo = "check_cluster_shard_ip_port failed";
+        job_error_info = "check_cluster_shard_ip_port failed";
         goto end;
       }
     }
 
 	  // update group_seeds to every node
     if(!System::get_instance()->update_shard_group_seeds(cluster_name, vec_shard_name[i], group_seeds)) {
-      job_memo = "update_shard_group_seeds error";
+      job_error_info = "update_shard_group_seeds error";
       goto end;
     }
   }
@@ -3502,22 +3458,24 @@ void ClusterMission::updateRestoreNodesInfo() {
   sleep(thread_work_interval * 3);  //wait cluster shard node update
   missiom_finish = true;
 	job_status = "done";
-	job_memo = "";
+	job_error_info = "";
 	for(auto &storages: vec_shard_storage_ip_port_paths)
-		for(auto &ip_port_paths: storages)
-		{
-			if(job_memo.length()>0)
-				job_memo += ";";
-			job_memo += std::get<0>(ip_port_paths) + ":" + std::to_string(std::get<1>(ip_port_paths));
+		for(auto &ip_port_paths: storages) {
+			if(job_error_info.length()>0)
+				job_error_info += ";";
+			job_error_info += std::get<0>(ip_port_paths) + ":" + std::to_string(std::get<1>(ip_port_paths));
 		}
-  syslog(Logger::INFO, "add new nodes succeed: %s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  syslog(Logger::INFO, "add new nodes successfully: %s", job_error_info.c_str());
+  job_error_info = "add new nodes successfully";
+  System::get_instance()->get_cluster_shard_node_info(cluster_name, vec_shard_name, 
+                                      vec_shard_storage_ip_port_paths, job_memo_json);
+  update_operation_record();
   delete_roll_back_record();
   return;
 
 end:
-  syslog(Logger::ERROR, "%s", job_memo.c_str());
-  System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+  syslog(Logger::ERROR, "%s", job_error_info.c_str());
+  update_operation_record();
   roll_back_record();
 }
 
@@ -3844,4 +3802,80 @@ void ClusterMission::get_user_name() {
 end:
 	if(pfd != NULL)
 		pclose(pfd);
+}
+
+bool ClusterMission::update_operation_record(){
+	std::string str_sql,memo;
+  Json::FastWriter writer;
+
+  job_memo_json["error_code"] = job_error_code;
+  job_memo_json["error_info"] = job_error_info;
+  writer.omitEndingLineFeed();
+  memo = writer.write(job_memo_json);
+
+	str_sql = "UPDATE cluster_general_job_log set status='" + job_status + "',memo='" + memo;
+	str_sql += "',when_ended=current_timestamp(6) where id=" + job_id;
+	//syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
+
+	if(System::get_instance()->execute_metadate_opertation(SQLCOM_UPDATE, str_sql)) {
+		syslog(Logger::ERROR, "execute_metadate_opertation error");
+		return false;
+	}
+
+	return true;
+}
+
+bool ClusterMission::ArrangeRemoteTask() {
+  request_type = get_request_type();
+  job_id = get_request_unique_id();
+  nodes_select = 0;
+  missiom_finish = false;
+	job_status = "not_started";
+	job_error_code = EintToStr(EOK);
+  job_error_info = "";
+
+  switch (request_type) {
+  case kunlun::kRenameClusterType:
+    renameCluster();
+    break;
+  case kunlun::kCreateClusterType:
+    createCluster();
+    break;
+  case kunlun::kDeleteClusterType:
+    deleteCluster();
+    break;
+
+  case kunlun::kAddShardsType:
+    addShards();
+    break;
+  case kunlun::kDeleteShardType:
+    // deleteShard(); // no support now
+    break;
+
+  case kunlun::kAddCompsType:
+    addComps();
+    break;
+  case kunlun::kDeleteCompType:
+    deleteComp();
+    break;
+
+  case kunlun::kAddNodesType:
+    addNodes();
+    break;
+  case kunlun::kDeleteNodeType:
+    deleteNode();
+    break;
+
+  case kunlun::kBackupClusterType:
+    backupCluster();
+    break;
+  case kunlun::kRestoreNewClusterType:
+    restoreNewCluster();
+    break;
+
+  default:
+    break;
+  }
+
+  return true;
 }

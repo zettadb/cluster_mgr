@@ -540,25 +540,39 @@ bool System::check_cluster_shard_ip_port(std::string &cluster_name,
 bool System::check_cluster_shard_name(std::string &cluster_name,
                                       std::string &shard_name) {
   Scopped_mutex sm(mtx);
+  bool ret = false;
 
-  if (meta_shard.check_cluster_shard_name(cluster_name, shard_name)) {
-    // syslog(Logger::ERROR, "check_cluster_shard_name error");
-    return false;
-  }
+	for (auto &cluster:kl_clusters)
+		if(cluster_name == cluster->get_name()) {
+      for (auto &shard : cluster->storage_shards) {
+        if(shard_name == shard->get_name()) {
+          ret = true;
+          break;
+        }
+      }
+      break;
+    }
 
-  return true;
+  return ret;
 }
 
 bool System::check_cluster_comp_name(std::string &cluster_name,
                                      std::string &comp_name) {
   Scopped_mutex sm(mtx);
+  bool ret = false;
 
-  if (meta_shard.check_cluster_comp_name(cluster_name, comp_name)) {
-    // syslog(Logger::ERROR, "check_cluster_comp_name error");
-    return false;
-  }
+	for (auto &cluster:kl_clusters)
+		if(cluster_name == cluster->get_name()) {
+      for (auto &comp : cluster->computer_nodes) {
+        if(comp_name == comp->get_name()) {
+          ret = true;
+          break;
+        }
+      }
+      break;
+    }
 
-  return true;
+  return ret;
 }
 
 bool System::check_cluster_shard_more(std::string &cluster_name) {
@@ -1400,20 +1414,137 @@ bool System::update_server_nodes_from_metadata(std::map<std::string, Machine*> &
   return true;
 }
 
-bool System::update_operation_record(std::string &id, std::string &status, std::string &memo) {
-	Scopped_mutex sm(mtx);
+bool System::get_cluster_info(std::string &cluster_name, Json::Value &json){
+  Scopped_mutex sm(mtx);
 
-	std::string str_sql;
-	str_sql = "UPDATE cluster_general_job_log set status='" + status + "',memo='" + memo;
-	str_sql += "',when_ended=current_timestamp(6) where id=" + id;
-	//syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
+  for (auto &cluster : kl_clusters) {
+    if (cluster_name == cluster->get_name()){
+      json["cluster_name"] = cluster_name;
+      json["cluster_id"] = std::to_string(cluster->get_id());
+      json["shards"] = std::to_string(cluster->storage_shards.size());
+      json["comps"] = std::to_string(cluster->computer_nodes.size());
+      break;
+    }
+  }
 
-	if(meta_shard.execute_metadate_opertation(SQLCOM_UPDATE, str_sql)) {
-		syslog(Logger::ERROR, "execute_metadate_opertation error");
-		return false;
-	}
+  return true;
+}
 
-	return true;
+bool System::get_cluster_shard_info(std::string &cluster_name, 
+                                    std::vector<std::string> &vec_shard_name, 
+                                    Json::Value &json){
+  Scopped_mutex sm(mtx);
+
+  for (auto &cluster : kl_clusters) {
+    if (cluster_name == cluster->get_name()){
+
+      Json::Value shard_list;
+      json["cluster_name"] = cluster_name;
+      json["cluster_id"] = std::to_string(cluster->get_id());
+      json["shards"] = std::to_string(cluster->storage_shards.size());
+      json["comps"] = std::to_string(cluster->computer_nodes.size());
+
+      for(auto &shard_name: vec_shard_name)
+        for (auto &shard : cluster->storage_shards)
+          if (shard_name == shard->get_name()){
+            Json::Value shard_json;
+            shard_json["shard_name"] = shard_name;
+            shard_json["shard_id"] = std::to_string(shard->get_id());
+            shard_list.append(shard_json);
+            break;
+          }
+
+      json["list_shard"] = shard_list;
+      break;
+    }
+  }
+
+  return true;
+}
+
+bool System::get_cluster_comp_info(std::string &cluster_name, 
+                                    std::vector<std::string> &vec_comp_name, 
+                                    Json::Value &json){
+  Scopped_mutex sm(mtx);
+
+  for (auto &cluster : kl_clusters) {
+    if (cluster_name == cluster->get_name()){
+
+      Json::Value comp_list;
+      json["cluster_name"] = cluster_name;
+      json["cluster_id"] = std::to_string(cluster->get_id());
+      json["shards"] = std::to_string(cluster->storage_shards.size());
+      json["comps"] = std::to_string(cluster->computer_nodes.size());
+
+      for(auto &comp_name: vec_comp_name)
+        for (auto &comp : cluster->computer_nodes)
+          if (comp_name == comp->get_name()){
+            Json::Value comp_json;
+            comp_json["comp_name"] = comp_name;
+            comp_json["comp_id"] = std::to_string(comp->get_id());
+            comp_list.append(comp_json);
+            break;
+          }
+
+      json["list_comp"] = comp_list;
+      break;
+    }
+  }
+
+  return true;
+}
+
+bool System::get_cluster_shard_node_info(std::string &cluster_name, 
+                                          std::vector<std::string> &vec_shard_name, 
+                                          std::vector <std::vector<Tpye_Ip_Port_Paths>> &vec_shard_storage_ip_port_paths, 
+                                          Json::Value &json){
+  Scopped_mutex sm(mtx);
+
+  for (auto &cluster : kl_clusters) {
+    if (cluster_name == cluster->get_name()){
+
+      Json::Value list_shard;
+      json["cluster_name"] = cluster_name;
+      json["cluster_id"] = std::to_string(cluster->get_id());
+      json["shards"] = std::to_string(cluster->storage_shards.size());
+      json["comps"] = std::to_string(cluster->computer_nodes.size());
+
+      for(int i=0; i<vec_shard_name.size(); i++)
+        for (auto &shard : cluster->storage_shards)
+          if (vec_shard_name[i] == shard->get_name()){
+            Json::Value list_node;
+            Json::Value list_shard_array;
+
+            list_shard_array["shard_name"] = vec_shard_name[i];
+            list_shard_array["shard_id"] = std::to_string(shard->get_id());
+            list_shard_array["nodes"] = std::to_string(shard->get_nodes().size());
+
+            for(int j=0; j<vec_shard_storage_ip_port_paths[i].size(); j++)
+              for (auto &node : shard->get_nodes()) {
+                std::string hostaddr;
+                int port;
+                
+                node->get_ip_port(hostaddr, port);
+                if(hostaddr == std::get<0>(vec_shard_storage_ip_port_paths[i][j]) 
+                      && port == std::get<1>(vec_shard_storage_ip_port_paths[i][j])){
+                  Json::Value list_node_array;
+                  list_node_array["hostaddr"] = hostaddr;
+                  list_node_array["port"] = std::to_string(port);
+                  list_node_array["node_id"] = std::to_string(node->get_id());
+                  list_node.append(list_node_array);
+                }
+              }
+            
+            list_shard_array["list_node"] = list_node;
+            list_shard.append(list_shard_array);
+          }
+      
+      json["list_shard"] = list_shard;
+      break;
+    }
+  }
+
+  return true;
 }
 
 bool System::get_meta_mode(Json::Value &attachment) {
@@ -1428,6 +1559,9 @@ bool System::get_meta_mode(Json::Value &attachment) {
     mode = "rbr";
 
   attachment["mode"] = mode;
+  attachment["status"] = "done";
+  attachment["error_code"] = "0";
+  attachment["error_info"] = "";
 
   return true;
 }
@@ -1435,27 +1569,33 @@ bool System::get_meta_mode(Json::Value &attachment) {
 bool System::get_meta_summary(Json::Value &attachment) {
   Scopped_mutex sm(mtx);
 
+  Json::Value list_meta;
+  attachment["status"] = "done";
+  attachment["error_code"] = "0";
+  attachment["error_info"] = "";
+
   for (auto &node : meta_shard.get_nodes()) {
     std::string hostaddr;
     int port;
 
     node->get_ip_port(hostaddr, port);
 
-    Json::Value list;
-    list["hostaddr"] = hostaddr;
-    list["port"] = std::to_string(port);
+    Json::Value list_array;
+    list_array["hostaddr"] = hostaddr;
+    list_array["port"] = std::to_string(port);
     if (node->connect_status())
-      list["status"] = "online";
+      list_array["status"] = "online";
     else
-      list["status"] = "offline";
+      list_array["status"] = "offline";
 
     if (node->is_master())
-      list["master"] = "true";
+      list_array["master"] = "true";
     else
-      list["master"] = "false";
+      list_array["master"] = "false";
 
-    attachment.append(list);
+    list_meta.append(list_array);
   }
+  attachment["list_meta"] = list_meta;
 
   return true;
 }
@@ -1466,14 +1606,20 @@ bool System::get_backup_storage(Json::Value &attachment) {
   std::vector<Tpye_string4> vec_t_string4;
   meta_shard.get_backup_storage_list(vec_t_string4);
 
+  Json::Value list_backup_storage;
+  attachment["status"] = "done";
+  attachment["error_code"] = "0";
+  attachment["error_info"] = "";
+
   for (auto &t_string4 : vec_t_string4) {
-    Json::Value list;
-    list["name"] = std::get<0>(t_string4);
-    list["stype"] = std::get<1>(t_string4);
-    list["hostaddr"] = std::get<2>(t_string4);
-    list["port"] = std::get<3>(t_string4);
-    attachment.append(list);
+    Json::Value list_array;
+    list_array["name"] = std::get<0>(t_string4);
+    list_array["stype"] = std::get<1>(t_string4);
+    list_array["hostaddr"] = std::get<2>(t_string4);
+    list_array["port"] = std::get<3>(t_string4);
+    list_backup_storage.append(list_array);
   }
+  attachment["list_backup_storage"] = list_backup_storage;
 
   return true;
 }
@@ -1481,29 +1627,35 @@ bool System::get_backup_storage(Json::Value &attachment) {
 bool System::get_cluster_summary(Json::Value &attachment) {
   Scopped_mutex sm(mtx);
 
-  for (auto &cluster : kl_clusters) {
-    Json::Value list;
+  Json::Value list_cluster;
+  attachment["status"] = "done";
+  attachment["error_code"] = "0";
+  attachment["error_info"] = "";
 
-    list["name"] = cluster->get_name();
-    list["nick_name"] = cluster->get_nick_name();
-    list["shards"] = std::to_string(cluster->storage_shards.size());
-    list["comps"] = std::to_string(cluster->computer_nodes.size());
+  for (auto &cluster : kl_clusters) {
+    Json::Value list_array;
+
+    list_array["cluster_name"] = cluster->get_name();
+    list_array["nick_name"] = cluster->get_nick_name();
+    list_array["shards"] = std::to_string(cluster->storage_shards.size());
+    list_array["comps"] = std::to_string(cluster->computer_nodes.size());
 
     int shard_node_offline = 0;
     for (auto &shard : cluster->storage_shards)
       for (auto &node : shard->get_nodes())
         if (!node->connect_status())
           shard_node_offline++;
-    list["storage_offine"] = std::to_string(shard_node_offline);
+    list_array["storage_offine"] = std::to_string(shard_node_offline);
 
     int comp_node_offline = 0;
     for (auto &comp : cluster->computer_nodes)
       if (!comp->connect_status())
         comp_node_offline++;
-    list["computer_offine"] = std::to_string(comp_node_offline);
+    list_array["computer_offine"] = std::to_string(comp_node_offline);
 
-    attachment.append(list);
+    list_cluster.append(list_array);
   }
+  attachment["list_cluster"] = list_cluster;
 
   return true;
 }
@@ -1520,49 +1672,66 @@ bool System::get_cluster_detail(Json::Value &paras, Json::Value &attachment) {
 
   for (auto &cluster : kl_clusters) {
     if (cluster_name == cluster->get_name()){
+      Json::Value list_shard;
+      Json::Value list_comp;
+      attachment["status"] = "done";
+      attachment["error_code"] = "0";
+      attachment["error_info"] = "";
+      attachment["cluster_name"] = cluster->get_name();
+      attachment["nick_name"] = cluster->get_nick_name();
+      attachment["shards"] = std::to_string(cluster->storage_shards.size());
+      attachment["comps"] = std::to_string(cluster->computer_nodes.size());
 
       for (auto &shard : cluster->storage_shards) {
+        Json::Value list_node;
+        Json::Value list_shard_array;
+        list_shard_array["shard_name"] = shard->get_name();
+        list_shard_array["nodes"] = std::to_string(shard->get_nodes().size());
+
         for (auto &node : shard->get_nodes()) {
-          Json::Value list;
+          Json::Value list_node_array;
           std::string hostaddr;
           int port;
 
           node->get_ip_port(hostaddr, port);
-          list["shard_name"] = shard->get_name();
-          list["hostaddr"] = hostaddr;
-          list["port"] = std::to_string(port);
+          list_node_array["hostaddr"] = hostaddr;
+          list_node_array["port"] = std::to_string(port);
 
           if (node->connect_status())
-            list["status"] = "online";
+            list_node_array["status"] = "online";
           else
-            list["status"] = "offline";
+            list_node_array["status"] = "offline";
 
           if (node->is_master())
-            list["master"] = "true";
+            list_node_array["master"] = "true";
           else
-            list["master"] = "false";
+            list_node_array["master"] = "false";
 
-          attachment.append(list);
+          list_node.append(list_node_array);
         }
+        list_shard_array["list_node"] = list_node;
+        list_shard.append(list_shard_array);
       }
+      attachment["list_shard"] = list_shard;
 
       for (auto &comp : cluster->computer_nodes) {
-        Json::Value list;
+        Json::Value list_array;
         std::string hostaddr;
         int port;
 
         comp->get_ip_port(hostaddr, port);
-        list["comp_name"] = comp->get_name();
-        list["hostaddr"] = hostaddr;
-        list["port"] = std::to_string(port);
+        list_array["comp_name"] = comp->get_name();
+        list_array["hostaddr"] = hostaddr;
+        list_array["port"] = std::to_string(port);
 
         if (comp->connect_status())
-          list["status"] = "online";
+          list_array["status"] = "online";
         else
-          list["status"] = "offline";
+          list_array["status"] = "offline";
 
-        attachment.append(list);
+        list_comp.append(list_array);
       }
+      attachment["list_comp"] = list_comp;
 
       break;
     }
@@ -1593,6 +1762,10 @@ bool System::get_variable(Json::Value &paras, Json::Value &attachment) {
     return false;
   }
   variable = paras["variable"].asString();
+
+  attachment["status"] = "done";
+  attachment["error_code"] = "0";
+  attachment["error_info"] = "";
 
 /*
   for (auto &node : meta_shard.get_nodes()) {
@@ -1681,6 +1854,10 @@ bool System::set_variable(Json::Value &paras, Json::Value &attachment) {
   }
   value = paras["value"].asString();
 
+  attachment["status"] = "done";
+  attachment["error_code"] = "0";
+  attachment["error_info"] = "";
+  
 /*
   for (auto &node : meta_shard.get_nodes()) {
     if (node->matches_ip_port(ip, port)) {

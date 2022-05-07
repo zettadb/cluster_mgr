@@ -11,7 +11,7 @@
 #include "kl_mentain/global.h"
 #include "kl_mentain/sys.h"
 
-void OTHER_Call_Back(void *);
+void Other_Call_Back(void *);
 namespace kunlun {
 class OtherMission;
 class OtherRemoteTask : public ::RemoteTask {
@@ -20,7 +20,7 @@ class OtherRemoteTask : public ::RemoteTask {
 public:
   explicit OtherRemoteTask(const char *task_spec_info, const char *request_id, OtherMission *mission)
       : super(task_spec_info), unique_request_id_(request_id), mission_(mission) {
-        super::Set_call_back(&OTHER_Call_Back);
+        super::Set_call_back(&Other_Call_Back);
         super::Set_cb_context((void *)this);
       }
   ~OtherRemoteTask() {}
@@ -43,6 +43,10 @@ class OtherMission : public ::MissionRequest {
 public:
   ClusterRequestTypes request_type;
   std::string job_id;
+	std::string job_status;
+	std::string job_error_code;
+  std::string job_error_info;
+
   int task_wait;
   int task_incomplete;
 
@@ -50,6 +54,8 @@ public:
   explicit OtherMission(Json::Value *doc) : super(doc){};
   ~OtherMission(){};
 
+  void ControlInstanceCallBack(std::string &response);
+  void UpdatePrometheusCallBack(std::string &response);
   void ControlInstance();
   void UpdatePrometheus();
   void PostgresExporter();
@@ -62,6 +68,7 @@ public:
 	bool update_prometheus();
   bool save_file(std::string &path, char* buf);
 
+  bool update_operation_record();
   virtual bool ArrangeRemoteTask() override final;
   virtual bool SetUpMisson() override { return true; }
   virtual bool TearDownMission() override { 

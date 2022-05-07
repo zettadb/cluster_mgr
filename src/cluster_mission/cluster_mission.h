@@ -49,9 +49,10 @@ class ClusterMission : public ::MissionRequest {
 public:
   ClusterRequestTypes request_type;
   std::string job_id;
-  std::string job_status;
-  std::string job_memo;
-  bool missiom_finish;
+	std::string job_status;
+	std::string job_error_code;
+  std::string job_error_info;
+  Json::Value job_memo_json;
 
   std::string user_name;
   std::string cluster_name;
@@ -89,6 +90,7 @@ public:
   int task_wait;
   int task_incomplete;
   int task_step;
+  bool missiom_finish;
 
   enum ClusterStep {GET_PATH_SIZE, INSTALL_STORAGE, INSTALL_COMPUTER, 
                     DELETE_INSTANCE, BACKUP_STORAGE, RESTORE_INSTANCE};
@@ -96,6 +98,22 @@ public:
 public:
   explicit ClusterMission(Json::Value *doc) : super(doc){};
   ~ClusterMission(){};
+
+  void UpdateMachinePathSize(std::vector<Machine*> &vec_machine, std::string &response);
+  void CheckInstanceInstall(std::string &response);
+  void CheckInstanceDelete(std::string &response);
+  void CheckBackupCluster(std::string &response);
+  void CheckInstanceRestore(std::string &response);
+  void CreateClusterCallBack(std::string &response);
+  void DeleteClusterCallBack(std::string &response);
+  void AddShardsCallBack(std::string &response);
+  void DeleteShardCallBack(std::string &response);
+  void AddCompsCallBack(std::string &response);
+  void DeleteCompCallBack(std::string &response);
+  void AddNodesCallBack(std::string &response);
+  void DeleteNodeCallBack(std::string &response);
+  void BackupClusterCallBack(std::string &response);
+  void RestoreNewCallBack(std::string &response);
 
   void renameCluster();
   void createCluster();
@@ -122,7 +140,7 @@ public:
   void create_shard_nodes(std::vector<Tpye_Ip_Port_Paths> &storages, std::string &shard_name);
   void create_storage(Tpye_Ip_Port_Paths &storage, Json::Value &para);
   void create_comps(std::vector<Tpye_Ip_Port_Paths> &comps, 
-      std::vector<std::string> &vec_comp_name, int comps_id);
+                    std::vector<std::string> &vec_comp_name, int comps_id);
   void create_computer(Tpye_Ip_Port_Paths &comp, Json::Value &para);
 
   void delete_cluster(std::string &cluster_name);
@@ -158,12 +176,13 @@ public:
   bool create_program_path();
   void get_user_name();
 
+  bool update_operation_record();
   virtual bool ArrangeRemoteTask() override final;
   virtual bool SetUpMisson() override { return true; }
   virtual bool TearDownMission() override { 
     if(!missiom_finish) {
       job_status = "failed";
-      System::get_instance()->update_operation_record(job_id, job_status, job_memo);
+      update_operation_record();
       delete_roll_back_record();
       missiom_finish = true;
     }

@@ -93,10 +93,10 @@ program_binaries_path = /home/kunlun/program_binaries
 instance_binaries_path = /home/kunlun/instance_binaries
 
 # storage_prog_package_name
-storage_prog_package_name = kunlun-storage-0.9.1
+storage_prog_package_name = kunlun-storage-0.9.2
 
 # computer_prog_package_name
-computer_prog_package_name = kunlun-server-0.9.1
+computer_prog_package_name = kunlun-server-0.9.2
 
 # computer instance port start
 computer_instance_port_start = 58200

@@ -142,7 +142,11 @@ public:
 	bool update_shard_group_seeds(std::string &cluster_name, std::string &shard_name, std::string &group_seeds);
 	bool get_machine_instance_port(Machine* machine);
 	bool update_server_nodes_from_metadata(std::map<std::string, Machine*> &map_machine);
-	bool update_operation_record(std::string &id, std::string &status, std::string &memo);
+	bool get_cluster_info(std::string &cluster_name, Json::Value &json);
+	bool get_cluster_shard_info(std::string &cluster_name, std::vector<std::string> &vec_shard_name, Json::Value &json);
+	bool get_cluster_comp_info(std::string &cluster_name, std::vector<std::string> &vec_comp_name, Json::Value &json);
+	bool get_cluster_shard_node_info(std::string &cluster_name, std::vector<std::string> &vec_shard_name, 
+			std::vector <std::vector<Tpye_Ip_Port_Paths>> &vec_shard_storage_ip_port_paths, Json::Value &json);
 	bool get_meta_mode(Json::Value &attachment);
 	bool get_meta_summary(Json::Value &attachment);
 	bool get_backup_storage(Json::Value &attachment);

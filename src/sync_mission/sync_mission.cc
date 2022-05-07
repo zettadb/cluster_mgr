@@ -14,6 +14,7 @@
 
 bool SyncMission::GetStatus() {
   Json::Value attachment;
+  Json::Reader reader;
   kunlun::MysqlConnection *meta_conn = g_node_channel_manager.get_meta_conn();
   char sql_buffer[4096] = {'\0'};
   int ret;
@@ -28,11 +29,12 @@ bool SyncMission::GetStatus() {
     setErr("%s", meta_conn->getErr());
     return false;
   }
-  
-  bzero((void *)sql_buffer, (size_t)4096);
+  if (query_result.GetResultLinesNum() != 1)
+    return false;
+
+  if (!reader.parse(query_result[0]["memo"], attachment))
+    return false;
   attachment["status"] = std::string(query_result[0]["status"]);
-  attachment["info"] = std::string(query_result[0]["memo"]);
-  query_result.Clean();
 
   set_body_json_attachment(attachment);
   return true;
@@ -61,6 +63,11 @@ bool SyncMission::GetBackupStorage() {
 
 bool SyncMission::GetMachineSummary() {
   Json::Value attachment;
+  Json::Value list_machine;
+
+  attachment["status"] = "done";
+  attachment["error_code"] = "0";
+  attachment["error_info"] = "";
 
 	std::vector<std::string> vec_machine;
 	if(!System::get_instance()->get_machine_info_from_metadata(vec_machine)) {
@@ -73,7 +80,7 @@ bool SyncMission::GetMachineSummary() {
       Json::Reader reader;
       Json::Value root_node,root_ret;
       Json::Value paras;
-      Json::Value list;
+      Json::Value list_array;
       root_node["cluster_mgr_request_id"] = "ping_pong";
       root_node["task_spec_info"] = "ping_pong";
       root_node["job_type"] = "ping_pong";
@@ -90,14 +97,15 @@ bool SyncMission::GetMachineSummary() {
       }
 
       if(ret)
-        list["status"] = "online";
+        list_array["status"] = "online";
       else
-        list["status"] = "offline";
+        list_array["status"] = "offline";
       
-      list["hostaddr"] = machine;
-      attachment.append(list);
+      list_array["hostaddr"] = machine;
+      list_machine.append(list_array);
   }
 
+  attachment["list_machine"] = list_machine;
   set_body_json_attachment(attachment);
   return true;
 }
