@@ -15,30 +15,35 @@ void BackupStorage::CreateBackupStorage() {
 
   job_status = "failed";
   if (!super::get_body_json_document().isMember("paras")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `paras` key-value pair in the request body";
     goto end;
   }
   paras = super::get_body_json_document()["paras"];
 
   if (!paras.isMember("name")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `name` key-value pair in the request body";
     goto end;
   }
   name = paras["name"].asString();
 
   if (!paras.isMember("stype")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `stype` key-value pair in the request body";
     goto end;
   }
   stype = paras["stype"].asString();
 
   if (!paras.isMember("hostaddr")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `hostaddr` key-value pair in the request body";
     goto end;
   }
   hostaddr= paras["hostaddr"].asString();
 
   if (!paras.isMember("port")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `port` key-value pair in the request body";
     goto end;
   }
@@ -85,30 +90,35 @@ void BackupStorage::UpdateBackupStorage() {
 
 	job_status = "failed";
   if (!super::get_body_json_document().isMember("paras")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `paras` key-value pair in the request body";
     goto end;
   }
   paras = super::get_body_json_document()["paras"];
 
   if (!paras.isMember("name")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `name` key-value pair in the request body";
     goto end;
   }
   name = paras["name"].asString();
 
   if (!paras.isMember("stype")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `stype` key-value pair in the request body";
     goto end;
   }
   stype = paras["stype"].asString();
 
   if (!paras.isMember("hostaddr")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `hostaddr` key-value pair in the request body";
     goto end;
   }
   hostaddr= paras["hostaddr"].asString();
 
   if (!paras.isMember("port")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `port` key-value pair in the request body";
     goto end;
   }
@@ -155,12 +165,14 @@ void BackupStorage::DeleteBackupStorage() {
 
   job_status = "failed";
   if (!super::get_body_json_document().isMember("paras")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `paras` key-value pair in the request body";
     goto end;
   }
   paras = super::get_body_json_document()["paras"];
 
   if (!paras.isMember("name")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `name` key-value pair in the request body";
     goto end;
   }

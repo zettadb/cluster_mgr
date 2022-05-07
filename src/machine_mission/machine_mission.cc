@@ -110,59 +110,69 @@ end:
 
 void MachineMission::CreateMachine() {
   MachineRemoteTask *update_machine;
+  brpc::Channel *channel;
   Json::Value root_node;
   Json::Value paras_node;
   Json::Value paras;
 
   if (!super::get_body_json_document().isMember("paras")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `paras` key-value pair in the request body";
     goto end;
   }
   paras = super::get_body_json_document()["paras"];
 
   if (!paras.isMember("hostaddr")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `hostaddr` key-value pair in the request body";
     goto end;
   }
   machine.hostaddr = paras["hostaddr"].asString();
 
   if (!paras.isMember("rack_id")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `rack_id` key-value pair in the request body";
     goto end;
   }
   machine.rack_id = paras["rack_id"].asString();
 
   if (!paras.isMember("datadir")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `datadir` key-value pair in the request body";
     goto end;
   }
   machine.vec_paths.emplace_back(paras["datadir"].asString());
 
   if (!paras.isMember("logdir")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `logdir` key-value pair in the request body";
     goto end;
   }
   machine.vec_paths.emplace_back(paras["logdir"].asString());
 
   if (!paras.isMember("wal_log_dir")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `wal_log_dir` key-value pair in the request body";
     goto end;
   }
   machine.vec_paths.emplace_back(paras["wal_log_dir"].asString());
 
   if (!paras.isMember("comp_datadir")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `comp_datadir` key-value pair in the request body";
     goto end;
   }
   machine.vec_paths.emplace_back(paras["comp_datadir"].asString());
 
   if (!paras.isMember("total_mem")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `total_mem` key-value pair in the request body";
     goto end;
   }
   machine.total_mem = stoi(paras["total_mem"].asString());
 
   if (!paras.isMember("total_cpu_cores")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `total_cpu_cores` key-value pair in the request body";
     goto end;
   }
@@ -184,11 +194,14 @@ void MachineMission::CreateMachine() {
 
 	//////////////////////////////////////////////////////////
 	// UpdateMachineTask from node
-  update_machine =
-      new MachineRemoteTask("Update_machine", job_id.c_str(), this);
-  update_machine->AddNodeSubChannel(
-      machine.hostaddr.c_str(),
-      g_node_channel_manager.getNodeChannel(machine.hostaddr.c_str()));
+  channel = g_node_channel_manager.getNodeChannel(machine.hostaddr.c_str());
+  if(channel == nullptr) {
+		job_error_info = "error, channel is no exist";
+		goto end;
+	}
+
+  update_machine = new MachineRemoteTask("Update_machine", job_id.c_str(), this);
+  update_machine->AddNodeSubChannel(machine.hostaddr.c_str(),channel);
 
   root_node["cluster_mgr_request_id"] = job_id;
   root_node["task_spec_info"] = update_machine->get_task_spec_info();
@@ -212,59 +225,69 @@ end:
 
 void MachineMission::UpdateMachine() {
   MachineRemoteTask *update_machine;
+  brpc::Channel *channel;
   Json::Value root_node;
   Json::Value paras_node;
   Json::Value paras;
 
   if (!super::get_body_json_document().isMember("paras")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `paras` key-value pair in the request body";
     goto end;
   }
   paras = super::get_body_json_document()["paras"];
 
   if (!paras.isMember("hostaddr")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `hostaddr` key-value pair in the request body";
     goto end;
   }
   machine.hostaddr = paras["hostaddr"].asString();
 
   if (!paras.isMember("rack_id")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `rack_id` key-value pair in the request body";
     goto end;
   }
   machine.rack_id = paras["rack_id"].asString();
 
   if (!paras.isMember("datadir")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `datadir` key-value pair in the request body";
     goto end;
   }
   machine.vec_paths.emplace_back(paras["datadir"].asString());
 
   if (!paras.isMember("logdir")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `logdir` key-value pair in the request body";
     goto end;
   }
   machine.vec_paths.emplace_back(paras["logdir"].asString());
 
   if (!paras.isMember("wal_log_dir")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `wal_log_dir` key-value pair in the request body";
     goto end;
   }
   machine.vec_paths.emplace_back(paras["wal_log_dir"].asString());
 
   if (!paras.isMember("comp_datadir")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `comp_datadir` key-value pair in the request body";
     goto end;
   }
   machine.vec_paths.emplace_back(paras["comp_datadir"].asString());
 
   if (!paras.isMember("total_mem")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `total_mem` key-value pair in the request body";
     goto end;
   }
   machine.total_mem = stoi(paras["total_mem"].asString());
 
   if (!paras.isMember("total_cpu_cores")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `total_cpu_cores` key-value pair in the request body";
     goto end;
   }
@@ -286,11 +309,14 @@ void MachineMission::UpdateMachine() {
 
 	//////////////////////////////////////////////////////////
 	// UpdateMachineTask from node
-  update_machine =
-      new MachineRemoteTask("Update_machine", job_id.c_str(), this);
-  update_machine->AddNodeSubChannel(
-      machine.hostaddr.c_str(),
-      g_node_channel_manager.getNodeChannel(machine.hostaddr.c_str()));
+  channel = g_node_channel_manager.getNodeChannel(machine.hostaddr.c_str());
+  if(channel == nullptr) {
+		job_error_info = "error, channel is no exist";
+		goto end;
+	}
+
+  update_machine = new MachineRemoteTask("Update_machine", job_id.c_str(), this);
+  update_machine->AddNodeSubChannel(machine.hostaddr.c_str(),channel);
 
   root_node["cluster_mgr_request_id"] = job_id;
   root_node["task_spec_info"] = update_machine->get_task_spec_info();
@@ -316,12 +342,14 @@ void MachineMission::DeleteMachine() {
 	Json::Value paras;
 
   if (!super::get_body_json_document().isMember("paras")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `paras` key-value pair in the request body";
     goto end;
   }
   paras = super::get_body_json_document()["paras"];
 
   if (!paras.isMember("hostaddr")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `hostaddr` key-value pair in the request body";
     goto end;
   }
@@ -389,7 +417,7 @@ bool MachineMission::ArrangeRemoteTask() {
 
   switch (request_type) {
   case kunlun::kCreateMachineType:
-    CreateMachine(); // update port and paths by node_mgr
+    // CreateMachine(); // update port and paths by node_mgr
     break;
   case kunlun::kUpdateMachineType:
     UpdateMachine(); // update port and paths by node_mgr

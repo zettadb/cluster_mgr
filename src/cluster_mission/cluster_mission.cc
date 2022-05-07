@@ -605,18 +605,21 @@ void ClusterMission::renameCluster() {
   Json::Value paras;
 
   if (!super::get_body_json_document().isMember("paras")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `paras` key-value pair in the request body";
     goto end;
   }
   paras = super::get_body_json_document()["paras"];
 
   if (!paras.isMember("cluster_name")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `cluster_name` key-value pair in the request body";
     goto end;
   }
   cluster_name = paras["cluster_name"].asString();
 
   if (!paras.isMember("nick_name")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `nick_name` key-value pair in the request body";
     goto end;
   }
@@ -653,6 +656,7 @@ void ClusterMission::createCluster() {
 	std::set<std::string> set_machine;
 
   if (!super::get_body_json_document().isMember("paras")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `paras` key-value pair in the request body";
     goto end;
   }
@@ -663,65 +667,77 @@ void ClusterMission::createCluster() {
   }
 
   if (!paras.isMember("ha_mode")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `ha_mode` key-value pair in the request body";
     goto end;
   }
   std::get<0>(cluster_info) = paras["ha_mode"].asString();
 
   if (!paras.isMember("shards")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `shards` key-value pair in the request body";
     goto end;
   }
   std::get<1>(cluster_info) = stoi(paras["shards"].asString());
 	if(std::get<1>(cluster_info)<1 || std::get<1>(cluster_info)>256) {
+    job_error_code = EintToStr(ERR_PARA);
 		job_error_info = "shards error(must in 1-256)";
 		goto end;
 	}
 
   if (!paras.isMember("nodes")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `nodes` key-value pair in the request body";
     goto end;
   }
   std::get<2>(cluster_info) = stoi(paras["nodes"].asString());
 	if(std::get<2>(cluster_info)<1 || std::get<2>(cluster_info)>256) {
+    job_error_code = EintToStr(ERR_PARA);
 		job_error_info = "nodes error(must in 1-256)";
 		goto end;
 	}
 
   if (!paras.isMember("comps")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `comps` key-value pair in the request body";
     goto end;
   }
   std::get<3>(cluster_info) = stoi(paras["comps"].asString());
 	if(std::get<3>(cluster_info)<1 || std::get<3>(cluster_info)>256) {
+    job_error_code = EintToStr(ERR_PARA);
 		job_error_info = "comps error(must in 1-256)";
 		goto end;
 	}
 
   if (!paras.isMember("max_storage_size")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `max_storage_size` key-value pair in the request body";
     goto end;
   }
   std::get<4>(cluster_info) = stoi(paras["max_storage_size"].asString());
 
   if (!paras.isMember("max_connections")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `max_connections` key-value pair in the request body";
     goto end;
   }
   std::get<5>(cluster_info) = stoi(paras["max_connections"].asString());
 
   if (!paras.isMember("cpu_cores")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `cpu_cores` key-value pair in the request body";
     goto end;
   }
   std::get<6>(cluster_info) = stoi(paras["cpu_cores"].asString());
 
   if (!paras.isMember("innodb_size")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `innodb_size` key-value pair in the request body";
     goto end;
   }
   std::get<7>(cluster_info) = stoi(paras["innodb_size"].asString());
 	if(std::get<7>(cluster_info)<1)	{
+    job_error_code = EintToStr(ERR_PARA);
 		job_error_info = "innodb_size error(must > 0)";
 		goto end;
 	}
@@ -737,16 +753,19 @@ void ClusterMission::createCluster() {
 	/////////////////////////////////////////////////////////
 	if(std::get<0>(cluster_info) == "no_rep")	{
 		if(std::get<2>(cluster_info)!=1) {
+      job_error_code = EintToStr(ERR_PARA);
 			job_error_info = "error, nodes=1 in no_rep mode";
 			goto end;
 		}
 	}	else if(std::get<0>(cluster_info) == "mgr")	{
 		if(std::get<2>(cluster_info)<3 || std::get<2>(cluster_info)>256) {
+      job_error_code = EintToStr(ERR_PARA);
 			job_error_info = "error, nodes>=3 && nodes<=256 in mgr mode";
 			goto end;
 		}
 	}	else if(std::get<0>(cluster_info) == "rbr")	{
 		if(std::get<2>(cluster_info)<3 || std::get<2>(cluster_info)>256) {
+      job_error_code = EintToStr(ERR_PARA);
 			job_error_info = "error, nodes>=3 && nodes<=256 in rbr mode";
 			goto end;
 		}
@@ -863,12 +882,14 @@ void ClusterMission::deleteCluster() {
   Json::Value paras;
 
   if (!super::get_body_json_document().isMember("paras")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `paras` key-value pair in the request body";
     goto end;
   }
   paras = super::get_body_json_document()["paras"];
 
   if (!paras.isMember("cluster_name")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `cluster_name` key-value pair in the request body";
     goto end;
   }
@@ -903,22 +924,30 @@ void ClusterMission::addShards() {
 	std::set<std::string> set_machine;
 
   if (!super::get_body_json_document().isMember("paras")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `paras` key-value pair in the request body";
     goto end;
   }
   paras = super::get_body_json_document()["paras"];
 
   if (!paras.isMember("cluster_name")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `cluster_name` key-value pair in the request body";
     goto end;
   }
   cluster_name = paras["cluster_name"].asString();
 
   if (!paras.isMember("shards")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `shards` key-value pair in the request body";
     goto end;
   }
   add_shards = stoi(paras["shards"].asString());
+	if(add_shards<1 || add_shards>256) {
+    job_error_code = EintToStr(ERR_PARA);
+		job_error_info = "shards error(must in 1-256)";
+		goto end;
+	}
 
   if (paras.isMember("machinelist")) {
     Json::Value machinelist = paras["machinelist"];
@@ -1048,18 +1077,21 @@ void ClusterMission::deleteShard() {
   std::vector<Tpye_Ip_Port> vec_storage_ip_port;
 
   if (!super::get_body_json_document().isMember("paras")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `paras` key-value pair in the request body";
     goto end;
   }
   paras = super::get_body_json_document()["paras"];
 
   if (!paras.isMember("cluster_name")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `cluster_name` key-value pair in the request body";
     goto end;
   }
   cluster_name = paras["cluster_name"].asString();
 
   if (!paras.isMember("shard_name")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `shard_name` key-value pair in the request body";
     goto end;
   }
@@ -1132,22 +1164,30 @@ void ClusterMission::addComps() {
 	std::set<std::string> set_machine;
 
   if (!super::get_body_json_document().isMember("paras")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `paras` key-value pair in the request body";
     goto end;
   }
   paras = super::get_body_json_document()["paras"];
 
   if (!paras.isMember("cluster_name")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `cluster_name` key-value pair in the request body";
     goto end;
   }
   cluster_name = paras["cluster_name"].asString();
 
   if (!paras.isMember("comps")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `comps` key-value pair in the request body";
     goto end;
   }
   add_comps = stoi(paras["comps"].asString());
+	if(add_comps<1 || add_comps>256) {
+    job_error_code = EintToStr(ERR_PARA);
+		job_error_info = "comps error(must in 1-256)";
+		goto end;
+	}
 
   if (paras.isMember("machinelist")) {
     Json::Value machinelist = paras["machinelist"];
@@ -1275,18 +1315,21 @@ void ClusterMission::deleteComp() {
   std::vector<Tpye_Ip_Port> vec_comps_ip_port;
 
   if (!super::get_body_json_document().isMember("paras")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `paras` key-value pair in the request body";
     goto end;
   }
   paras = super::get_body_json_document()["paras"];
 
   if (!paras.isMember("cluster_name")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `cluster_name` key-value pair in the request body";
     goto end;
   }
   cluster_name = paras["cluster_name"].asString();
 
   if (!paras.isMember("comp_name")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `comp_name` key-value pair in the request body";
     goto end;
   }
@@ -1361,12 +1404,14 @@ void ClusterMission::addNodes() {
   std::string shard_uuid;
 
   if (!super::get_body_json_document().isMember("paras")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `paras` key-value pair in the request body";
     goto end;
   }
   paras = super::get_body_json_document()["paras"];
 
   if (!paras.isMember("cluster_name")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `cluster_name` key-value pair in the request body";
     goto end;
   }
@@ -1380,11 +1425,13 @@ void ClusterMission::addNodes() {
   }
 
   if (!paras.isMember("nodes")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `nodes` key-value pair in the request body";
     goto end;
   }
   add_nodes = stoi(paras["nodes"].asString());
 	if(add_nodes<1 || add_nodes>256) {
+    job_error_code = EintToStr(ERR_PARA);
 		job_error_info = "nodes error(must in 1-256)";
 		goto end;
 	}
@@ -1541,30 +1588,35 @@ void ClusterMission::deleteNode() {
   ClusterRemoteTask *cluster_task;
 
   if (!super::get_body_json_document().isMember("paras")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `paras` key-value pair in the request body";
     goto end;
   }
   paras = super::get_body_json_document()["paras"];
 
   if (!paras.isMember("cluster_name")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `cluster_name` key-value pair in the request body";
     goto end;
   }
   cluster_name = paras["cluster_name"].asString();
 
   if (!paras.isMember("shard_name")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `shard_name` key-value pair in the request body";
     goto end;
   }
   shard_name = paras["shard_name"].asString();
 
   if (!paras.isMember("hostaddr")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `hostaddr` key-value pair in the request body";
     goto end;
   }
   ip_port.first = paras["hostaddr"].asString();
 
   if (!paras.isMember("port")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `shard_name` key-value pair in the request body";
     goto end;
   }
@@ -1631,12 +1683,14 @@ void ClusterMission::backupCluster(){
   std::string backup_storage; //no used
 
   if (!super::get_body_json_document().isMember("paras")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `paras` key-value pair in the request body";
     goto end;
   }
   paras = super::get_body_json_document()["paras"];
 
   if (!paras.isMember("backup_cluster_name")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `backup_cluster_name` key-value pair in the request body";
     goto end;
   }
@@ -1693,24 +1747,25 @@ void ClusterMission::restoreNewCluster(){
   std::set<std::string> set_machine;
 
   if (!super::get_body_json_document().isMember("paras")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `paras` key-value pair in the request body";
     goto end;
   }
   paras = super::get_body_json_document()["paras"];
 
   if (!paras.isMember("backup_cluster_name")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `backup_cluster_name` key-value pair in the request body";
     goto end;
   }
   backup_cluster_name = paras["backup_cluster_name"].asString();
 
-  if (!paras.isMember("nick_name")) {
-    job_error_info = "missing `nick_name` key-value pair in the request body";
-    goto end;
+  if (paras.isMember("nick_name")) {
+    nick_name = paras["nick_name"].asString();
   }
-  nick_name = paras["nick_name"].asString();
-
+  
   if (!paras.isMember("timestamp")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `timestamp` key-value pair in the request body";
     goto end;
   }

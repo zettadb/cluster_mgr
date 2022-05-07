@@ -106,24 +106,28 @@ void OtherMission::ControlInstance() {
   Tpye_Ip_Port ip_port;
 
   if (!super::get_body_json_document().isMember("paras")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `paras` key-value pair in the request body";
     goto end;
   }
   paras = super::get_body_json_document()["paras"];
 
   if (!paras.isMember("hostaddr")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `hostaddr` key-value pair in the request body";
     goto end;
   }
   hostaddr = paras["hostaddr"].asString();
 
   if (!paras.isMember("port")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `port` key-value pair in the request body";
     goto end;
   }
   port = stoi(paras["port"].asString());
 
   if (!paras.isMember("control")) {
+    job_error_code = EintToStr(ERR_JSON);
     job_error_info = "missing `control` key-value pair in the request body";
     goto end;
   }
@@ -227,18 +231,21 @@ void OtherMission::PostgresExporter() {
 	int port;
 
 	if (!super::get_body_json_document().isMember("paras")) {
+		job_error_code = EintToStr(ERR_JSON);
 		job_error_info = "missing `paras` key-value pair in the request body";
 		goto end;
 	}
 	paras = super::get_body_json_document()["paras"];
 
 	if (!paras.isMember("hostaddr")) {
+		job_error_code = EintToStr(ERR_JSON);
 		job_error_info = "missing `hostaddr` key-value pair in the request body";
 		goto end;
 	}
 	hostaddr = paras["hostaddr"].asString();
 
 	if (!paras.isMember("port")) {
+		job_error_code = EintToStr(ERR_JSON);
 		job_error_info = "missing `port` key-value pair in the request body";
 		goto end;
 	}
@@ -273,18 +280,21 @@ void OtherMission::MysqldExporter() {
 	int port;
 
 	if (!super::get_body_json_document().isMember("paras")) {
+		job_error_code = EintToStr(ERR_JSON);
 		job_error_info = "missing `paras` key-value pair in the request body";
 		goto end;
 	}
 	paras = super::get_body_json_document()["paras"];
 
 	if (!paras.isMember("hostaddr")) {
+		job_error_code = EintToStr(ERR_JSON);
 		job_error_info = "missing `hostaddr` key-value pair in the request body";
 		goto end;
 	}
 	hostaddr = paras["hostaddr"].asString();
 
 	if (!paras.isMember("port")) {
+		job_error_code = EintToStr(ERR_JSON);
 		job_error_info = "missing `port` key-value pair in the request body";
 		goto end;
 	}

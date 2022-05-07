@@ -21,7 +21,10 @@ namespace kunlun
 #define EIVALID_RESPONSE_PROTOCAL EOFFSET(2)
 #define ENODE_UNREACHEABLE EOFFSET(3)
 
+#define ERR_JSON EOFFSET(4)
+#define ERR_PARA EOFFSET(5)
 
+#define ERR_CREATE_CLUSTER EOFFSET(100)
 
 // New item should add above
 #define EUNDEFINED_ERROR EOFFSET(1000)
