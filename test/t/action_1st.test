@@ -1,0 +1,45 @@
+--disable_warnings
+DROP TABLE IF EXISTS t1;
+SET @@sql_mode='NO_ENGINE_SUBSTITUTION';
+--enable_warnings
+
+SET SQL_WARNINGS=1;
+
+CREATE TABLE t1 (a INT);
+INSERT INTO t1 VALUES (1);
+INSERT INTO t1 VALUES (2);
+
+DROP TABLE t1;
+
+--http_connect(cluster_mgr_http1, cluster_mgr)
+
+--http
+request_type: POST
+header:Content-Type:application/json
+body:{
+"version": "1.0",
+"job_id":"",
+"job_type": "create_cluster",
+"timestamp" : "1435749309",
+"user_name":"kunlun_test",
+"paras":{
+"nick_name":"my_nick_name",
+"ha_mode":"rbr",
+"shards":"2",
+"nodes":"3",
+"comps":"1",
+"max_storage_size":"20",
+"max_connections":"6",
+"cpu_cores":"8",
+"innodb_size":"1",
+"machinelist":
+[
+{"hostaddr":"${node_mgr.1}"},
+{"hostaddr":"${node_mgr.2}"},
+{"hostaddr":"${node_mgr.3}"}
+]
+}
+}
+EOF
+
+--source kunlun-test/include/wait_http_request_finish.inc
