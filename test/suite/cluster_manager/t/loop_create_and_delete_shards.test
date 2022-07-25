@@ -1,0 +1,48 @@
+#
+# Description:
+# 1. create cluster
+# 2. add two shards and delete one shard rand
+# 3. check pg can read/write
+#
+
+--let $http_connection_name=loop_create_and_delete_shards
+--let $nickname=loop_create_and_delete_shards
+
+--source kunlun-test/suite/cluster_manager/include/pre_install_cluster.inc
+
+--let $shards=1
+--let $nodes=3
+--let $add_num=2
+
+while($add_num > 0)
+{
+--connection $http_connection_name
+--let $shard_conn_name=add_shard_.$add_num
+--source kunlun-test/suite/cluster_manager/include/add_shard_without_assign.inc
+dec $add_num;
+}
+
+--connection default
+--let $rand_num=`SELECT FLOOR(1+RAND()*3)`
+--echo rand_num: $rand_num
+--let $shard_id=query_get_value(SELECT id FROM shards WHERE db_cluster_id=$cluster_id, id, $rand_num)
+
+--connection $http_connection_name
+--source kunlun-test/suite/cluster_manager/include/delete_shard_input_params.inc
+
+--connection default
+--let $comp_nums = `SELECT COUNT(*) FROM comp_nodes WHERE db_cluster_id=$cluster_id`
+--let c_inc=1
+while($comp_nums > 0) 
+{
+--let $cconn_name=cc_pg_conn.$c_inc
+--let $comp = computer.$comp_nums
+--pg_connect($cconn_name, $comp, $comp_user, $comp_pwd)
+--source kunlun-test/suite/cluster_manager/include/check_computer_state.inc
+--dec $comp_nums
+--inc $c_inc
+--disconnect $cconn_name
+}
+
+--connection $http_connection_name
+--source kunlun-test/suite/cluster_manager/include/delete_cluster_input_params.inc

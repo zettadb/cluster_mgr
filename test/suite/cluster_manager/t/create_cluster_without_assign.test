@@ -1,0 +1,19 @@
+#
+# Description:
+# create cluster without assigned storage and computer nodes
+#
+
+--http_connect(create_cluster_cm_http, cluster_mgr)
+
+--let $nick_name=create_cluster_without_assign
+--let $ha_mode=rbr
+--let $shards=1
+--let $nodes=3
+--let $comps=1
+--let $dbcfg=1
+
+--source kunlun-test/suite/cluster_manager/include/create_cluster_without_assign.inc
+
+#--let $clusterid=$cluster_id
+
+#--source kunlun-test/suite/cluster_manager/include/delete_cluster_input_params.inc

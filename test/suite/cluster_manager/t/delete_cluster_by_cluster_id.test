@@ -1,0 +1,10 @@
+#
+# Description:
+# delete cluster by input clusterid
+#
+
+--http_connect(delete_cluster_cm_http, cluster_mgr)
+
+--let $cluster_id=31
+
+--source kunlun-test/suite/cluster_manager/include/delete_cluster_input_params.inc

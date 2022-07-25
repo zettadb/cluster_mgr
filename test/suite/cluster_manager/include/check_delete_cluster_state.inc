@@ -1,0 +1,54 @@
+#
+# Description:
+# 1. check shards, shard_nodes
+# 2. check comp_nodes
+# 3. check metadb commit_log_xxx and ddl_ops_log_xxxx
+#
+
+--connection default
+
+--let $sds_num=query_get_value(SELECT COUNT(*) FROM shards WHERE db_cluster_id=$cluster_id, COUNT(*), 1)
+if($sds_num != 0)
+{
+    --echo shards is not empty
+    --exit
+}
+
+--let $sn_num=query_get_value(SELECT COUNT(*) FROM shard_nodes WHERE db_cluster_id=$cluster_id, COUNT(*), 1)
+if($sn_num != 0)
+{
+    --echo shard_nodes is not empty
+    --exit
+}
+
+--let $dc_num=query_get_value(SELECT COUNT(*) FROM db_clusters WHERE id=$cluster_id, COUNT(*), 1)
+if($dc_num != 0)
+{
+    --echo db_clusters is not empty
+    --exit
+}
+
+--let $comps_num=query_get_value(SELECT COUNT(*) FROM comp_nodes WHERE db_cluster_id=$cluster_id, COUNT(*), 1)
+if($comps_num)
+{
+    --echo comp_nodes is not empty
+    --exit
+}
+
+--let $commit_name='commit_log_$cluster_name'
+--let $ddlops_name='ddl_ops_log_$cluster_name'
+--let $commit_exist=query_get_value(SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME=$commit_name, COUNT(*), 1)
+if($commit_exist != 0) 
+{
+    --echo commit_log is not deleted, please check
+    --exit
+}
+
+--let $ddlops_exist=query_get_value(SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME=$ddlops_name, COUNT(*), 1)
+if($ddlops_exist != 0) 
+{
+    --echo ddl_ops_log is not deleted, please check
+    --exit
+}
+
+--echo ==== delete cluster ok ====
