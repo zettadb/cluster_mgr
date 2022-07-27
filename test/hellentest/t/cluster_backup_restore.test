@@ -1,0 +1,150 @@
+#Use case description:
+#1.create cluster
+#2.cycle query status
+#3.check computer node write and read
+#4.check shard master and slave 
+#5.backup the src cluster
+#6.create the des cluster
+#7.restore cluster
+##8.result : the restore_log of meta status is done.
+--http_connect(cluster_mgr_http1, cluster_mgr,50000)
+
+--http
+request_type: POST
+header:Content-Type:application/json
+body:{
+        "version":"1.0",
+        "job_id":"",
+        "job_type":"create_cluster",
+        "user_name":"kunlun_test",
+        "timestamp":"202205131532",
+        "paras":{
+              "nick_name":"rbrcluster001",
+              "ha_mode":"rbr",
+              "shards":"1",
+              "nodes":"3",
+              "comps":"1",
+              "max_storage_size":"20",
+              "max_connections":"6",
+              "cpu_cores":"8",
+              "innodb_size":"1",
+              "dbcfg":"1",
+              "fullsync_level": "1",
+              "storage_iplists": [
+                   "${node_mgr.1}"
+                          ],
+              "computer_iplists": [
+                   "${node_mgr.1}"
+                           ]
+  }           
+}
+EOF
+
+--let $job_id = `http_reap(job_id)`
+--sleep 20
+--source kunlun-test/include/wait_http_request_finish.inc
+
+--kl_cluster_id(1)
+#check shard master and slave
+--source kunlun-test/include/check_shard_state.inc
+
+#check cn
+--pg_connect(testrbr1,computer.1, abc, abc)
+--source kunlun-test/include/check_cn_write_read.inc
+--sleep 20
+create table student(id int primary key, info text, wt int);
+insert into student(id,info,wt) values(1, 'record1', 1);
+insert into student(id,info,wt) values(2, 'record2', 2);
+--sleep 20
+#backup the src cluster
+--connection default
+--let $cluster_id = `select id from db_clusters limit 0,1;`
+
+--connection cluster_mgr_http1
+--http
+request_type: POST
+header:Content-Type:application/json
+body:{
+        "version":"1.0",
+        "job_id":"",
+        "job_type":"manual_backup_cluster",
+        "timestamp" : "1435749309",
+        "user_name":"kunlun_test",
+        "paras":{
+               "cluster_id":"${cluster_id}"
+                 }
+}
+EOF
+
+--let $job_id = `http_reap(job_id)`
+--sleep 30
+#--source kunlun-test/include/wait_http_request_finish.inc
+
+#create the des cluster 
+#--connection cluster_mgr_http1
+--http
+request_type: POST
+header:Content-Type:application/json
+body:{
+        "version":"1.0",
+        "job_id":"",
+        "job_type":"create_cluster",
+        "user_name":"kunlun_test",
+        "timestamp":"202205131532",
+        "paras":{
+              "nick_name":"rbrcluster001",
+              "ha_mode":"rbr",
+              "shards":"1",
+              "nodes":"3",
+              "comps":"1",
+              "max_storage_size":"20",
+              "max_connections":"6",
+              "cpu_cores":"8",
+              "innodb_size":"1",
+              "dbcfg":"1",
+              "fullsync_level": "1",
+              "storage_iplists": [
+                   "${node_mgr.1}"
+                          ],
+              "computer_iplists": [
+                   "${node_mgr.1}"
+                           ]
+  }           
+}
+EOF
+
+--let $job_id = `http_reap(job_id)`
+--sleep 20
+--source kunlun-test/include/wait_http_request_finish.inc
+#restore cluster
+--connection default
+--let $src_cluster_id = `select id from db_clusters limit 0,1;`
+--let $dst_cluster_id = `select id from db_clusters limit 1,1;`
+--let $current_time=`select now();`
+
+--connection cluster_mgr_http1
+--http
+request_type: POST
+header:Content-Type:application/json
+body:{
+        "version":"1.0",
+        "job_id":"",
+        "job_type":"cluster_restore",
+        "timestamp" : "1435749309",
+        "user_name":"kunlun_test",
+        "paras":{ 
+               "src_cluster_id":"${src_cluster_id}",
+               "dst_cluster_id":"${dst_cluster_id}",
+               "restore_time":"${current_time}"
+                 }
+}
+EOF
+
+--let $job_id = `http_reap(job_id)`
+--sleep 50
+#--source kunlun-test/include/wait_http_request_finish.inc
+--connection default
+--let $restore_shard_status = query_get_value(select status from restore_log where general_log_id =$job_id and restore_type="shard" and status = "failed",status,1)
+--echo $restore_shard_status
+--let $restore_comp_status = query_get_value(select status from restore_log where general_log_id =$job_id and restore_type="compute" and  status = "failed",status,1)
+--echo $restore_comp_status

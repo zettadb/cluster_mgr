@@ -1,0 +1,41 @@
+shard.1
+SET client_min_messages TO 'warning';
+
+drop table if exists t1111;
+
+RESET client_min_messages;
+
+create table t1111(id int primary key, info text, wt int);
+
+insert into t1111(id,info,wt) values(1, 'record1', 1);
+
+insert into t1111(id,info,wt) values(2, 'record2', 2);
+
+update t1111 set wt = 12 where id = 1;
+
+select * from t1111;
+1	record1	122	record2	2
+delete from t1111 where id = 1;
+
+select * from t1111;
+2	record2	2
+prepare q1(int) as select*from t1111 where id=$1;
+
+begin;
+
+execute q1(1);
+
+execute q1(2);
+2	record2	2
+prepare q2(text,int, int) as update t1111 set info=$1 , wt=$2 where id=$3;
+
+execute q2('Rec1',2,1);
+
+commit;
+
+execute q2('Rec2',3,2);
+
+drop table t1111;
+
+shard.1
+"==== delete cluster ok ===="

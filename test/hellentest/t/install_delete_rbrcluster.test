@@ -1,0 +1,76 @@
+#Use case description:
+#1.create cluster
+#2.cycle query status
+#3.check computer node write and read
+#4.check shard master and slave
+#5.delete cluster
+
+--http_connect(cluster_mgr_http1, cluster_mgr,50000)
+
+--http
+request_type: POST
+header:Content-Type:application/json
+body:{
+        "version":"1.0",
+        "job_id":"",
+        "job_type":"create_cluster",
+        "user_name":"kunlun_test",
+        "timestamp":"202205131532",
+        "paras":{
+              "nick_name":"rbrcluster001",
+              "ha_mode":"rbr",
+              "shards":"1",
+              "nodes":"3",
+              "comps":"1",
+              "max_storage_size":"20",
+              "max_connections":"6",
+              "cpu_cores":"8",
+              "innodb_size":"1",
+              "dbcfg":"1",
+              "fullsync_level": "1",
+              "storage_iplists": [
+                   "${node_mgr.1}"
+                          ],
+              "computer_iplists": [
+                   "${node_mgr.1}"
+                           ]
+  }           
+}
+EOF
+
+--let $job_id = `http_reap(job_id)`
+--sleep 20
+--source kunlun-test/include/wait_http_request_finish.inc
+
+#check shard active and standby
+
+#check cn
+--kl_cluster_id(1)
+
+--pg_connect(testrbr1,computer.1, abc, abc)
+--source kunlun-test/include/check_cn_write_read.inc
+
+#check mysql
+#--kl_cluster_id(1)
+#check the first shard
+--source kunlun-test/include/check_shard_state.inc 
+
+--connection cluster_mgr_http1  
+--http
+request_type: POST
+header:Content-Type:application/json
+body:{
+        "version":"1.0",
+        "job_id":"",
+        "job_type":"delete_cluster",
+        "timestamp" : "1435749309",
+        "user_name":"zhangsan",
+        "paras":{ "cluster_name":"${cluster_name}"}
+}
+EOF
+
+--let $job_id = `http_reap(job_id)`
+--sleep 20
+--source kunlun-test/include/wait_http_request_finish.inc
+
+--source kunlun-test/include/check_delete_cluster_state.inc

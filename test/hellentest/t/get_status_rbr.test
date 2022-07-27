@@ -1,0 +1,23 @@
+#Use case description:
+#1.query current working status
+
+--http_connect(cluster_mgr_http1, cluster_mgr,50000)
+
+--http
+request_type: POST
+header:Content-Type:application/json
+body:{
+     "version":"1.0",
+        "job_id":"108",
+        "job_type":"get_status",
+        "timestamp":"202205131532",
+        "paras":{
+              }
+}
+EOF
+
+
+#--sleep 20
+#--source kunlun-test/include/wait_http_request_finish.inc
+--echo "test create cluster"
+

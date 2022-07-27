@@ -1,0 +1,109 @@
+#Use case description:
+#1.create cluster
+#2.cycle query status
+#3.check computer node write and read
+#4.check mysyld master and slave
+#5.add computer node 
+#6.check all computer node write and read
+#7.delete cluster
+
+
+--http_connect(cluster_mgr_http1, cluster_mgr)
+
+--http
+request_type: POST
+header:Content-Type:application/json
+body:{
+        "version":"1.0",
+        "job_id":"",
+        "job_type":"create_cluster",
+        "user_name":"kunlun_test",
+        "timestamp":"202205131532",
+        "paras":{
+              "nick_name":"rbrcluster001",
+              "ha_mode":"rbr",
+              "shards":"1",
+              "nodes":"3",
+              "comps":"1",
+              "max_storage_size":"20",
+              "max_connections":"6",
+              "cpu_cores":"8",
+              "innodb_size":"1",
+              "dbcfg":"1",
+              "storage_iplists": [
+                        "${node_mgr.1}"
+                                ],
+              "computer_iplists": [
+                        "${node_mgr.1}"
+                               ]
+              }
+}
+EOF
+
+--let $job_id = `http_reap(job_id)`
+--sleep 20
+--source kunlun-test/include/wait_http_request_finish.inc
+
+--kl_cluster_id(1)
+#check shard master and slave status
+--source kunlun-test/include/check_shard_state.inc
+
+#check cn
+--pg_connect(testrbr1,computer.1, abc, abc)
+--source kunlun-test/include/check_cn_write_read.inc
+
+--connection default
+--let $cluster_id = `select id from db_clusters limit 0,1;`
+
+--connection cluster_mgr_http1  
+#add comps
+--http
+request_type: POST
+header:Content-Type:application/json
+body:{
+        "version":"1.0",
+        "job_id":"",
+        "job_type":"add_comps",
+        "user_name":"kunlun_test",
+        "timestamp":"202205131532",
+        "paras":{
+              "cluster_id":"${cluster_id}",
+              "comps":"2",
+              "computer_iplists":[
+                         "${node_mgr.1}"
+                ]
+              }
+}
+EOF
+
+--let $job_id = `http_reap(job_id)`
+--sleep 20
+--source kunlun-test/include/wait_http_request_finish.inc
+
+--kl_cluster_id(1)
+
+--pg_connect(testrbr2,computer.2, abc, abc)
+--source kunlun-test/include/check_cn_write_read.inc
+
+--pg_connect(testrbr3,computer.3, abc, abc)
+--source kunlun-test/include/check_cn_write_read.inc
+
+--connection cluster_mgr_http1
+--http
+request_type: POST
+header:Content-Type:application/json
+body:{
+        "version":"1.0",
+        "job_id":"",
+        "job_type":"delete_cluster",
+        "timestamp" : "202205131532",
+        "user_name":"zhangsan",
+        "paras":{ "cluster_name":"${cluster_name}"}
+}
+EOF
+
+--let $job_id = `http_reap(job_id)`
+--sleep 20
+--source kunlun-test/include/wait_http_request_finish.inc
+
+--source kunlun-test/include/check_delete_cluster_state.inc

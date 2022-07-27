@@ -1,0 +1,65 @@
+#Use case description:
+#1.create machine 
+#create machine didn't produce any output, because it is a synchronous interface
+
+--http_connect(cluster_mgr_http1, cluster_mgr,50000)
+
+#create machine on storage of node_mgr.1 
+--http
+request_type: POST
+header:Content-Type:application/json
+body:{
+        "version":"1.0",
+        "job_id":"",
+        "job_type":"create_machine",
+        "user_name":"hellen_test",
+        "timestamp":"202205131532",
+        "paras":{
+    		"hostaddr": "${node_mgr.1}",
+    		"machine_type": "storage",
+    		"port_range": "51400-51600",
+    		"rack_id": "1",
+    		"datadir": "/home/hellen/testjenkins092",
+    		"logdir": "/home/hellen/testjenkins092",
+    		"wal_log_dir": "/home/hellen/testjenkins092",
+    		"comp_datadir": "/home/hellen/testjenkins092",
+    		"total_mem": "1024",
+    		"total_cpu_cores": "8"
+  }           
+}
+EOF
+
+--sleep 1
+
+
+#create machine on computer of node_mgr.1
+--http
+request_type: POST
+header:Content-Type:application/json
+body:{
+        "version":"1.0",
+        "job_id":"",
+        "job_type":"create_machine",
+        "user_name":"hellen_test",
+        "timestamp":"202205131532",
+        "paras":{
+                "hostaddr": "${node_mgr.1}",
+                "machine_type": "computer",
+                "port_range": "51700-51800",
+                "rack_id": "1",
+                "datadir": "/home/hellen/testjenkins092",
+                "logdir": "/home/hellen/testjenkins092",
+                "wal_log_dir": "/home/hellen/testjenkins092",
+                "comp_datadir": "/home/hellen/testjenkins092",
+                "total_mem": "1024",
+                "total_cpu_cores": "8"
+  }
+}
+EOF
+
+--sleep 1
+
+# create machine didn't produce any output, because it is a synchronous interface
+--echo "create machine end"
+
+

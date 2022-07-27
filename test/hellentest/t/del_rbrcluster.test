@@ -1,0 +1,27 @@
+#Use case description:
+#1.delete_cluster
+#2.check delete cluster 
+
+--connection default
+--let $cluster_id = `select id from db_clusters limit 0,1;`
+
+--http_connect(cluster_mgr_http1, cluster_mgr,50000)  
+--http
+request_type: POST
+header:Content-Type:application/json
+body:{
+        "version":"1.0",
+        "job_id":"",
+        "job_type":"delete_cluster",
+        "timestamp" : "1435749309",
+        "user_name":"zhangsan",
+        "paras":{ "cluster_id":"${cluster_id}"} 
+}
+EOF
+
+--let $job_id = `http_reap(job_id)`
+--sleep 20
+--source kunlun-test/include/wait_http_request_finish.inc
+--echo "test elete cluste ok"
+
+--source kunlun-test/include/check_delete_cluster_state.inc
