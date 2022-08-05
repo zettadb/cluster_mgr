@@ -869,7 +869,7 @@ compute_txn_decisions(std::map<uint, cluster_txninfo> &cluster_txns) {
 			max_trxid = ((clstr.second.max_start_ts.st_ << 32) | 0xffffffff);
 			
 			int slen = snprintf(qstr_buf, sizeof(qstr_buf),
-				"select txn_id, comp_node_id, next_txn_cmd, unix_timestamp(prepare_ts) from commit_log_%s where txn_id >= %lu and txn_id <= %lu order by txn_id",
+				"select txn_id, comp_node_id, next_txn_cmd, unix_timestamp(prepare_ts), written_shards from commit_log_%s where txn_id >= %lu and txn_id <= %lu order by txn_id",
 				clstr.second.cname.c_str(), min_trxid, max_trxid);
 			Assert(slen < sizeof(qstr_buf));
 			
@@ -890,10 +890,12 @@ compute_txn_decisions(std::map<uint, cluster_txninfo> &cluster_txns) {
 				uint64_t trxid = strtoull(res[i]["txn_id"], &endptr, 10);
 				Assert(endptr == NULL || *endptr == '\0');
 				Txn_key ti;
+				ti.trxid = trxid;
 				ti.start_ts = (trxid >> 32);
 				ti.local_txnid = (trxid & 0xffffffff);
 				ti.comp_nodeid = strtoul(res[i]["comp_node_id"], &endptr, 10);
 				Assert(endptr == NULL || *endptr == '\0');
+				ti.written_shards = res[i]["written_shards"];
 
 				/*
 				The SQL query result is in Txn_key increasing order (for free),
@@ -1034,8 +1036,8 @@ bool Shard::WriteCommitLog(const Txn_decision& td) {
     clock_gettime(CLOCK_REALTIME, &time);
 	uint64_t deadline = time.tv_sec + global_txn_commit_log_wait_max_sec;
 
-	std::string sql_stmt = string_sprintf("insert into %s.commit_log_%s (comp_node_id, txn_id, next_txn_cmd) values (%u, %lu, (if (unix_timestamp() > %ld), NULL, '%s'))",
-				KUNLUN_METADATA_DB_NAME, cluster_name.c_str(), td.tk.comp_nodeid, td.tk.local_txnid, deadline, decision.c_str());
+	std::string sql_stmt = string_sprintf("insert into %s.commit_log_%s (comp_node_id, txn_id, next_txn_cmd, written_shards) values (%u, %lu, (if (unix_timestamp() > %ld, NULL, '%s')), '%s')",
+				KUNLUN_METADATA_DB_NAME, cluster_name.c_str(), td.tk.comp_nodeid, td.tk.trxid, deadline, decision.c_str(), td.tk.written_shards.c_str());
 	MysqlResult res;
 	if(master->send_stmt(sql_stmt, &res, 1)) {
 		KLOG_ERROR("write commit log to meta db failed, so quit to commit xa");
