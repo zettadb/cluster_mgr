@@ -7,9 +7,10 @@
 
 #include "config.h"
 #include "global.h"
-#include "log.h"
+//#include "log.h"
 #include "sys.h"
 #include "sys_config.h"
+#include "zettalib/tool_func.h"
 #include <limits.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -20,12 +21,14 @@ extern int64_t thread_work_interval;
 extern int64_t storage_sync_interval;
 extern int64_t commit_log_retention_hours;
 
-extern std::string program_binaries_path;
-extern std::string instance_binaries_path;
-extern std::string storage_prog_package_name;
-extern std::string computer_prog_package_name;
-extern int64_t storage_instance_port_start;
-extern int64_t computer_instance_port_start;
+//extern std::string program_binaries_path;
+//extern std::string instance_binaries_path;
+//extern std::string storage_prog_package_name;
+//extern std::string computer_prog_package_name;
+//extern int64_t storage_instance_port_start;
+//extern int64_t computer_instance_port_start;
+extern int64_t global_txn_commit_log_wait_max_sec;
+extern int64_t backup_allow_replica_delay;
 
 extern int64_t cluster_mgr_brpc_http_port;
 extern std::string raft_group_member_init_config;
@@ -34,6 +37,12 @@ extern int64_t raft_brpc_port;
 extern std::string prometheus_path;
 extern int64_t prometheus_port_start;
 extern std::string local_ip;
+extern std::string log_file_path;
+extern int64_t max_log_file_size;
+
+extern std::string meta_group_seeds;
+extern std::string meta_svr_user;
+extern std::string meta_svr_pwd;
 
 Configs *Configs::get_instance() {
   if (m_inst == NULL)
@@ -160,11 +169,11 @@ void Configs::define_configs() {
   define_int_config("mysql_max_packet_size", mysql_max_packet_size, 65535,
                     1024 * 1024 * 1024, 1024 * 1024 * 1024,
                     "MySQL client max packet size in bytes.");
-  define_enum_config(
+  /*define_enum_config(
       "log_verbosity", (int &)log_verbosity, Logger::log_verbosity_options,
       sizeof(Logger::log_verbosity_options) / sizeof(char *), "INFO",
       "Log verbosity or amount of details, options are(in increasing "
-      "details):{ERROR, WARNING, INFO, LOG, DEBUG1, DEBUG2, DEBUG3}.");
+      "details):{ERROR, WARNING, INFO, LOG, DEBUG1, DEBUG2, DEBUG3}.");*/
   define_int_config("max_log_file_size", max_log_file_size, 10, 10000, 100,
                     "Max log file size in mega bytes(MB). When a log file "
                     "grows larger than this, a new one is created and used.");
@@ -209,7 +218,7 @@ void Configs::define_configs() {
 
   define_str_config("log_file", log_file_path, def_log_path, "log file path");
 
-  define_str_config("program_binaries_path", program_binaries_path,
+  /*define_str_config("program_binaries_path", program_binaries_path,
                     "../../../program_binaries", "program_binaries_path");
   define_str_config("instance_binaries_path", instance_binaries_path,
                     "../../../instance_binaries", "instance_binaries_path");
@@ -222,7 +231,7 @@ void Configs::define_configs() {
                     0, 65535, 57330, "storage_instance_port_start");
   define_int_config("computer_instance_port_start",
                     computer_instance_port_start, 0, 65535, 57030,
-                    "computer_instance_port_start");
+                    "computer_instance_port_start");*/
   define_str_config(
       "raft_group_member_init_config", raft_group_member_init_config,
       "127.0.0.1:8110:0,",
@@ -233,7 +242,12 @@ void Configs::define_configs() {
       "specify the temporary data path of the cluster_mgr");
   define_int_config("brpc_raft_port", raft_brpc_port,
                     1000, 65535, 5000, "raft brpc server listen port.");
-  
+ 
+  define_int_config("global_txn_commit_log_wait_max_sec", global_txn_commit_log_wait_max_sec,
+                    1, 5000, 10, "global txn commit_log wait max second.");
+  define_int_config("backup_allow_replica_delay", backup_allow_replica_delay,
+                    1, 65535, 7200, "select backup node in replica delay.");
+ 
   define_str_config("prometheus_path", prometheus_path,
                     "../../../program_binaries/prometheus", "prometheus_path");
   define_int_config("prometheus_port_start", prometheus_port_start, 0, 65535,
@@ -284,19 +298,19 @@ int Configs::set_cfg(const std::string &name, const char *val) {
   case 0:
     break;
   case -1:
-    syslog(Logger::ERROR, "Variable name %s does not exist", name.c_str());
+    fprintf(stderr, "Variable name %s does not exist", name.c_str());
     break;
   case -2:
-    syslog(Logger::ERROR,
+    fprintf(stderr,
            "Variable %s value %s not valid or can not be interpreted.",
            name.c_str(), val);
     break;
   case -3:
-    syslog(Logger::ERROR, "Variable %s value %s does not match its type.",
+    fprintf(stderr, "Variable %s value %s does not match its type.",
            name.c_str(), val);
     break;
   case -4:
-    syslog(Logger::ERROR,
+    fprintf(stderr,
            "Variable %s value %s is not in its type's valid range.",
            name.c_str(), val);
     break;
@@ -330,8 +344,10 @@ int Configs::set_uint_cfg(const std::string &name, const char *val) {
     return -4;
   Config_entry_uint *ceu = uint_cfgs.find(name)->second;
   if (ceu->min > ival || ival > ceu->max) {
-    syslog(Logger::ERROR,
+    /*syslog(Logger::ERROR,
            "Variable %s value %s is not in its defined valid range [%lu, %lu].",
+           name.c_str(), val, ceu->min, ceu->max);*/
+    fprintf(stderr, "Variable %s value %s is not in its defined valid range [%lu, %lu].",
            name.c_str(), val, ceu->min, ceu->max);
     return -5;
   }
@@ -349,8 +365,10 @@ int Configs::set_int_cfg(const std::string &name, const char *val) {
     return -4;
   Config_entry_int *cei = int_cfgs.find(name)->second;
   if (cei->min > ival || ival > cei->max) {
-    syslog(Logger::ERROR,
+    /*syslog(Logger::ERROR,
            "Variable %s value %s is not in its defined valid range [%ld, %ld].",
+           name.c_str(), val, cei->min, cei->max);*/
+    fprintf(stderr, "Variable %s value %s is not in its defined valid range [%ld, %ld].",
            name.c_str(), val, cei->min, cei->max);
     return -5;
   }
@@ -471,7 +489,8 @@ int Configs::process_config_file(const std::string &fn) {
 
     char *s = strchr(p, '=');
     if (!s || s <= p) {
-      syslog(Logger::ERROR, "Invalid log file format in line '%s'", line);
+      //syslog(Logger::ERROR, "Invalid log file format in line '%s'", line);
+      fprintf(stderr, "Invalid log file format in line '%s'", line);
       return -9;
     }
 
@@ -497,7 +516,8 @@ int Configs::process_config_file(const std::string &fn) {
 
     if (q >= r) // no value part
     {
-      syslog(Logger::ERROR, "Invalid log file format in line '%s'", line);
+      //syslog(Logger::ERROR, "Invalid log file format in line '%s'", line);
+      fprintf(stderr, "Invalid log file format in line '%s'", line);
       return -9;
     }
 
@@ -508,38 +528,29 @@ int Configs::process_config_file(const std::string &fn) {
   std::string bad_vars;
   int nbad = 0;
   if ((nbad = check_key_vars_set(bad_vars)) > 0) {
-    syslog(
+    /*syslog(
         Logger::ERROR,
         "Some (%d) critical variables in config file not assigned a value : %s",
+        nbad, bad_vars.c_str());*/
+    fprintf(stderr, "Some (%d) critical variables in config file not assigned a value : %s",
         nbad, bad_vars.c_str());
     return -8;
   }
 
   // get meta_ip_port by meta_group_seeds
-  char *cStart, *cEnd;
-  cStart = (char *)meta_group_seeds.c_str();
-  while (*cStart != '\0') {
-    cEnd = strchr(cStart, ':');
-    if (cEnd == NULL)
-      break;
-
-    meta_svr_ip = std::string(cStart, cEnd - cStart);
-
-    cStart = cEnd + 1;
-    cEnd = strchr(cStart, ',');
-    meta_svr_port = atoi(cStart);
-    if (cEnd == NULL)
-      *cStart = '\0';
-    else
-      cStart = cEnd + 1;
-
-    vec_meta_ip_port.emplace_back(std::make_pair(meta_svr_ip, meta_svr_port));
-  }
-
-  if (vec_meta_ip_port.size() == 0) {
-    syslog(Logger::ERROR, "meta_group_seeds is invalid : %s",
+  std::vector<std::string> meta_ipports = kunlun::StringTokenize(meta_group_seeds, 
+            ",");
+  if(meta_ipports.size() == 0) {
+    fprintf(stderr, "meta_group_seeds is invalid : %s",
            meta_group_seeds.c_str());
     return -10;
+  }
+
+  for(size_t i=0; i<meta_ipports.size();i++) {
+    meta_svr_ip = meta_ipports[i].substr(0, meta_ipports[i].rfind(":"));
+    std::string sport = meta_ipports[i].substr(meta_ipports[i].rfind(":")+1);
+    meta_svr_port = atoi(sport.c_str());
+    vec_meta_ip_port.emplace_back(std::make_pair(meta_svr_ip, meta_svr_port));
   }
 
   return 0;

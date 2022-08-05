@@ -1,0 +1,6 @@
+add_library(coldbackup OBJECT coldbackup.cc)
+target_include_directories(coldbackup INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_include_directories(coldbackup PUBLIC "${PROJECT_SOURCE_DIR}/src")
+target_include_directories(coldbackup PUBLIC "${VENDOR_OUTPUT_PATH}/include")
+target_include_directories(coldbackup PUBLIC "${PROJECT_BINARY_DIR}")
+target_include_directories(coldbackup PUBLIC "${ZETTALIB_INCLUDE_PATH}")

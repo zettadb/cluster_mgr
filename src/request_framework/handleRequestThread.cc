@@ -7,23 +7,29 @@
 #include "handleRequestThread.h"
 #include "unistd.h"
 #include "string.h"
+#include "zettalib/op_log.h"
+
+using namespace kunlun;
 
 void *HandleRequestThread::AsyncDealRequest(void *arg)
 {
-  ClusterRequest *request = static_cast<ClusterRequest *>(arg);
+  ObjectPtr<ClusterRequest> request(static_cast<ClusterRequest *>(arg));
   request->DealRequest();
   request->TearDown();
-  syslog(Logger::DEBUG1, "request: %d already finished", request->get_request_unique_id());
-  // delete arg;
+  KLOG_INFO("request: {} already finished", request->get_request_unique_id());
+  //if(request->get_default_del_request()) {
+  //  KLOG_INFO("request: {} delete by HandleRequest", request->get_request_unique_id());
+  //  delete request;
+  //}
   return nullptr;
 }
 
-void HandleRequestThread::DispatchRequest(ClusterRequest *request_base)
+void HandleRequestThread::DispatchRequest(ObjectPtr<ClusterRequest> request_base)
 {
   // always successfully
-  while (!request_queue_.push(request_base))
+  while (!request_queue_.push(request_base.GetTRaw()))
   {
-    syslog(Logger::ERROR,
+    KLOG_ERROR(
            "can not dispatch the request, maybe the request_queue_ is full");
     sleep(1);
   }
@@ -34,16 +40,18 @@ int HandleRequestThread::run()
 {
   while (m_state)
   {
-    ClusterRequest *request_base = nullptr;
-    int ret = request_queue_.pop(request_base);
+    ClusterRequest *request = nullptr;
+    int ret = request_queue_.pop(request);
     if (!ret)
     {
       usleep(20 * 100);
       continue;
     }
-    // request_base should not be null
-    assert(request_base);
+    
+    if(!request)
+      continue;
 
+    ObjectPtr<ClusterRequest> request_base(request);
     // deal the request
     request_base->SetUp();
 
@@ -54,10 +62,10 @@ int HandleRequestThread::run()
       bthread_t bid;
       ret = bthread_start_background(
           &bid, nullptr, &(HandleRequestThread::AsyncDealRequest),
-          (void *)request_base);
+          (void *)(request_base.GetTRaw()));
       if (ret != 0)
       {
-        syslog(Logger::ERROR, "start bthread to async deal Request failed: %s",
+        KLOG_ERROR( "start bthread to async deal Request failed: {}",
                strerror(ret));
       }
     } while (ret != 0);

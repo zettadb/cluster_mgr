@@ -7,7 +7,9 @@
 #include "backup_storage.h"
 #include "kl_mentain/global.h"
 #include "kl_mentain/sys.h"
+#include "zettalib/op_log.h"
 
+using namespace kunlun;
 
 void BackupStorage::CreateBackupStorage() {
   std::string name,stype,hostaddr,port,conn_str,str_sql;
@@ -50,10 +52,11 @@ void BackupStorage::CreateBackupStorage() {
   port = paras["port"].asString();
 
 	job_error_info = "create backup storage start";
-  syslog(Logger::INFO, "%s", job_error_info.c_str());
+  KLOG_INFO("{}", job_error_info);
 
 	/////////////////////////////////////////////////////////
 	if(System::get_instance()->check_backup_storage_name(name))	{
+    job_error_code = EintToStr(ERR_BACKUP_NAME_EXIST);
 		job_error_info = "backup storage name have existed";
 		goto end;
 	}
@@ -62,6 +65,7 @@ void BackupStorage::CreateBackupStorage() {
 	if(stype == "HDFS")	{
 		conn_str = "hdfs://" + hostaddr + ":" + port;
 	}	else {
+    job_error_code = EintToStr(ERR_BACKUP_STYPE_NO_SUPPORT);
 		job_error_info = "stype isn't support";
 		goto end;
 	}
@@ -71,6 +75,7 @@ void BackupStorage::CreateBackupStorage() {
 	//syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
 
 	if(System::get_instance()->execute_metadate_opertation(SQLCOM_INSERT, str_sql))	{
+    job_error_code = EintToStr(ERR_META_WRITE);
 		job_error_info = "job_create_backup_storage error";
 		goto end;
 	}
@@ -80,7 +85,7 @@ void BackupStorage::CreateBackupStorage() {
 	job_error_info = "create backup storage successfully";
 
 end:
-	syslog(Logger::ERROR, "%s", job_error_info.c_str());
+	KLOG_ERROR("{}", job_error_info);
   update_operation_record();
 }
 
@@ -125,10 +130,11 @@ void BackupStorage::UpdateBackupStorage() {
   port = paras["port"].asString();
 
 	job_error_info = "update backup storage start";
-  syslog(Logger::INFO, "%s", job_error_info.c_str());
+  KLOG_INFO("{}", job_error_info.c_str());
 
 	/////////////////////////////////////////////////////////
 	if(!System::get_instance()->check_backup_storage_name(name)) {
+    job_error_code = EintToStr(ERR_BACKUP_NAME_NO_EXIST);
 		job_error_info = "backup storage name no existed";
 		goto end;
 	}
@@ -137,6 +143,7 @@ void BackupStorage::UpdateBackupStorage() {
 	if(stype == "HDFS")	{
 		conn_str = "hdfs://" + hostaddr + ":" + port;
 	} else {
+    job_error_code = EintToStr(ERR_BACKUP_STYPE_NO_SUPPORT);
 		job_error_info = "stype isn't support";
 		goto end;
 	}
@@ -146,6 +153,7 @@ void BackupStorage::UpdateBackupStorage() {
 	//syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
 
 	if(System::get_instance()->execute_metadate_opertation(SQLCOM_UPDATE, str_sql))	{
+    job_error_code = EintToStr(ERR_META_WRITE);
 		job_error_info = "job_update_backup_storage error";
 		goto end;
 	}
@@ -155,7 +163,7 @@ void BackupStorage::UpdateBackupStorage() {
 	job_error_info = "update backup storage successfully";
 
 end:
-	syslog(Logger::ERROR, "%s", job_error_info.c_str());
+	KLOG_ERROR("{}", job_error_info);
   update_operation_record();
 }
 
@@ -179,10 +187,11 @@ void BackupStorage::DeleteBackupStorage() {
   name = paras["name"].asString();
 
 	job_error_info = "delete backup storage start";
-  syslog(Logger::INFO, "%s", job_error_info.c_str());
+  KLOG_INFO("{}", job_error_info);
 
 	/////////////////////////////////////////////////////////
 	if(!System::get_instance()->check_backup_storage_name(name)) {
+    job_error_code = EintToStr(ERR_BACKUP_NAME_NO_EXIST);
 		job_error_info = "backup storage name no existed";
 		goto end;
 	}
@@ -190,6 +199,7 @@ void BackupStorage::DeleteBackupStorage() {
 	/////////////////////////////////////////////////////////
 	//must delete cluster_shard_backup_restore_log
 	if(!System::get_instance()->get_backup_storage_string(name, backup_storage_id, backup_storage_str)) {
+    job_error_code = EintToStr(ERR_BACKUP_STRING);
 		job_error_info = "get_backup_storage_string error";
 		goto end;
 	}
@@ -198,6 +208,7 @@ void BackupStorage::DeleteBackupStorage() {
 	//syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
 
 	if(System::get_instance()->execute_metadate_opertation(SQLCOM_DELETE, str_sql)) {
+    job_error_code = EintToStr(ERR_META_WRITE);
 		job_error_info = "job_delete_backup_storage error";
 		//goto end;
 	}
@@ -208,6 +219,7 @@ void BackupStorage::DeleteBackupStorage() {
 	//syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
 
 	if(System::get_instance()->execute_metadate_opertation(SQLCOM_DELETE, str_sql))	{
+    job_error_code = EintToStr(ERR_META_WRITE);
 		job_error_info = "job_delete_backup_storage error";
 		//goto end;
 	}
@@ -217,6 +229,7 @@ void BackupStorage::DeleteBackupStorage() {
 	//syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
 
 	if(System::get_instance()->execute_metadate_opertation(SQLCOM_DELETE, str_sql))	{
+    job_error_code = EintToStr(ERR_META_WRITE);
 		job_error_info = "job_delete_backup_storage error";
 		goto end;
 	}
@@ -226,7 +239,7 @@ void BackupStorage::DeleteBackupStorage() {
 	job_error_info = "delete backup storage successfully";
 
 end:
-	syslog(Logger::ERROR, "%s", job_error_info.c_str());
+	KLOG_ERROR("{}", job_error_info);
   update_operation_record();
 }
 
@@ -245,7 +258,7 @@ bool BackupStorage::update_operation_record(){
 	//syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
 
 	if(System::get_instance()->execute_metadate_opertation(SQLCOM_UPDATE, str_sql)) {
-		syslog(Logger::ERROR, "execute_metadate_opertation error");
+		KLOG_ERROR("execute_metadate_opertation error");
 		return false;
 	}
 

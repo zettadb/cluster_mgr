@@ -27,13 +27,12 @@ typedef uint32_t uint;
 
 //some sql buf strlen(const_str) < sizeof(const_str)-1
 //#define CONST_STR_PTR_LEN(const_str) const_str,(sizeof(const_str) - 1)
-#define CONST_STR_PTR_LEN(const_str) const_str,strlen(const_str)
+//#define CONST_STR_PTR_LEN(const_str) const_str,strlen(const_str)
 #define ABS(a,b) (a>b?(a-b):(b-a))
 
 #define KUNLUN_METADATA_DBNAME "Kunlun_Metadata_DB"
 
-// ha_mode, shards, nodes, comps, storage_size, connections, cpu_cores, innodb_size
-typedef std::tuple<std::string, int, int, int, int, int, int, int> Tpye_cluster_info;
+typedef std::tuple<std::string, int, int, int, int, int, int, int, int, int> Tpye_cluster_info;
 typedef std::tuple<std::string, int, std::string, std::string> Tpye_Ip_Port_User_Pwd;
 typedef std::tuple<std::string, int, std::vector<std::string>> Tpye_Ip_Port_Paths;
 typedef std::tuple<std::string, int, std::string, int, int> Tpye_Shard_Id_Ip_Port_Id;
@@ -54,8 +53,8 @@ typedef std::pair<std::string, std::vector<std::string>> Tpye_Ip_Paths;
 #define gettid() syscall(SYS_gettid)
 #endif
 
-inline bool likely(bool expr) { return __builtin_expect(expr, true); }
-inline bool unlikely(bool expr) { return __builtin_expect(expr, false); }
+//inline bool likely(bool expr) { return __builtin_expect(expr, true); }
+//inline bool unlikely(bool expr) { return __builtin_expect(expr, false); }
 
 class Scopped_mutex
 {

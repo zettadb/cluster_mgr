@@ -20,10 +20,13 @@
 #include "zettalib/errorcup.h"
 #include "json/json.h"
 #include <map>
-#include <mutex>
+#include <atomic>
+//#include <mutex>
 #include <string>
 
 using namespace kunlunrpc;
+using namespace kunlun;
+
 enum REMOTE_TASK_STATUS {
   // R_* means remote
   R_NOT_STARTED = 0,
@@ -32,6 +35,7 @@ enum REMOTE_TASK_STATUS {
   R_FAILED_DONE
 };
 
+class RemoteTask;
 class RemoteTaskResponse : public kunlun::ErrorCup,
                            public kunlun::GlobalErrorNum {
 public:
@@ -42,15 +46,21 @@ public:
   bool ParseAttachment(const char *, const char *);
   std::string SerializeResponseToStr();
   bool ok();
+  std::string get_request_id();
+  std::string get_error_info();
   Json::Value get_all_response_json();
+  void SetRpcFailedInfo(brpc::Controller *cntl,RemoteTask *task);
 
 private:
-  std::mutex mutex_;
+  //std::mutex mutex_;
+  KlWrapMutex mutex_;
   std::map<std::string, std::string> attachment_str_map_;
   std::map<std::string, Json::Value> attachment_json_map_;
   Json::Value all_response_;
-  bool failed_occour_;
+  std::atomic<bool> failed_occour_;
+  std::string error_info_;
   std::string task_spec_info_;
+  std::string request_id_;
 };
 
 class TaskManager;
@@ -75,11 +85,10 @@ public:
 public:
   void AddNodeSubChannel(const char *, brpc::Channel *);
   void AddChannelParas(const char *, Json::Value);
+  void virtual SetUpStatus(); 
   // sync run in bthread
-  bool RunTask();
-  bool RunSingleTask();
-  bool Success();
-  Json::Value GetExcuteErrorInfo();
+  bool virtual RunTask();
+  std::string getTaskInfo();
   const char *get_task_spec_info() const;
   void SetPara(const char *, Json::Value);
   void Set_call_back(void (*function)(void *));
@@ -117,12 +126,20 @@ public:
     serialized_result_ = "";
     error_occour_ = false;
   }
-  ~TaskManager();
+  ~TaskManager(){
+    auto iter = remote_task_vec_.begin();
+    for(;iter != remote_task_vec_.end();iter++){
+      if((*iter) != nullptr){
+        delete (*iter);
+      }
+    }
+  };
 
   void PushBackTask(RemoteTask *);
   const std::vector<RemoteTask *> &get_remote_task_vec();
   void SerializeAllResponse();
   bool ok();
+  void SetSerializeResult(const std::string& result);
 
 public:
   std::string serialized_result_;

@@ -1,0 +1,6 @@
+add_library(restore_cluster OBJECT restoreShardTask.cc restoreComputeTask.cc restoreClusterMission.cc)
+target_include_directories(restore_cluster INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_include_directories(restore_cluster PUBLIC "${PROJECT_SOURCE_DIR}/src")
+target_include_directories(restore_cluster PUBLIC "${VENDOR_OUTPUT_PATH}/include")
+target_include_directories(restore_cluster PUBLIC "${PROJECT_BINARY_DIR}")
+target_include_directories(restore_cluster PUBLIC "${ZETTALIB_INCLUDE_PATH}")

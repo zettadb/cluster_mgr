@@ -4,7 +4,8 @@
 #include "sys_config.h"
 #include "global.h"
 #include "shard.h"
-#include "log.h"
+#include "zettalib/op_pg.h"
+//#include "log.h"
 
 #include <atomic>
 #include <set>
@@ -12,67 +13,48 @@
 #include <map>
 #include <vector>
 #include <tuple>
+#include "util_func/meta_info.h"
+#include "util_func/object_ptr.h"
+#include "util_func/kl_mutex.h"
+//#include "pgsql/libpq-fe.h"
+using namespace kunlun;
 
-#include "pgsql/libpq-fe.h"
-
-class PGSQL_CONN
-{
-private:
-	bool connected;
-	int port;
-	std::string db, ip, user, pwd;
-	PGconn	   *conn;
-	PGresult   *result;
-	Computer_node *owner;
-	friend class Computer_node;
-	void free_pgsql_result();
+class Computer_node : public ObjectRef {
 public:
-	PGSQL_CONN(const char * ip_, int port_, const char * user_,		const char * pwd_, Computer_node *owner_):
-		connected(false), port(port_), ip(ip_), user(user_), pwd(pwd_), owner(owner_)
-	{
-		result = NULL;
-	}
-
-	~PGSQL_CONN() { close_conn(); }
-
-	int send_stmt(int pgres, const char *database, const char *stmt);
-
-	Computer_node *get_owner() { return owner; }
-
-	int connect(const char *database);
-	void close_conn();
-};
-
-class Computer_node
-{
-public:
-	uint id;
-	uint cluster_id;
+	int id;
+	int cluster_id;
 	std::string name;
-	friend class PGSQL_CONN;
-	PGSQL_CONN gpsql_conn;
+	std::string ip;
+	int port;
+	std::string user;
+	std::string pwd;
+	std::string db;
+	PGConnection *gpsql_conn;
+	KlWrapMutex sql_mtx_;
+  CounterTriggerTimePeriod coldbackup_timer;
 
-	Computer_node(uint id_, uint cluster_id_, int port_,
+
+	Computer_node(int id_, int cluster_id_, int port_,
 		const char * name_, const char * ip_, const char * user_, const char * pwd_):
-		id(id_), cluster_id(cluster_id_), name(name_),
-		gpsql_conn(ip_, port_, user_, pwd_, this)
+		id(id_), cluster_id(cluster_id_), name(name_), ip(ip_), port(port_),
+		user(user_), pwd(pwd_) ,coldbackup_timer(1,"01:00:00-02:00:00")//,
 	{
+		gpsql_conn = nullptr;
 		Assert(name_ && ip_ && user_ && pwd_);
 		Assert(port_ > 0);
+    coldbackup_timer.InitOrRefresh("01:00:00-02:00:00");
 	}
 
-	void get_ip_port(std::string&ip, int&port) const
-	{
-		ip = gpsql_conn.ip;
-		port = gpsql_conn.port;
+	void get_ip_port(std::string&ip, int&port) const {
+		ip = this->ip;
+		port = this->port;
 	}
-	void get_user_pwd(std::string&user, std::string&pwd) const
-	{
-		user = gpsql_conn.user;
-		pwd = gpsql_conn.pwd;
+	void get_user_pwd(std::string&user, std::string&pwd) const {
+		user = this->user;
+		pwd = this->pwd;
 	}
 
-	uint get_id() const
+	int get_id() const
 	{
 		return id;
 	}
@@ -84,11 +66,11 @@ public:
 
 	bool matches_ip_port(const std::string &ip, int port) const
 	{
-		return gpsql_conn.ip == ip && gpsql_conn.port == port;
+		return this->ip == ip && this->port == port;
 	}
 
 	bool refresh_node_configs(int port_,
-		const char * name_, const char * ip_, const char * user_, const char * pwd_)
+		const char * name_, const char * ip_, const char * user_, const char * pwd_,std::string time_str = "01:00:00-02:00:00")
 	{
 		bool is_change = false;
 
@@ -97,90 +79,122 @@ public:
 			name = name_;
 		}
 
-		if(gpsql_conn.port != port_)
+		if(port != port_)
 		{
-			gpsql_conn.port = port_;
+			port = port_;
 			is_change = true;
 		}
 			
-		if(gpsql_conn.ip != ip_)
+		if(ip != ip_)
 		{
-			gpsql_conn.ip = ip_;
+			ip = ip_;
 			is_change = true;
 		}
 			
-		if(gpsql_conn.user != user_)
+		if(user != user_)
 		{
-			gpsql_conn.user = user_;
+			user = user_;
 			is_change = true;
 		}
 			
-		if(gpsql_conn.pwd != pwd_)
+		if(pwd != pwd_)
 		{
-			gpsql_conn.pwd = pwd_;
+			pwd = pwd_;
 			is_change = true;
 		}
 
 		// close connect, it will be reconnect while next send_stmt
-		if(is_change)
+		if(is_change) {
 			close_conn();
-
+		}
+    bool ret = coldbackup_timer.InitOrRefresh(time_str);
+    if(!ret){
+      KLOG_ERROR("Init or refresh compute coldback time faild: {}",coldbackup_timer.getErr());
+    }
 		return is_change;
 	}
 
-	int send_stmt(int pgres, const char *database, const char *stmt, int nretries = 1);
-	void close_conn() { gpsql_conn.close_conn(); }
-	bool connect_status() { return gpsql_conn.connected; }
-	PGresult *get_result() { return gpsql_conn.result; }
-	void free_pgsql_result() { gpsql_conn.free_pgsql_result(); }
+	bool pg_connect(const std::string& database);
+	int send_stmt(const char *database, const char *stmt, PgResult *result, int nretries = 1);
+
+	void close_conn() {
+		if(gpsql_conn) {
+			gpsql_conn->Close(); 
+			delete gpsql_conn;
+			gpsql_conn = nullptr;
+		}
+	}
+
+	bool connect_status() {
+		if(!gpsql_conn){
+			return false;
+		}
+		return gpsql_conn->CheckIsConnected(); 
+  	}
+	//PGresult *get_result() { return gpsql_conn.result; }
+	//void free_pgsql_result() { gpsql_conn.free_pgsql_result(); }
 	bool get_variables(std::string &variable, std::string &value);
 	bool set_variables(std::string &variable, std::string &value_int, std::string &value_str);
 };
 
-class KunlunCluster
-{
+class KunlunCluster : public ObjectRef {
 private:
-	mutable pthread_mutex_t mtx;
-	uint id;
+	KlWrapMutex mtx_;
+	int id;
 	std::string name;
 	std::string nick_name;
-	
-public:
-
-	std::vector<Computer_node *> computer_nodes;
-	std::vector<Shard *> storage_shards;
+	std::atomic<bool> is_delete_;
 
 public:
-	KunlunCluster(uint id_, const std::string &name_);
+	std::vector<ObjectPtr<Computer_node> > computer_nodes;
+	std::vector<ObjectPtr<Shard> > storage_shards;
+
+public:
+	KunlunCluster(int id_, const std::string &name_);
 	~KunlunCluster();
 
-	uint get_id() const
+	int get_id() 
 	{
-		Scopped_mutex sm(mtx);
 		return id;
 	}
 
-	const std::string &get_name() const
+	std::string &get_name() 
 	{
-		Scopped_mutex sm(mtx);
 		return name;
 	}
 
-	const std::string &get_nick_name() const
+	std::string &get_nick_name() 
 	{
-		Scopped_mutex sm(mtx);
+		KlWrapGuard<KlWrapMutex> guard(mtx_);
 		return nick_name;
 	}
 
 	void set_nick_name(const std::string &nick_name_)
 	{
-		Scopped_mutex sm(mtx);
+		KlWrapGuard<KlWrapMutex> guard(mtx_);
 		nick_name = nick_name_;
+	}
+	void set_cluster_delete_state(bool is_delete) {
+		is_delete_.store(is_delete);
+	}
+	bool get_cluster_delete_state() const {
+		return is_delete_.load();
 	}
 
 	int refresh_storages_to_computers();
-	int refresh_storages_to_computers_metashard(MetadataShard &meta_shard);
-	int truncate_commit_log_from_metadata_server(std::vector<KunlunCluster *> &kl_clusters, MetadataShard &meta_shard);
+	int refresh_storages_to_computers_metashard(ObjectPtr<MetadataShard> meta_shard);
+	int truncate_commit_log_from_metadata_server(std::vector<ObjectPtr<KunlunCluster> > &kl_clusters, 
+					ObjectPtr<MetadataShard> meta_shard);
+  	ObjectPtr<Computer_node> get_coldbackup_comp_node();
+	void deal_cn_ddl_undoing_jobs(ObjectPtr<MetadataShard> meta_shard);
+	bool lock_ddl_locks(ObjectPtr<Shard_node> master);
+	void unlock_ddl_locks(ObjectPtr<Shard_node> master);
+	int get_computer_database_namespace(ObjectPtr<Computer_node> computer,
+			std::map<std::string, std::vector<std::string> >& db_map_tables);
+	int get_storage_database_namespace(ObjectPtr<Shard> shard, 
+					std::map<std::string, std::vector<std::string> >& db_map_tables);
+	int get_node_mgr_database_namespace(ObjectPtr<Shard> shard, 
+					std::map<std::string, std::vector<std::string> >& db_map_tables);
 };
 
 #endif // !KL_CLUSTER_H

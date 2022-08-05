@@ -22,11 +22,16 @@ public:
   bool GetMetaMode();
   bool GetMetaSummary();
   bool GetBackupStorage();
-  bool GetMachineSummary();
   bool GetClusterSummary();
   bool GetClusterDetail();
+  bool GetExpandTableList();
   bool GetVariable();
   bool SetVariable();
+
+  bool GenerateRelatedAttachment(Json::Value &doc);
+  void fetchClusterRestoreResult(Json::Value &doc);
+  void fetchClusterExpandResult(Json::Value &doc);
+
   virtual bool SyncTaskImpl() override {
     bool ret = true;
     switch (get_request_type()) {
@@ -42,14 +47,11 @@ public:
     case kunlun::kGetBackupStorageType:
       ret = GetBackupStorage();
       break;
-    case kunlun::kGetMachineSummaryType:
-      ret = GetMachineSummary();
-      break;
-    case kunlun::kGetClusterSummaryType:
-      ret = GetClusterSummary();
-      break;
     case kunlun::kGetClusterDetailType:
       ret = GetClusterDetail();
+      break;
+    case kunlun::kGetExpandTableListType:
+      ret = GetExpandTableList();
       break;
     case kunlun::kGetVariableType:
       ret = GetVariable();

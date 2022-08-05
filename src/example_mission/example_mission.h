@@ -4,48 +4,17 @@
   This source code is licensed under Apache 2.0 License,
   combined with Common Clause Condition 1.0, as detailed in the NOTICE file.
 */
+#include "cluster_operator/mysqlInstallRemote.h"
+#include "cluster_operator/postgresInstallRemote.h"
+#include "cluster_operator/shardInstallMission.h"
+#include "cluster_operator/computeInstallMission.h"
 #include "http_server/node_channel.h"
 #include "request_framework/missionRequest.h"
+#include "request_framework/handleRequestThread.h"
+#include "zettalib/op_log.h"
 
+extern HandleRequestThread *g_request_handle_thread;
 namespace kunlun {
-
-class ExampleRemoteTask : public ::RemoteTask {
-  typedef ::RemoteTask super;
-
-public:
-  explicit ExampleRemoteTask(const char *task_spec_info, const char *request_id)
-      : super(task_spec_info), unique_request_id_(request_id) {}
-  ~ExampleRemoteTask() {}
-  void SetParaToRequestBody(brpc::Controller *cntl,
-                            std::string node_hostaddr) override {
-    if (prev_task_ == nullptr) {
-      return super::SetParaToRequestBody(cntl, node_hostaddr);
-    }
-
-    Json::Value root;
-    root["cluster_mgr_request_id"] = unique_request_id_;
-    root["task_spec_info"] = task_spec_info_;
-    root["job_type"] = "execute_command";
-
-    Json::Value paras;
-    paras["command_name"] = "echo";
-    Json::Value para_json_array;
-    para_json_array.append(prev_task_->get_response()->SerializeResponseToStr());
-    para_json_array.append(" 1>&2");
-    paras["command_para"] = para_json_array;
-    root["paras"] = paras;
-
-    Json::FastWriter writer;
-    writer.omitEndingLineFeed();
-
-    cntl->request_attachment().append(writer.write(root));
-    cntl->http_request().set_method(brpc::HTTP_METHOD_POST);
-  }
-
-private:
-  std::string unique_request_id_;
-};
-
 class ExampleMission : public ::MissionRequest {
   typedef MissionRequest super;
 
@@ -53,73 +22,121 @@ public:
   explicit ExampleMission(Json::Value *doc) : super(doc){};
   ~ExampleMission(){};
 
+  virtual bool SetUpMisson() override {
+
+    //InstanceInfoSt st1 ;
+    //st1.ip = "192.168.0.135";
+    //st1.port = 8930;
+    //st1.innodb_buffer_size_M = 16;
+    //st1.role = "master";
+    //InstanceInfoSt st2;
+    //st2.ip = "192.168.0.135";
+    //st2.port = 8931;
+    //st2.innodb_buffer_size_M = 16;
+    //st2.role = "slave";
+
+    //KAddShardMission * mission = new KAddShardMission();
+
+    //mission->setInstallInfoOneByOne(st1);
+    //mission->setInstallInfoOneByOne(st2);
+    //bool ret = mission->InitFromInternal();
+    //if(!ret){
+    //  KLOG_ERROR("{}",mission->getErr());
+    //}
+    //g_request_handle_thread->DispatchRequest(mission);
+    //KLOG_INFO("DISPATCH TEST SHARD INSTALL");
+
+    ComputeInstanceInfoSt st1;
+    st1.ip = "192.168.0.135";
+    st1.pg_port = 55001;
+    st1.mysql_port = 55002;
+    st1.init_user = "abc";
+    st1.init_pwd = "abc";
+    st1.compute_id = 1;
+    ComputeInstanceInfoSt st2;
+    st2.ip = "192.168.0.135";
+    st2.pg_port = 55003;
+    st2.mysql_port = 55004;
+    st2.init_user = "abc";
+    st2.init_pwd = "abc";
+    st2.compute_id = 2;
+
+    KComputeInstallMission * mission = new KComputeInstallMission();
+    mission->setInstallInfoOneByOne(st1);
+    mission->setInstallInfoOneByOne(st2);
+
+    bool ret = mission->InitFromInternal();
+    if(!ret){
+      KLOG_ERROR("{}",mission->getErr());
+    }
+    g_request_handle_thread->DispatchRequest(mission);
+    KLOG_INFO("DISPATCH TEST COMPUTE INSTALL");
+
+  
+    return true; 
+  }
   virtual bool ArrangeRemoteTask() override {
     // for each node_channel, execute the ifconfig and fetch the output
-    auto node_channle_map = g_node_channel_manager.get_nodes_channel_map();
+    auto node_channle_map = g_node_channel_manager->get_nodes_channel_map();
     auto iter = node_channle_map.begin();
     for (; iter != node_channle_map.end(); iter++) {
-      IfConfig((iter->first).c_str());
+      //IfConfig((iter->first).c_str());
+      //InstallMysqlTask((iter->first).c_str());
+      //InstallPostgresTask((iter->first).c_str());
     }
-
-    iter = node_channle_map.begin();
-    ExampleRemoteTask *fetch_date =
-        new ExampleRemoteTask("Example_fetch_date", get_request_unique_id().c_str());
-    fetch_date->AddNodeSubChannel(
-        (iter->first).c_str(),
-        g_node_channel_manager.getNodeChannel((iter->first).c_str()));
-
-    Json::Value root;
-    root["cluster_mgr_request_id"] = get_request_unique_id();
-    root["task_spec_info"] = fetch_date->get_task_spec_info();
-    root["job_type"] = "execute_command";
-
-    Json::Value paras;
-    paras["command_name"] = "date";
-    Json::Value para_json_array;
-    para_json_array.append(" 1>&2");
-    paras["command_para"] = para_json_array;
-    root["paras"] = paras;
-
-    fetch_date->SetPara((iter->first).c_str(), root);
-    get_task_manager()->PushBackTask(fetch_date);
-
-    ExampleRemoteTask *echo_prev_date =
-        new ExampleRemoteTask("Example_echo_prev", get_request_unique_id().c_str());
-    echo_prev_date->set_prev_task(fetch_date);
-    echo_prev_date->AddNodeSubChannel(
-        (iter->first).c_str(),
-        g_node_channel_manager.getNodeChannel((iter->first).c_str()));
-    get_task_manager()->PushBackTask(echo_prev_date);
-
     return true;
   }
-  virtual bool SetUpMisson() override { return true; }
   virtual bool TearDownMission() override { return true; }
   virtual bool FillRequestBodyStImpl() override { return true; }
   virtual void ReportStatus() override {
-    syslog(Logger::INFO, "report status called here");
+    KLOG_INFO("report status called here");
+  }
+
+  bool InstallPostgresTask(const char *node_ip) {
+    kunlun::ComputeInstanceInfoSt info_st;
+    info_st.ip = "192.168.0.135";
+    info_st.pg_port = 56701;
+    info_st.mysql_port = 56702;
+    info_st.init_user = "abc";
+    info_st.init_pwd = "abc";
+    info_st.compute_id = 1;
+    info_st.related_id = 100;
+    
+    kunlun::PostgresInstallRemoteTask *task =
+        new kunlun::PostgresInstallRemoteTask("test_install_postgres_single", "100");
+    bool ret = task->InitInstanceInfoOneByOne(info_st);
+    if(!ret){
+      KLOG_ERROR("{}",task->getErr());
+    }
+    get_task_manager()->PushBackTask(task);
+    return true;
+  }
+
+  bool InstallMysqlTask(const char *node_ip) {
+    kunlun::MySQLInstallRemoteTask *task =
+        new kunlun::MySQLInstallRemoteTask("test_install_mysql_single", "100");
+    bool ret = task->InitInstanceInfoOneByOne(std::string(node_ip), "7895", "7896", 16, 0);
+    if(!ret){
+      KLOG_ERROR("{}",task->getErr());
+    }
+    get_task_manager()->PushBackTask(task);
+    return true;
   }
 
   bool IfConfig(const char *node_ip) {
-    brpc::Channel *channel = g_node_channel_manager.getNodeChannel(node_ip);
+    brpc::Channel *channel = g_node_channel_manager->getNodeChannel(node_ip);
 
     // RemoteTask is a base class which has the callback_ facility to support
     // the special requirment, see the ExpandClusterTask for detail
     RemoteTask *task = new RemoteTask("Example_Ifconfig_info");
     task->AddNodeSubChannel(node_ip, channel);
-
     Json::Value root;
-    root["task_spec_info"] = task->get_task_spec_info();
+    root["command_name"] = "ifconfig";
     root["cluster_mgr_request_id"] = get_request_unique_id();
-    root["job_type"] = "execute_command";
-    
+    root["task_spec_info"] = task->get_task_spec_info();
     Json::Value paras;
-    paras["command_name"] = "ifconfig";
-    Json::Value para_json_array;
-    para_json_array.append("-a 1>&2");
-    paras["command_para"] = para_json_array;
-    root["paras"] = paras;
-
+    paras.append("-a 1>&2");
+    root["para"] = paras;
     task->SetPara(node_ip, root);
     get_task_manager()->PushBackTask(task);
     return true;

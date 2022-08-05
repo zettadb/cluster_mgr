@@ -8,7 +8,8 @@
 #include "sys_config.h"
 #include "global.h"
 #include "sys.h"
-#include "log.h"
+//#include "log.h"
+#include "zettalib/op_log.h"
 #include "config.h"
 #include "machine_info.h"
 #include "thread_manager.h"
@@ -22,6 +23,8 @@
 extern "C" void *signal_hander(void *arg);
 extern "C" void *thread_func(void*thrdarg);
 extern "C" void *thread_func_storage_sync(void*thrdarg);
+
+using namespace kunlun;
 
 int64_t num_worker_threads = 3;
 int Thread_manager::do_exit = 0;
@@ -121,9 +124,9 @@ void Thread_manager::start_signal_handler() {
   if ((error = pthread_create(&signal_hdlr_thrd,
                                    &thr_attr, signal_hander, 0))) {
 	char errmsg_buf[256];
-    syslog(Logger::ERROR,
-		"Can not create interrupt handler thread, error: %d, %s",
-		error, errno, strerror_r(errno, errmsg_buf, sizeof(errmsg_buf)));
+    KLOG_ERROR(
+		"Can not create interrupt handler thread, error: {}, {}",
+			errno, strerror_r(errno, errmsg_buf, sizeof(errmsg_buf)));
     do_exit = 1;
   }
 
@@ -141,8 +144,8 @@ void Thread_manager::start_worker_thread()
 			 &Thread_manager::get_instance()->thr_attr, thread_func, thd)))
 		{
 			char errmsg_buf[256];
-			syslog(Logger::ERROR, "Can not create worker thread, error: %d, %s",
-			error, errno, strerror_r(errno, errmsg_buf, sizeof(errmsg_buf)));
+			KLOG_ERROR("Can not create worker thread, error: {}, {}",
+				errno, strerror_r(errno, errmsg_buf, sizeof(errmsg_buf)));
 			delete thd;
 			do_exit = 1;
 			break;
@@ -160,8 +163,8 @@ void Thread_manager::start_worker_thread()
 			 &Thread_manager::get_instance()->thr_attr, thread_func_storage_sync, thd)))
 		{
 			char errmsg_buf[256];
-			syslog(Logger::ERROR, "Can not create storage sync thread, error: %d, %s",
-			error, errno, strerror_r(errno, errmsg_buf, sizeof(errmsg_buf)));
+			KLOG_ERROR("Can not create storage sync thread, error: {}, {}",
+				errno, strerror_r(errno, errmsg_buf, sizeof(errmsg_buf)));
 			delete thd;
 			do_exit = 1;
 			return;
@@ -240,9 +243,9 @@ extern "C" void *signal_hander(void *arg) {
     if (error)
 	{
 		char errmsg_buf[256];
-		syslog(Logger::ERROR,
+		KLOG_ERROR(
 				"Fatal error in signal handler thread. sigwait/sigwaitinfo returned "
-				"error  (%d, %s)\n. Exiting signal handler thread",
+				"error  ({}, {})\n. Exiting signal handler thread",
 				errno, strerror_r(errno, errmsg_buf, sizeof(errmsg_buf)));
 		Thread_manager::do_exit = 1;
 	}
@@ -301,13 +304,13 @@ void Thread::run()
 		if (System::get_instance()->get_cluster_mgr_working() &&
 			System::get_instance()->acquire_shard(this, decr_kicks()) && cur_shard)
 		{
-			syslog(Logger::LOG, "Thread (%p, %d) starts working on shard (%s.%s, %u)",
-				this, tid, cur_shard->get_cluster_name().c_str(),
-				cur_shard->get_name().c_str(), cur_shard->get_id());
+			/*KLOG_INFO("Thread starts working on shard ({}.{}, {})",
+				cur_shard->get_cluster_name(),
+				cur_shard->get_name(), cur_shard->get_id());*/
 			cur_shard->maintenance();
-			syslog(Logger::LOG, "Thread (%p, %d) finishes working on shard (%s.%s, %u)",
-				this, tid, cur_shard->get_cluster_name().c_str(),
-				cur_shard->get_name().c_str(), cur_shard->get_id());
+			/*KLOG_INFO("Thread finishes working on shard ({}.{}, {})",
+				cur_shard->get_cluster_name(),
+				cur_shard->get_name(), cur_shard->get_id());*/
 		}
 		else
 			Thread_manager::get_instance()->sleep_wait(this, thread_work_interval * 1000);

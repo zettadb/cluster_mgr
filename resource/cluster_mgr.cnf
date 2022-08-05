@@ -14,31 +14,6 @@ mysql_write_timeout = 3
 # MySQL client max packet size in bytes.
 mysql_max_packet_size = 1073741824
 
-# NO. of times a SQL statement is resent for execution when MySQL connection broken.
-statement_retries = 2
-
-# Interval in milli-seconds a statement is resent for execution when it fails and we believe MySQL node will be ready in a while.
-statement_retry_interval_ms = 1000
-
-##################################################################
-# for log file
-
-# Log verbosity or amount of details, options are(in increasing details):
-# {ERROR, WARNING, INFO, LOG, DEBUG1, DEBUG2, DEBUG3}.
-log_verbosity = INFO
-
-# 100MB, if log grows larger than this it's rotated
-max_log_file_size = 100
-
-# log file path and name
-log_file = ../log/sys_cluster_mgr.log
-
-# log file path and name
-cluster_mgr_tmp_data_path = ../data
-
-##################################################################
-# for cluster working
-
 #Number of worker threads to create and maintain.
 num_worker_threads=5
 
@@ -54,59 +29,64 @@ storage_sync_interval = 60
 # Interval in hours a thread waits next commit_log clear.
 commit_log_retention_hours = 24
 
-##################################################################
-# for meta
+# 100MB, if log grows larger than this it's rotated
+max_log_file_size = 100
 
 # meta server group seeds, note: no space in the middle of string
 # only one seed in no_rep mode, must three or more seeds in mgr/rbr mode
-#meta_group_seeds = 192.168.0.128:58100,192.168.0.128:58103,192.168.0.128:58106
-meta_group_seeds = 192.168.0.128:58100
+meta_group_seeds = 192.168.0.128:57301,192.168.0.128:57304,192.168.0.128:57307
 
 # meta data server user account
-meta_user = pgx
+meta_user = clustmgr
 
 # meta data server user's password 
-meta_pwd = pgx_pwd
-
-##################################################################
-# for raft
-
-# specify the raft group memeber config, comma seperate formation, must stop with comma
-raft_group_member_init_config = 192.168.0.128:58001:0,
-
-# raft server listen port
-brpc_raft_port = 58001
-
-# cluster_mgr ip
-local_ip = 192.168.0.128
-
-##################################################################
-# for web http interface
+meta_pwd = clustmgr_pwd
 
 # cluster mgr http port
-brpc_http_port = 58000
+brpc_http_port = 8010
 
+# log file path and name
+log_file = ../log/sys_cluster_mgr
+
+# log file path and name
+cluster_mgr_tmp_data_path = ../data
+
+# NO. of times a SQL statement is resent for execution when MySQL connection broken.
+statement_retries = 2
+
+# Interval in milli-seconds a statement is resent for execution when it fails and we believe MySQL node will be ready in a while.
+statement_retry_interval_ms = 1000
+
+# specify the raft group memeber config, comma seperate formation, must stop with comma
+raft_group_member_init_config = 192.168.0.128:8110:0,
+
+# raft server listen port
+brpc_raft_port = 8110
+
+##################################################################
 # program_binaries_path
-program_binaries_path = /home/kunlun/program_binaries
+program_binaries_path = ../../../../../program_binaries
 
 # instance_binaries_path
-instance_binaries_path = /home/kunlun/instance_binaries
+instance_binaries_path = ../../../../../instance_binaries
 
 # storage_prog_package_name
-storage_prog_package_name = kunlun-storage-0.9.2
+storage_prog_package_name = kunlun-storage-0.9.1
 
 # computer_prog_package_name
-computer_prog_package_name = kunlun-server-0.9.2
-
-# computer instance port start
-computer_instance_port_start = 58200
+computer_prog_package_name = kunlun-server-0.9.1
 
 # storage instance port start
-storage_instance_port_start = 58500
+storage_instance_port_start = 57330
+
+# computer instance port start
+computer_instance_port_start = 57030
 
 # prometheus path
-prometheus_path = /home/kunlun/program_binaries/prometheus
+prometheus_path = ../../../../../program_binaries/prometheus
 
 # prometheus port start
-prometheus_port_start = 58010
+prometheus_port_start = 57010
 
+# cluster_mgr ip
+local_ip = 127.0.0.1

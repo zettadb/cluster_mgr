@@ -22,6 +22,8 @@ set(ZETTALIB_INCLUDE_PATH "${ZETTALIB_PATH}/build/output/include")
 set(ZETTALIB_LIB_PATH "${ZETTALIB_PATH}/build/output/lib")
 set(VENDOR_OUTPUT_PATH "${ZETTALIB_PATH}/src/vendor/vendor_output")
 
+add_definitions("-Wno-error=format-security")
+add_definitions(-DBOOST_BIND_GLOBAL_PLACEHOLDERS)
 link_directories(${VENDOR_OUTPUT_PATH}/lib)
 link_directories(${ZETTALIB_LIB_PATH})
 configure_file(src/sys_config.h.in sys_config.h)
@@ -33,11 +35,18 @@ add_subdirectory(src/cluster_expand)
 add_subdirectory(src/raft_ha)
 add_subdirectory(src/example_mission)
 add_subdirectory(src/sync_mission)
-add_subdirectory(src/machine_mission)
 add_subdirectory(src/backup_storage)
 add_subdirectory(src/cluster_mission)
 add_subdirectory(src/other_mission)
+add_subdirectory(src/cluster_debug)
+add_subdirectory(src/rebuild_node)
+add_subdirectory(src/coldbackup)
+add_subdirectory(src/cluster_collection)
+add_subdirectory(src/cluster_operator)
+add_subdirectory(src/restore_cluster)
+add_subdirectory(src/cluster_auto)
 add_executable(cluster_mgr src/main.cc)
+
 target_include_directories(cluster_mgr PUBLIC
   "${PROJECT_BINARY_DIR}"
   "${ZETTALIB_INCLUDE_PATH}"
@@ -48,29 +57,42 @@ target_include_directories(cluster_mgr PUBLIC
   "${PROJECT_SOURCE_DIR}/src/util_func"
   "${PROJECT_SOURCE_DIR}/src/cluster_expand"
   "${PROJECT_SOURCE_DIR}/src/raft_ha"
-  "${PROJECT_SOURCE_DIR}/src/example_mission"
   "${PROJECT_SOURCE_DIR}/src/sync_mission"
-  "${PROJECT_SOURCE_DIR}/src/machine_mission"
   "${PROJECT_SOURCE_DIR}/src/backup_storage"
   "${PROJECT_SOURCE_DIR}/src/cluster_mission"
-  "${PROJECT_SOURCE_DIR}/src/other_mission")
+  "${PROJECT_SOURCE_DIR}/src/other_mission"
+  "${PROJECT_SOURCE_DIR}/src/rebuild_node"
+  "${PROJECT_SOURCE_DIR}/src/cluster_collection"
+  "${PROJECT_SOURCE_DIR}/src/coldbackup"
+  "${PROJECT_SOURCE_DIR}/src/cluster_debug"
+  "${PROJECT_SOURCE_DIR}/src/cluster_operator"
+  "${PROJECT_SOURCE_DIR}/src/restore_cluster"
+  "${PROJECT_SOURCE_DIR}/src/cluster_auto"
+  "${PROJECT_SOURCE_DIR}/src/example_mission")
 target_link_libraries(cluster_mgr 
   kl_mentain
   http_server 
   request_framework 
   util_func 
+  cluster_auto
   cluster_expand 
+  cluster_debug
   raft_ha
   example_mission
+  cluster_collection
   sync_mission
-  machine_mission
   backup_storage
   cluster_mission
   other_mission
+  rebuild_node
+  coldbackup
+  cluster_operator
+  restore_cluster
   libzettalib.a
   libbraft.a
   libbrpc.a 
   libjsoncpp.a 
+  libspdlog.a
   libgflags.a 
   libprotobuf.a 
   libleveldb.a 
@@ -93,8 +115,10 @@ install(FILES
   PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
   DESTINATION bin)
 install(FILES ${CMAKE_SOURCE_DIR}/resource/cluster_mgr.cnf DESTINATION conf)
+install(FILES ${CMAKE_SOURCE_DIR}/resource/rbr_consfailover.cnf DESTINATION conf)
 install(DIRECTORY DESTINATION log)
 install(DIRECTORY DESTINATION data)
+install(DIRECTORY DESTINATION data/cluster_mgr_raft)
 
 MACRO(REPORT_CXX_FLAGS)
   MESSAGE(STATUS "CMAKE_C_FLAGS: ${CMAKE_C_FLAGS}")

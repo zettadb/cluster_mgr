@@ -4,10 +4,10 @@
    This source code is licensed under Apache 2.0 License,
    combined with Common Clause Condition 1.0, as detailed in the NOTICE file.
 */
-#ifndef _EXPAND_MISSION_H_
-#define _EXPAND_MISSION_H_
+#pragma once
 #include "http_server/node_channel.h"
 #include "request_framework/missionRequest.h"
+#include "table_pick.h"
 
 void Expand_Call_Back(void *);
 namespace kunlun {
@@ -32,8 +32,15 @@ class ExpandClusterMission : public MissionRequest {
   typedef MissionRequest super;
 
 public:
-  explicit ExpandClusterMission(Json::Value *doc) : super(doc){};
-  ~ExpandClusterMission(){};
+  explicit ExpandClusterMission(Json::Value *doc) : super(doc) {
+    shuffle_policy_ = nullptr;
+    drop_old_table_ = false;
+  };
+  ~ExpandClusterMission() {
+    if (shuffle_policy_ != nullptr) {
+      delete shuffle_policy_;
+    }
+  };
 
   virtual bool ArrangeRemoteTask() override final;
   virtual bool SetUpMisson() override final;
@@ -69,6 +76,32 @@ private:
   std::string related_id_;
   // tarball name
   std::string tarball_name_prefix_;
+  // drop old table or not
+  bool drop_old_table_;
+  TableShufflePolicy *shuffle_policy_;
+  bool setup_success_;
 };
+
+class GetExpandTableListMission : public MissionRequest {
+  typedef MissionRequest super;
+
+public:
+  explicit GetExpandTableListMission(Json::Value *doc) : super(doc){
+    shuffle_policy_ = nullptr;
+  };
+  ~GetExpandTableListMission(){
+    if(shuffle_policy_ != nullptr){
+      delete shuffle_policy_;
+    }
+  };
+public:
+  virtual bool ArrangeRemoteTask() { return true; };
+  virtual bool SetUpMisson() override;
+  virtual bool TearDownMission() override;
+
+  std::string table_list_str_;
+  TableShufflePolicy *shuffle_policy_;
+  bool setup_success_;
+};
+
 };     // namespace kunlun
-#endif /*_EXPAND_MISSION_H_*/

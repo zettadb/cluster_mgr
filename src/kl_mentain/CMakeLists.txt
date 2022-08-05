@@ -1,13 +1,12 @@
 add_library(kl_mentain OBJECT 
   config.cc 
-  log.cc 
   os.cc 
   shard.cc 
   sys.cc 
   txn.cc 
-  thread_manager.cc 
   kl_cluster.cc 
-  machine_info.cc
+  async_mysql.cc
+  func_timer.cc
 )
 target_include_directories(kl_mentain INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_include_directories(kl_mentain PUBLIC "${PROJECT_SOURCE_DIR}/src")

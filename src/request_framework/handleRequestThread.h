@@ -18,7 +18,7 @@ class HandleRequestThread : public ZThread, public ErrorCup {
 public:
   HandleRequestThread(){};
   ~HandleRequestThread(){};
-  void DispatchRequest(ClusterRequest *);
+  void DispatchRequest(ObjectPtr<ClusterRequest>);
   int run();
 
 private:

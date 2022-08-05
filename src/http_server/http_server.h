@@ -8,7 +8,6 @@
 #define _CLUSTER_MGR_HTTP_SERVER_H_
 
 #include "brpc/server.h"
-#include "kl_mentain/log.h"
 #include "proto/clustermng.pb.h"
 #include "request_framework/handleRequestThread.h"
 #include "request_framework/missionRequest.h"
@@ -20,42 +19,45 @@
 #include "json/json.h"
 
 using namespace kunlunrpc;
+using namespace kunlun;
+
 class HttpServiceImpl : public HttpService,
                         public kunlun::ErrorCup,
                         public kunlun::GlobalErrorNum {
 public:
   HttpServiceImpl() {
     request_handle_thread_ = nullptr;
-    meta_cluster_mysql_conn_ = nullptr;
+    //meta_cluster_mysql_conn_ = nullptr;
   };
   virtual ~HttpServiceImpl(){};
   void Emit(google::protobuf::RpcController *, const HttpRequest *,
             HttpResponse *, google::protobuf::Closure *);
 
   bool RecoverInteruptedJobIfExists();
-  ClusterRequest *GenerateRequest(google::protobuf::RpcController *);
-  MissionRequest *MissionRequestFactory(Json::Value *);
+  ObjectPtr<ClusterRequest> GenerateRequest(google::protobuf::RpcController *);
+  ObjectPtr<MissionRequest> MissionRequestFactory(Json::Value *);
 
   void set_request_handle_thread(HandleRequestThread *);
-  void set_meta_cluster_mysql_conn(kunlun::MysqlConnection *);
+  //void set_meta_cluster_mysql_conn(kunlun::MysqlConnection *);
   HandleRequestThread *get_request_handle_thread();
 
-  std::string MakeErrorInstantResponseBody(const char *);
-  std::string MakeAcceptInstantResponseBody(ClusterRequest *);
-  std::string MakeSyncOkResponseBody(ClusterRequest *);
+  std::string MakeErrorInstantResponseBody(const char *, int);
+  std::string MakeAcceptInstantResponseBody(ObjectPtr<ClusterRequest>);
+  std::string MakeSyncOkResponseBody(ObjectPtr<ClusterRequest>);
 
-  std::string GenerateRequestUniqueId(ClusterRequest *);
-  std::string FetchRelatedIdInSameSession(kunlun::MysqlConnection *,
-                                          std::string);
+  std::string GenerateRequestUniqueId(ObjectPtr<ClusterRequest>);
+  //std::string FetchRelatedIdInSameSession(kunlun::MysqlConnection *,
+  //                                        std::string);
+  std::string FetchRelatedIdInSameSession(std::string);
   bool ParseBodyToJsonDoc(const std::string &, Json::Value *);
 
 private:
   HandleRequestThread *request_handle_thread_;
-  kunlun::MysqlConnection *meta_cluster_mysql_conn_;
+  //kunlun::MysqlConnection *meta_cluster_mysql_conn_;
 };
 
 extern brpc::Server *NewHttpServer();
 extern void RecoverInteruptedJobIfExists(kunlun::MysqlConnection *,
                                          HandleRequestThread *);
-extern void SetInteruptedJobAsFaild(kunlun::MysqlConnection *, const char *);
+extern void SetInteruptedJobAsFaild(const char *);
 #endif /*_CLUSTER_MGR_HTTP_SERVER_H_*/

@@ -36,31 +36,39 @@ enum ClusterRequestTypes {
   kDeleteNodeType,
   kBackupClusterType,
   kRestoreNewClusterType,
+  kUpdateClusterColdBackTimePeriodType,
+  kManualBackupClusterType,
   kClusterExpandType,
-  
-  kCreateMachineType,
-  kUpdateMachineType,
-  kDeleteMachineType,
   kCreateBackupStorageType,
   kUpdateBackupStorageType,
   kDeleteBackupStorageType,
+  kRaftMissionType,
 
   kControlInstanceType,
   kUpdatePrometheusType,
   kPostgresExporterType,
   kMysqldExporterType,
+  kClusterRebuildNodeType,
+
+  kCreateMachineType,
+  kUpdateMachineType,
+  kDeleteMachineType,
 
   kSyncReturnType = 300,
   kGetStatusType,
   kGetMetaModeType,
   kGetMetaSummaryType,
   kGetBackupStorageType,
-  kGetMachineSummaryType,
+
   kGetClusterSummaryType,
   kGetClusterDetailType,
+  kGetExpandTableListType,
   kGetVariableType,
   kSetVariableType,
 
+#ifndef NDEBUG
+  kClusterDebugType,
+#endif
   // addtional type should add above
   kRequestTypeMax = 1000
 };

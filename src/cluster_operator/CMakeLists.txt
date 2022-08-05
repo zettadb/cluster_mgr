@@ -1,0 +1,6 @@
+add_library(cluster_operator OBJECT mysqlInstallRemote.cc shardInstallMission.cc postgresInstallRemote.cc computeInstallMission.cc)
+target_include_directories(cluster_operator INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_include_directories(cluster_operator PUBLIC "${PROJECT_SOURCE_DIR}/src")
+target_include_directories(cluster_operator PUBLIC "${VENDOR_OUTPUT_PATH}/include")
+target_include_directories(cluster_operator PUBLIC "${PROJECT_BINARY_DIR}")
+target_include_directories(cluster_operator PUBLIC "${ZETTALIB_INCLUDE_PATH}")

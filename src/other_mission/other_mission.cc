@@ -5,9 +5,12 @@
   combined with Common Clause Condition 1.0, as detailed in the NOTICE file.
 */
 #include "other_mission.h"
+#include "zettalib/op_log.h"
 
-std::string prometheus_path;
-int64_t prometheus_port_start;
+using namespace kunlun;
+
+extern std::string prometheus_path;
+extern int64_t prometheus_port_start;
 
 void Other_Call_Back(void *cb_context) {
   OtherRemoteTask *task = static_cast<OtherRemoteTask *>(cb_context);
@@ -34,6 +37,7 @@ void OtherMission::ControlInstanceCallBack(std::string &response){
   job_status = "failed";
   bool ret = reader.parse(response.c_str(), root);
   if (!ret) {
+    job_error_code = EintToStr(ERR_PARA_NODE);
     job_error_info = "JSON parse error: " + response;
     goto end;
   }
@@ -42,6 +46,7 @@ void OtherMission::ControlInstanceCallBack(std::string &response){
 
   job_status = info["status"].asString();
   if(job_status == "failed") {
+    job_error_code = EintToStr(ERR_CONTROL_INSTANCE);
     job_error_info = info["info"].asString();
     goto end;
   }
@@ -51,7 +56,7 @@ void OtherMission::ControlInstanceCallBack(std::string &response){
   job_error_info = "control instance successfully";
 
 end:
-  syslog(Logger::INFO, "%s", job_error_info.c_str());
+  KLOG_INFO("{}", job_error_info);
   update_operation_record();
   System::get_instance()->set_cluster_mgr_working(true);
 }
@@ -65,8 +70,9 @@ void OtherMission::UpdatePrometheusCallBack(std::string &response){
 	job_status = "failed";
 	bool ret = reader.parse(response.c_str(), root);
 	if (!ret) {
+		job_error_code = EintToStr(ERR_PARA_NODE);
 		job_error_info = "JSON parse error: " + response;
-		syslog(Logger::INFO, "%s", job_error_info.c_str());
+		KLOG_INFO("{}", job_error_info);
 		goto end;
 	}
 	array = root["response_array"][0];
@@ -74,8 +80,9 @@ void OtherMission::UpdatePrometheusCallBack(std::string &response){
 
 	job_status = info["status"].asString();
 	if(job_status == "failed") {
+		job_error_code = EintToStr(ERR_UPDATE_PROMETHEUS);
 		job_error_info = info["info"].asString();
-		syslog(Logger::INFO, "%s", job_error_info.c_str());
+		KLOG_INFO("{}", job_error_info);
 		goto end;
 	}
 
@@ -89,9 +96,10 @@ end:
 			job_error_info = "update prometheus successfully";
 		}else{
 			job_status = "failed";
+			job_error_code = EintToStr(ERR_UPDATE_PROMETHEUS);
 			job_error_info = "update prometheus failed";
 		}
-		syslog(Logger::INFO, "%s", job_error_info.c_str());
+		KLOG_INFO( "{}", job_error_info);
 		update_operation_record();
 	}
 }
@@ -135,13 +143,13 @@ void OtherMission::ControlInstance() {
 
   job_status = "not_started";
   job_error_info = "control instance start";
-  syslog(Logger::INFO, "%s", job_error_info.c_str());
+  KLOG_INFO( "{}", job_error_info);
   update_operation_record();
 
   System::get_instance()->set_cluster_mgr_working(false);
 
   //init channel again
-  g_node_channel_manager.Init();
+  g_node_channel_manager->Init();
 
 	//////////////////////////////////////////////////////////
 	// update meta table status by ip and port
@@ -177,7 +185,7 @@ void OtherMission::ControlInstance() {
       new OtherRemoteTask("control_instance", job_id.c_str(), this);
   task->AddNodeSubChannel(
       hostaddr.c_str(),
-      g_node_channel_manager.getNodeChannel(hostaddr.c_str()));
+      g_node_channel_manager->getNodeChannel(hostaddr.c_str()));
 
   root_node["cluster_mgr_request_id"] = job_id;
   root_node["task_spec_info"] = task->get_task_spec_info();
@@ -195,7 +203,7 @@ void OtherMission::ControlInstance() {
 
 end:
   job_status = "failed";
-  syslog(Logger::ERROR, "%s", job_error_info.c_str());
+  KLOG_ERROR( "%s", job_error_info.c_str());
   update_operation_record();
 }
 
@@ -203,11 +211,11 @@ void OtherMission::UpdatePrometheus(){
 
 	job_status = "not_started";
 	job_error_info = "update prometheus start";
-	syslog(Logger::INFO, "%s", job_error_info.c_str());
+	KLOG_INFO( "{}", job_error_info);
 	update_operation_record();
 
 	//init channel again
-	g_node_channel_manager.Init();
+	g_node_channel_manager->Init();
 
 	if(!update_prometheus()) {
 		job_error_info = "update prometheus error";
@@ -215,13 +223,13 @@ void OtherMission::UpdatePrometheus(){
 	}
 
 	job_error_info = "update prometheus working";
-	syslog(Logger::INFO, "%s", job_error_info.c_str());
+	KLOG_INFO( "{}", job_error_info);
 	update_operation_record();
 	return;
 
 end:
 	job_status = "failed";
-	syslog(Logger::ERROR, "%s", job_error_info.c_str());
+	KLOG_ERROR( "{}", job_error_info);
 	update_operation_record();
 }
 
@@ -253,7 +261,7 @@ void OtherMission::PostgresExporter() {
 
 	job_status = "not_started";
 	job_error_info = "postgres exporter start";
-	syslog(Logger::INFO, "%s", job_error_info.c_str());
+	KLOG_INFO( "{}", job_error_info);
 	update_operation_record();
 
 	if(!restart_postgres_exporter(hostaddr, port)) {
@@ -264,13 +272,13 @@ void OtherMission::PostgresExporter() {
 	job_status = "done";
 	job_error_code = EintToStr(EOK);
 	job_error_info = "postgres exporter successfully";
-	syslog(Logger::INFO, "%s", job_error_info.c_str());
+	KLOG_INFO( "{}", job_error_info);
 	update_operation_record();
 	return;
 
 end:
 	job_status = "failed";
-	syslog(Logger::ERROR, "%s", job_error_info.c_str());
+	KLOG_ERROR("{}", job_error_info);
 	update_operation_record();
 }
 
@@ -302,7 +310,7 @@ void OtherMission::MysqldExporter() {
 
 	job_status = "not_started";
 	job_error_info = "mysql exporter start";
-	syslog(Logger::INFO, "%s", job_error_info.c_str());
+	KLOG_INFO( "{}", job_error_info);
 	update_operation_record();
 
 	if(!restart_mysql_exporter(hostaddr, port)) {
@@ -313,13 +321,13 @@ void OtherMission::MysqldExporter() {
 	job_status = "done";
 	job_error_code = EintToStr(EOK);
 	job_error_info = "mysql exporter successfully";
-	syslog(Logger::INFO, "%s", job_error_info.c_str());
+	KLOG_INFO( "{}", job_error_info);
 	update_operation_record();
 	return;
 
 end:
 	job_status = "failed";
-	syslog(Logger::ERROR, "%s", job_error_info.c_str());
+	KLOG_ERROR( "{}", job_error_info);
 	update_operation_record();
 }
 
@@ -334,11 +342,15 @@ bool OtherMission::restart_node_exporter(std::vector<std::string> &vec_node) {
 	root_node["paras"] = paras_node;
 
 	for(auto &node: vec_node) {
+		brpc::Channel *chann = g_node_channel_manager->getNodeChannel(node.c_str());
+		if(chann == nullptr)
+			continue;
+
 		node_exporter =
 			new OtherRemoteTask("node_exporter", job_id.c_str(), this);
 		node_exporter->AddNodeSubChannel(
 			node.c_str(),
-			g_node_channel_manager.getNodeChannel(node.c_str()));
+			chann);
 
 		node_exporter->SetPara(node.c_str(), root_node);
 		get_task_manager()->PushBackTask(node_exporter);
@@ -359,11 +371,11 @@ bool OtherMission::restart_postgres_exporter(std::string &hostaddr, int port) {
 	/////////////////////////////////////////////////////////
 	// get process_id of postgres_exporter
 	cmd = "netstat -tnpl | grep tcp6 | grep " + std::to_string(prometheus_port_start+2);
-	syslog(Logger::INFO, "restart_postgres_exporter cmd %s", cmd.c_str());
+	KLOG_INFO( "restart_postgres_exporter cmd {}", cmd);
 
 	pfd = popen(cmd.c_str(), "r");
 	if(!pfd) {
-		syslog(Logger::ERROR, "kill error %s", cmd.c_str());
+		KLOG_ERROR( "kill error {}", cmd);
 		return false;
 	}
 	if(fgets(buf, 256, pfd)!=NULL) {
@@ -388,16 +400,16 @@ bool OtherMission::restart_postgres_exporter(std::string &hostaddr, int port) {
 	// kill postgres_exporter
 	if(process_id.length() > 0) {
 		cmd = "kill -9 " + process_id;
-		syslog(Logger::INFO, "restart_postgres_exporter cmd %s", cmd.c_str());
+		KLOG_INFO( "restart_postgres_exporter cmd {}", cmd);
 
 		pfd = popen(cmd.c_str(), "r");
 		if(!pfd) {
-			syslog(Logger::ERROR, "kill error %s", cmd.c_str());
+			KLOG_ERROR( "kill error {}", cmd);
 			return false;
 		}
 		while(fgets(buf, 256, pfd)!=NULL) {
 			//if(strcasestr(buf, "error") != NULL)
-				syslog(Logger::INFO, "%s", buf);
+				KLOG_INFO( "{}", buf);
 		}
 		pclose(pfd);
 	}
@@ -407,11 +419,11 @@ bool OtherMission::restart_postgres_exporter(std::string &hostaddr, int port) {
 	cmd = "export DATA_SOURCE_NAME=\"postgresql://abc:abc@" + hostaddr + ":" + std::to_string(port) + "/postgres?sslmode=disable\";";
 	cmd += "cd " + prometheus_path + "/postgres_exporter;";
 	cmd += "./postgres_exporter --web.listen-address=:" + std::to_string(prometheus_port_start+2) + " &";
-	syslog(Logger::INFO, "restart_postgres_exporter cmd %s", cmd.c_str());
+	KLOG_INFO( "restart_postgres_exporter cmd {}", cmd);
 
 	pfd = popen(cmd.c_str(), "r");
 	if(!pfd) {
-		syslog(Logger::ERROR, "start error %s", cmd.c_str());
+		KLOG_ERROR( "start error {}", cmd);
 		return false;
 	}
 	pclose(pfd);
@@ -428,11 +440,11 @@ bool OtherMission::restart_mysql_exporter(std::string &hostaddr, int port) {
 	/////////////////////////////////////////////////////////
 	// get process_id of mysql_exporter
 	cmd = "netstat -tnpl | grep tcp6 | grep " + std::to_string(prometheus_port_start+3);
-	syslog(Logger::INFO, "restart_mysql_exporter cmd %s", cmd.c_str());
+	KLOG_INFO( "restart_mysql_exporter cmd {}", cmd);
 
 	pfd = popen(cmd.c_str(), "r");
 	if(!pfd) {
-		syslog(Logger::ERROR, "kill error %s", cmd.c_str());
+		KLOG_ERROR( "kill error {}", cmd);
 		return false;
 	}
 	if(fgets(buf, 256, pfd)!=NULL) {
@@ -457,16 +469,16 @@ bool OtherMission::restart_mysql_exporter(std::string &hostaddr, int port) {
 	// kill mysql_exporter
 	if(process_id.length() > 0) {
 		cmd = "kill -9 " + process_id;
-		syslog(Logger::INFO, "restart_mysql_exporter cmd %s", cmd.c_str());
+		KLOG_INFO( "restart_mysql_exporter cmd {}", cmd);
 
 		pfd = popen(cmd.c_str(), "r");
 		if(!pfd) {
-			syslog(Logger::ERROR, "kill error %s", cmd.c_str());
+			KLOG_ERROR( "kill error {}", cmd);
 			return false;
 		}
 		while(fgets(buf, 256, pfd)!=NULL) {
 			//if(strcasestr(buf, "error") != NULL)
-				syslog(Logger::INFO, "%s", buf);
+				KLOG_INFO( "{}", buf);
 		}
 		pclose(pfd);
 	}
@@ -476,11 +488,11 @@ bool OtherMission::restart_mysql_exporter(std::string &hostaddr, int port) {
 	cmd = "export DATA_SOURCE_NAME=\"pgx:pgx_pwd@tcp(" + hostaddr + ":" + std::to_string(port) + ")/\";";
 	cmd += "cd " + prometheus_path + "/mysqld_exporter;";
 	cmd += "./mysqld_exporter --web.listen-address=:" + std::to_string(prometheus_port_start+3) + " &";
-	syslog(Logger::INFO, "restart_mysql_exporter cmd %s", cmd.c_str());
+	KLOG_INFO( "restart_mysql_exporter cmd {}", cmd);
 
 	pfd = popen(cmd.c_str(), "r");
 	if(!pfd) {
-		syslog(Logger::ERROR, "start error %s", cmd.c_str());
+		KLOG_ERROR( "start error {}", cmd);
 		return false;
 	}
 	pclose(pfd);
@@ -497,11 +509,11 @@ bool OtherMission::restart_prometheus() {
 	/////////////////////////////////////////////////////////
 	// get process_id of prometheus
 	cmd = "netstat -tnpl | grep tcp6 | grep " + std::to_string(prometheus_port_start);
-	syslog(Logger::INFO, "restart_prometheus cmd %s", cmd.c_str());
+	KLOG_INFO( "restart_prometheus cmd {}", cmd);
 
 	pfd = popen(cmd.c_str(), "r");
 	if(!pfd) {
-		syslog(Logger::ERROR, "kill error %s", cmd.c_str());
+		KLOG_ERROR("kill error {}", cmd);
 		return false;
 	}
 	if(fgets(buf, 256, pfd)!=NULL) {
@@ -526,16 +538,16 @@ bool OtherMission::restart_prometheus() {
 	// kill prometheus
 	if(process_id.length() > 0) {
 		cmd = "kill -9 " + process_id;
-		syslog(Logger::INFO, "restart_prometheus cmd %s", cmd.c_str());
+		KLOG_INFO( "restart_prometheus cmd {}", cmd);
 
 		pfd = popen(cmd.c_str(), "r");
 		if(!pfd) {
-			syslog(Logger::ERROR, "kill error %s", cmd.c_str());
+			KLOG_ERROR( "kill error {}", cmd);
 			return false;
 		}
 		while(fgets(buf, 256, pfd)!=NULL) {
 			//if(strcasestr(buf, "error") != NULL)
-				syslog(Logger::INFO, "%s", buf);
+				KLOG_INFO( "{}", buf);
 		}
 		pclose(pfd);
 	}
@@ -544,11 +556,11 @@ bool OtherMission::restart_prometheus() {
 	// start prometheus
 	cmd = "cd " + prometheus_path + ";./prometheus --config.file=\"prometheus.yml\"";
 	cmd += " --web.listen-address=:" + std::to_string(prometheus_port_start) + " &";
-	syslog(Logger::INFO, "restart_prometheus cmd %s", cmd.c_str());
+	KLOG_INFO( "restart_prometheus cmd {}", cmd);
 
 	pfd = popen(cmd.c_str(), "r");
 	if(!pfd) {
-		syslog(Logger::ERROR, "start error %s", cmd.c_str());
+		KLOG_ERROR( "start error {}", cmd);
 		return false;
 	}
 	pclose(pfd);
@@ -562,7 +574,7 @@ bool OtherMission::update_prometheus() {
 	std::string ymlfile_path, yml_buf;
 
 	if(!System::get_instance()->get_machine_info_from_metadata(vec_machine)) {
-		syslog(Logger::ERROR, "get_machine_info_from_metadata error");
+		KLOG_ERROR( "get_machine_info_from_metadata error");
 		return false;
 	}
 
@@ -595,21 +607,21 @@ bool OtherMission::update_prometheus() {
 	yml_buf += "      - targets: [" + mysql_str + "]\r\n";
 
 	if(!save_file(ymlfile_path, (char*)yml_buf.c_str())) {
-		syslog(Logger::ERROR, "save prometheus yml file error");
+		KLOG_ERROR( "save prometheus yml file error");
 		return false;
 	}
 
 	/////////////////////////////////////////////////////////
 	// restart prometheus
 	if(!restart_prometheus()) {
-		syslog(Logger::ERROR, "restart prometheus error");
+		KLOG_ERROR( "restart prometheus error");
 		return false;
 	}
 
 	/////////////////////////////////////////////////////////
 	// restart node_exporter in every machine
 	if(!restart_node_exporter(vec_machine)) {
-		syslog(Logger::ERROR, "start node_exporter error");
+		KLOG_ERROR( "start node_exporter error");
 		return false;
 	}
 
@@ -619,7 +631,7 @@ bool OtherMission::update_prometheus() {
 bool OtherMission::save_file(std::string &path, char* buf) {
 	FILE* pfd = fopen(path.c_str(), "wb");
 	if(pfd == NULL)	{
-		syslog(Logger::ERROR, "Create file error %s", path.c_str());
+		KLOG_ERROR("Create file error {}", path);
 		return false;
 	}
 
@@ -644,7 +656,7 @@ bool OtherMission::update_operation_record(){
 	//syslog(Logger::INFO, "str_sql=%s", str_sql.c_str());
 
 	if(System::get_instance()->execute_metadate_opertation(SQLCOM_UPDATE, str_sql)) {
-		syslog(Logger::ERROR, "execute_metadate_opertation error");
+		KLOG_ERROR( "execute_metadate_opertation error");
 		return false;
 	}
 
@@ -663,13 +675,13 @@ bool OtherMission::ArrangeRemoteTask() {
     ControlInstance();
     break;
   case kunlun::kUpdatePrometheusType:
-    UpdatePrometheus();
+    //UpdatePrometheus();
     break;
   case kunlun::kPostgresExporterType:
-    PostgresExporter();
+    //PostgresExporter();
     break;
   case kunlun::kMysqldExporterType:
-    MysqldExporter();
+    //MysqldExporter();
     break;
 
   default:

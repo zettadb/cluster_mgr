@@ -1,0 +1,8 @@
+syntax="proto2";
+package raft_ha;
+
+message raft_msg {
+    required int32 op = 1;
+    required string key = 2;
+    optional string msg = 3;
+};

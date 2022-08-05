@@ -6,6 +6,9 @@
 */
 #include "meta_info.h"
 #include "arpa/inet.h"
+#include "zettalib/tool_func.h"
+#include "kl_mentain/shard.h"
+#include <error.h>
 #include <string>
 #include <time.h>
 #include <unistd.h>
@@ -71,13 +74,18 @@ ClusterRequestTypes GetReqTypeEnumByStr(const char *type_str) {
   case "backup_cluster"_hash:
     type_enum = kBackupClusterType;
     break;
-  case "restore_new_cluster"_hash:
+  case "cluster_restore"_hash:
     type_enum = kRestoreNewClusterType;
+    break;
+  case "update_cluster_coldback_time_period"_hash:
+    type_enum = kUpdateClusterColdBackTimePeriodType;
+    break;
+  case "manual_backup_cluster"_hash:
+    type_enum = kManualBackupClusterType;
     break;
   case "expand_cluster"_hash:
     type_enum = kClusterExpandType;
     break;
-
   case "create_machine"_hash:
     type_enum = kCreateMachineType;
     break;
@@ -96,7 +104,11 @@ ClusterRequestTypes GetReqTypeEnumByStr(const char *type_str) {
   case "delete_backup_storage"_hash:
     type_enum = kDeleteBackupStorageType;
     break;
-
+  
+  case "raft_mission"_hash:
+    type_enum = kRaftMissionType;
+    break;
+    
   case "control_instance"_hash:
     type_enum = kControlInstanceType;
     break;
@@ -122,14 +134,11 @@ ClusterRequestTypes GetReqTypeEnumByStr(const char *type_str) {
   case "get_backup_storage"_hash:
     type_enum = kGetBackupStorageType;
     break;
-  case "get_machine_summary"_hash:
-    type_enum = kGetMachineSummaryType;
-    break;
-  case "get_cluster_summary"_hash:
-    type_enum = kGetClusterSummaryType;
-    break;
   case "get_cluster_detail"_hash:
     type_enum = kGetClusterDetailType;
+    break;
+  case "get_expand_table_list"_hash:
+    type_enum = kGetExpandTableListType;
     break;
   case "get_variable"_hash:
     type_enum = kGetVariableType;
@@ -137,7 +146,15 @@ ClusterRequestTypes GetReqTypeEnumByStr(const char *type_str) {
   case "set_variable"_hash:
     type_enum = kSetVariableType;
     break;
-
+  case "rebuild_node"_hash:
+    type_enum = kClusterRebuildNodeType;
+    break;
+    
+#ifndef NDEBUG
+  case "cluster_debug"_hash:
+    type_enum = kClusterDebugType;
+    break;
+#endif
   // addtional type convert should add above
   default:
     type_enum = kRequestTypeMax;
@@ -162,22 +179,24 @@ bool ValidNetWorkAddr(const char *addr) {
   return ret == 1 ? true : false;
 }
 
-std::string FetchNodemgrTmpDataPath(MysqlConnection *meta, const char *ip) {
+std::string FetchNodemgrTmpDataPath(GlobalNodeChannelManager *g_channel, const char *ip) {
   char sql[2048] = {'\0'};
   sprintf(sql,
-          "select nodemgr_tmp_data_abs_path as path"
+          "select nodemgr_bin_path as bin_path"
           " from kunlun_metadata_db.server_nodes"
-          " where hostaddr='%s'",
+          " where hostaddr='%s' ",
           ip);
   kunlun::MysqlResult result;
-  int ret = meta->ExcuteQuery(sql, &result);
-  if (ret < 0) {
+  int ret = g_channel->send_stmt(sql, &result, 3);
+  if (ret) {
     return "";
   }
-  return result[0]["path"];
+  std::string bin_path = result[0]["bin_path"];
+  std::string base = kunlun::GetBasePath(bin_path);
+  return base + "/data";
 }
 
-int64_t FetchNodeMgrListenPort(MysqlConnection *meta, const char *ip) {
+int64_t FetchNodeMgrListenPort(GlobalNodeChannelManager *g_channel, const char *ip) {
   char sql[2048] = {'\0'};
   sprintf(sql,
           "select nodemgr_port as port from kunlun_metadata_db.server_nodes "
@@ -185,11 +204,69 @@ int64_t FetchNodeMgrListenPort(MysqlConnection *meta, const char *ip) {
           ip);
 
   kunlun::MysqlResult result;
-  int ret = meta->ExcuteQuery(sql, &result);
-  if (ret < 0) {
+  bool ret = g_channel->send_stmt(sql, &result, 3);
+  if (ret) {
     return -1;
   }
   return ::atoi(result[0]["port"]);
+}
+
+bool TimePeriod::parse() {
+
+  auto c1 = kunlun::StringTokenize(time_str_, "-");
+  if (c1.size() != 2) {
+    setErr("misformat of the time period string");
+    return false;
+  }
+
+  sscanf(c1[0].c_str(), "%d:%d:%d", &(start_.tm_hour),
+                   &(start_.tm_min), &(start_.tm_sec));
+  sscanf(c1[1].c_str(), "%d:%d:%d", &(stop_.tm_hour), &(stop_.tm_min),
+               &(stop_.tm_sec));
+  parsed_ = true;
+  return true;
+
+}
+
+bool TimePeriod::init(std::string time_str) {
+
+  if (parsed_ && time_str == time_str_) {
+    return true;
+  }
+  time_str_ = time_str;
+  parsed_ =false;
+  return parse();
+}
+
+bool TimePeriod::TimesUp() {
+  if(!parsed_){
+    return false;
+  }
+
+  time_t now = 0;
+  time(&now);
+  struct tm now_tm;
+  if (localtime_r(&now, &now_tm) == NULL) {
+    setErr("localtime_r() failed: %s", strerror(errno));
+    return false;
+  }
+
+  start_.tm_year = now_tm.tm_year;
+  start_.tm_mon = now_tm.tm_mon;
+  start_.tm_mday = now_tm.tm_mday;
+  stop_.tm_year = now_tm.tm_year;
+  stop_.tm_mon = now_tm.tm_mon;
+  stop_.tm_mday = now_tm.tm_mday;
+  time_t start_epoch = mktime(&start_);
+  time_t stop_epoch = mktime(&stop_);
+
+  return now > start_epoch && now < stop_epoch;
+}
+
+uint64_t GetNowTimestamp() {
+    timespec time;
+    clock_gettime(CLOCK_REALTIME, &time);
+    return time.tv_sec;
 }
 
 }; // namespace kunlun
