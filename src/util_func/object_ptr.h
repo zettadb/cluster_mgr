@@ -18,22 +18,15 @@ namespace kunlun
 
 class ObjectRef {
 public:
-    ObjectRef() : ref_(1), watchshed_(1) {}
+    ObjectRef() : ref_(1) {}
     virtual ~ObjectRef() {}
 
     void IncRef() {
-        KlWrapGuard<KlWrapMutex> guard(mux_);
         ref_.fetch_add(1);
     }
 
     bool ZeroAndDecRef() {
-        KlWrapGuard<KlWrapMutex> guard(mux_);
-        if(!ref_.compare_exchange_strong(watchshed_, 0)) {
-            ref_.fetch_sub(1);
-            watchshed_ = 1;
-            return false;
-        }
-        return true;
+        return (ref_.fetch_sub(1) == 1);
     }
 
     //just for test.
@@ -45,8 +38,6 @@ public:
     ObjectRef operator=(const ObjectRef&) = delete;
 private:
     std::atomic<int> ref_;
-    int watchshed_;
-    KlWrapMutex mux_;
 };
 
 template<class T>

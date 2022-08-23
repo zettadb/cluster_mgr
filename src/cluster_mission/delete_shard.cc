@@ -282,6 +282,8 @@ bool DeleteShardMission::DelShardJobs() {
         st1.ip = std::get<0>(storage_dparams_[i]);
         st1.port = std::get<1>(storage_dparams_[i]);
         st1.exporter_port = std::get<1>(storage_dparams_[i]) + 1;
+        st1.mgr_port = std::get<1>(storage_dparams_[i]) + 2;
+        st1.xport = std::get<1>(storage_dparams_[i]) + 3;
         st1.innodb_buffer_size_M = 1;
         if(i == 0)
             st1.role = "master";
@@ -465,7 +467,7 @@ bool DeleteShardMission::PostDeleteShard() {
     ret = g_prometheus_manager->DelStorageConf(storage_hosts);
     if(ret) {
         KLOG_ERROR("delete prometheus mysqld_exporter config failed");
-        return false;
+        //return false;
     }
 
     UpdateShardTopologyAndBackup();

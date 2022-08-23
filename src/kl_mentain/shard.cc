@@ -496,6 +496,10 @@ int Shard::check_mgr_cluster()
 	for (auto &i:nodes) {
 		if (!System::get_instance()->get_cluster_mgr_working())
 			break;
+
+		if(!i.Invalid())
+			continue;
+			
 		int stat = i->check_mgr_state();
 		if (stat < -1)
 			return stat;

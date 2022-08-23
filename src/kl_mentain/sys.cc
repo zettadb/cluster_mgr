@@ -33,6 +33,8 @@ System::System(const std::string& cfg_path) : cluster_mgr_working(true), config_
   amysql_mgr_ = new CAsyncMysqlManager();
   amysql_mgr_->start();
 
+  ObjectPtr<MetadataShard> ms(new MetadataShard());
+  meta_shard = ms;
   //add timer for async mysql
   g_global_timer->AddLoopTimerUnit(CAsyncMysqlManager::CheckMysqlSocketTimeout, 
                     amysql_mgr_, 5);
@@ -1470,6 +1472,9 @@ bool System::get_cluster_summary(Json::Value &attachment) {
 
 bool System::get_cluster_detail(Json::Value &paras, Json::Value &attachment) {
   KlWrapGuard<KlWrapMutex> guard(mtx);
+
+  attachment["work_mode"] = "community";
+  return true;
 
   std::string cluster_name;
   if (!paras.isMember("cluster_name")) {

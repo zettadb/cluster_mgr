@@ -14,13 +14,18 @@ struct InstanceInfoSt {
   std::string ip = "";
   unsigned long port = 0;
   unsigned long exporter_port = 0;
+  unsigned long mgr_port = 0;
+  unsigned long xport = 0;
+  std::string mgr_seed = "";
+  std::string mgr_uuid = "";
   int innodb_buffer_size_M = 0;
   int db_cfg = 0;
   // kunlun_metadata_db mysql_pg_install table's primary key
   int related_id = -1;
   std::string role = "slave";
+
   std::string to_string() {
-    return kunlun::string_sprintf("(%s | %lu | %lu |%d | %d | %s)", ip.c_str(), port, exporter_port,
+    return kunlun::string_sprintf("(%s | %lu | %lu | %lu | %lu |%d | %d | %s)", ip.c_str(), port, exporter_port, mgr_port, xport,
                                   innodb_buffer_size_M, db_cfg, role.c_str());
   }
 };
@@ -39,8 +44,9 @@ public:
   bool InitInstanceInfoOneByOne(std::string ip, std::string port, std::string exporter_port,
                                 int buffer_size, int db_cfg);
 
-  bool InitInstanceInfoOneByOne(std::string ip, unsigned long port, unsigned long exporter_port,
-                                int buffer_size, int db_cfg);
+  bool InitInstanceInfoOneByOne(std::string ip, unsigned long port, unsigned long exporter_port, unsigned long mgr_port,
+                                unsigned long xport, std::string mgr_seed, std::string mgr_uuid, int buffer_size, 
+                                int db_cfg, std::string role);
 
   bool virtual TaskReportImpl() override;
   void virtual SetUpStatus() override;
@@ -74,8 +80,8 @@ public:
   bool InitInstanceInfoOneByOne(std::string ip, std::string port, std::string exporter_port,
                                 int buffer_size);
 
-  bool InitInstanceInfoOneByOne(std::string ip, unsigned long port, unsigned long exporter_port,
-                                int buffer_size);
+  bool InitInstanceInfoOneByOne(std::string ip, unsigned long port, unsigned long exporter_port, unsigned long mgr_port,
+                                unsigned long xport, int buffer_size);
 
   bool virtual TaskReportImpl() override;
   void virtual SetUpStatus() override;

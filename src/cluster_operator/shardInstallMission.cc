@@ -115,8 +115,11 @@ bool KAddShardMission::ArrangeRemoteTask() {
   auto iter = install_infos_.begin();
   for (; iter != install_infos_.end(); iter++) {
     bool ret = task->InitInstanceInfoOneByOne(
-        iter->second.ip, iter->second.port, iter->second.exporter_port, iter->second.innodb_buffer_size_M,
-        iter->second.db_cfg);
+        iter->second.ip, iter->second.port, iter->second.exporter_port,
+        iter->second.mgr_port, iter->second.xport,
+        iter->second.mgr_seed, iter->second.mgr_uuid,
+        iter->second.innodb_buffer_size_M,
+        iter->second.db_cfg, iter->second.role);
     if (!ret) {
       KLOG_ERROR("{}", task->getErr());
       delete task;
@@ -221,6 +224,10 @@ bool KAddShardMission::setUpRBR() {
   return enableMaster(master);
 }
 
+bool KAddShardMission::setUpMgr() {
+  return true;
+}
+
 bool KAddShardMission::TearDownMission() {
   kunlun::StorageShardConnection conn(meta_group_seeds, meta_svr_user,
                                       meta_svr_pwd);
@@ -252,8 +259,9 @@ bool KAddShardMission::TearDownMission() {
     return false;
   }
 
+  bool ret1 = setUpMgr();
   // SetUp rbr
-  bool ret1 = setUpRBR();
+  //bool ret1 = setUpRBR();
   if (!ret1) {
     result.Clean();
     bzero((void *)sql, 10240);
@@ -430,7 +438,9 @@ bool KDelShardMission::ArrangeRemoteTask() {
   auto iter = install_infos_.begin();
   for (; iter != install_infos_.end(); iter++) {
     bool ret = task->InitInstanceInfoOneByOne(
-        iter->second.ip, iter->second.port, iter->second.exporter_port, iter->second.innodb_buffer_size_M);
+        iter->second.ip, iter->second.port, iter->second.exporter_port, 
+        iter->second.mgr_port, iter->second.xport,
+        iter->second.innodb_buffer_size_M);
     if (!ret) {
       KLOG_ERROR("{}", task->getErr());
       delete task;

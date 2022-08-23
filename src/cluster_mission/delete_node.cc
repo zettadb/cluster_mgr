@@ -325,7 +325,7 @@ bool DeleteNodeMission::PostDelNode() {
     ret = g_prometheus_manager->DelStorageConf(storage_hosts);
     if(ret) {
         KLOG_ERROR("delete prometheus mysqld_exporter config failed");
-        return false;
+        //return false;
     }
     return true;
 }

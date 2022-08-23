@@ -21,15 +21,14 @@ class AddShardMission : public MissionRequest {
     typedef MissionRequest super;
 public:
     explicit AddShardMission(Json::Value *doc) : super(doc),
-          err_code_(0), init_flag_(false), fullsync_level_(-1) {}
+          err_code_(0), init_flag_(false) {}
 
     explicit AddShardMission(const std::string& ha_mode, const std::string& cluster_name, int cluster_id,
-                    int shards, int nodes, const std::vector<std::string>& storage_iplists, int fullsync_level, 
+                    int shards, int nodes, const std::vector<std::string>& storage_iplists, 
                     int innodb_size, int dbcfg, const std::string& computer_user, const std::string& computer_pwd) : err_code_(0), init_flag_(true),
             ha_mode_(ha_mode), cluster_name_(cluster_name), cluster_id_(cluster_id), shards_(shards), 
-            nodes_(nodes), storage_iplists_(storage_iplists), fullsync_level_(fullsync_level), 
-            innodb_size_(innodb_size), dbcfg_(dbcfg), computer_user_(computer_user), 
-            computer_pwd_(computer_pwd) {}
+            nodes_(nodes), storage_iplists_(storage_iplists), innodb_size_(innodb_size), dbcfg_(dbcfg), 
+            computer_user_(computer_user), computer_pwd_(computer_pwd) {}
     virtual ~AddShardMission() {}
 
     virtual bool ArrangeRemoteTask() override final;
@@ -65,6 +64,7 @@ protected:
     void RollbackStorageJob();
     int GetShardNum();
     void UpdateShardTopologyAndBackup();
+    std::string GetProcUuid();
 
 private:
     int err_code_;
@@ -79,7 +79,6 @@ private:
     int shards_;
     int nodes_;
     std::vector<std::string> storage_iplists_;
-    int fullsync_level_;
     int innodb_size_;
     int dbcfg_;
     std::string computer_user_;

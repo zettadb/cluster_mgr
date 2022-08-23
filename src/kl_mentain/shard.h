@@ -306,11 +306,13 @@ public:
 	  @retval true if master changed; false otherwise.
 	*/
 	bool set_master(ObjectPtr<Shard_node> node) {
-		if (cur_master->get_id() == node->get_id())
-			return false;
+		if(cur_master.Invalid()) {
+			if (cur_master->get_id() == node->get_id())
+				return false;
 
-		if (cur_master.Invalid())
 			cur_master->set_master(false);
+		}
+		
 		if (node.Invalid())
 			node->set_master(true);
 		cur_master = node;
@@ -625,6 +627,8 @@ public:
 		ObjectPtr<Shard_node> sn;
 
 		for (auto&n:nodes) {
+			if(!n.Invalid())
+				continue;
 			n->get_ip_port(ip1, port1);
 			if (ip == ip1 && port == port1) {
 				sn = n;
