@@ -21,7 +21,7 @@ class CreateClusterMission : public MissionRequest {
     typedef MissionRequest super;
 public:
     explicit CreateClusterMission(Json::Value *doc) : super(doc),
-          err_code_(0), init_flag_(false), cluster_id_(-2), dbcfg_(0), fullsync_level_(1), computer_user_("abc"), 
+          err_code_(0), init_flag_(false), cluster_id_(-2), dbcfg_(0), computer_user_("abc"), 
           computer_pwd_("abc"), storage_dstate_(""), computer_dstate_("") {}
     
     virtual ~CreateClusterMission() {}
@@ -76,7 +76,6 @@ private:
     int cpu_cores_;
     int innodb_size_;
     int dbcfg_;
-    int fullsync_level_;
     std::string computer_user_;
     std::string computer_pwd_;
     std::vector<std::string> storage_iplists_;

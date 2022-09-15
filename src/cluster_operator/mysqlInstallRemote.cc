@@ -63,14 +63,24 @@ bool MySQLInstallRemoteTask::InitInstanceInfoOneByOne(std::string ip,
 bool MySQLInstallRemoteTask::InitInstanceInfoOneByOne(std::string ip,
                                                       unsigned long port,
                                                       unsigned long exporter_port,
+                                                      unsigned long mgr_port,
+                                                      unsigned long xport,
+                                                      std::string mgr_seed,
+                                                      std::string mgr_uuid,
                                                       int buffer_size,
-                                                      int db_cfg) {
+                                                      int db_cfg,
+                                                      std::string role) {
   InstanceInfoSt info_st;
   info_st.ip = ip;
   info_st.port = port;
   info_st.exporter_port = exporter_port;
+  info_st.mgr_port = mgr_port;
+  info_st.xport = xport;
+  info_st.mgr_seed = mgr_seed;
+  info_st.mgr_uuid = mgr_uuid;
   info_st.innodb_buffer_size_M = buffer_size;
   info_st.db_cfg = db_cfg;
+  info_st.role = role;
 
   string key =
       kunlun::string_sprintf("%s_%lu", info_st.ip.c_str(), info_st.port);
@@ -103,12 +113,17 @@ bool MySQLInstallRemoteTask::ComposeOneNodeChannelAndPara(std::string key) {
   root["job_type"] = "install_mysql";
 
   Json::Value paras;
-  paras["command_name"] = "install-mysql-rbr.py";
+  paras["command_name"] = "install-mysql-mgr.py";
 
   paras["port"] = std::to_string(info_st.port);
   paras["exporter_port"] = std::to_string(info_st.exporter_port);
+  paras["mgr_port"] = std::to_string(info_st.mgr_port);
+  paras["xport"] = std::to_string(info_st.xport);
+  paras["mgr_seed"] = info_st.mgr_seed;
+  paras["mgr_uuid"] = info_st.mgr_uuid;
   paras["innodb_buffer_size_M"] = std::to_string(info_st.innodb_buffer_size_M);
   paras["db_cfg"] = std::to_string(info_st.db_cfg);
+  paras["is_master"] = (info_st.role == "master" ? "1" : "0");
   root["paras"] = paras;
   SetPara(key.c_str(), root);
   return true;
@@ -285,11 +300,15 @@ bool MySQLUninstallRemoteTask::InitInstanceInfoOneByOne(std::string ip,
 bool MySQLUninstallRemoteTask::InitInstanceInfoOneByOne(std::string ip,
                                                       unsigned long port,
                                                       unsigned long exporter_port,
+                                                      unsigned long mgr_port,
+                                                      unsigned long xport,
                                                       int buffer_size) {
   InstanceInfoSt info_st;
   info_st.ip = ip;
   info_st.port = port;
   info_st.exporter_port = exporter_port;
+  info_st.mgr_port = mgr_port;
+  info_st.xport = xport;
   info_st.innodb_buffer_size_M = buffer_size;
 
   string key =
@@ -323,10 +342,12 @@ bool MySQLUninstallRemoteTask::ComposeOneNodeChannelAndPara(std::string key) {
   root["job_type"] = "uninstall_mysql";
 
   Json::Value paras;
-  paras["command_name"] = "uninstall-mysql-rbr.py";
+  paras["command_name"] = "uninstall-mysql-mgr.py";
 
   paras["port"] = std::to_string(info_st.port);
   paras["exporter_port"] = std::to_string(info_st.exporter_port);
+  paras["mgr_port"] = std::to_string(info_st.mgr_port);
+  paras["xport"] = std::to_string(info_st.xport);
   paras["innodb_buffer_size_M"] = std::to_string(info_st.innodb_buffer_size_M);
   root["paras"] = paras;
   SetPara(key.c_str(), root);

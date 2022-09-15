@@ -211,7 +211,6 @@ bool AddNodeMission::GetInstallNodeParamsByClusterId() {
     key_name.push_back("memo.computer_passwd");
     key_name.push_back("memo.innodb_size");
     key_name.push_back("memo.dbcfg");
-    key_name.push_back("memo.fullsync_level");
     CMemo_Params memo_paras = GetClusterMemoParams(cluster_id_, key_name);
     if(!std::get<0>(memo_paras)) {
         err_code_ = std::get<1>(memo_paras);
@@ -224,7 +223,6 @@ bool AddNodeMission::GetInstallNodeParamsByClusterId() {
     computer_user_ = key_vals["computer_user"];
     computer_pwd_ = key_vals["computer_passwd"];
     innodb_size_ = atoi(key_vals["innodb_size"].c_str());
-    fullsync_level_ = atoi(key_vals["fullsync_level"].c_str());
     dbcfg_ = atoi(key_vals["dbcfg"].c_str());
 
     return true;
@@ -419,8 +417,8 @@ bool AddNodeMission::DispatchShardInstallJob(int shard_id) {
     std::vector<IComm_Param> iparam = storage_iparams_[shard_id];
     for(size_t i=0; i<iparam.size(); i++) {
         bool ret = task->InitInstanceInfoOneByOne(
-            std::get<0>(iparam[i]), std::get<1>(iparam[i]), std::get<1>(iparam[i])+1, innodb_size_,
-            dbcfg_);
+            std::get<0>(iparam[i]), std::get<1>(iparam[i]), std::get<1>(iparam[i])+1, std::get<1>(iparam[i])+2,
+            std::get<1>(iparam[i])+3, "", "", innodb_size_, dbcfg_, "slave");
         if(!ret) {
             KLOG_ERROR("package install mysql parameter failed {}", task->getErr());
             err_code_ = ADD_NODE_DISPATH_INSTALL_TASK_ERROR;
@@ -459,6 +457,8 @@ void AddNodeMission::RollbackStorageInstall(int shard_id) {
         st1.ip = std::get<0>(iparams[i]);
         st1.port = std::get<1>(iparams[i]);
         st1.exporter_port = std::get<1>(iparams[i]) + 1;
+        st1.mgr_port = std::get<1>(iparams[i]) + 2;
+        st1.xport = std::get<1>(iparams[i]) + 3;
         st1.innodb_buffer_size_M = innodb_size_;
         if(i == 0)
             st1.role = "master";
@@ -599,11 +599,6 @@ bool AddNodeMission::PostAddNode(int shard_id) {
             KLOG_ERROR("insert node_map_master failed {}", g_node_channel_manager->getErr());
             return false;
         }
-
-        if(!PersistFullsyncLevel(slave_hosts, fullsync_level_)) {
-            KLOG_ERROR("persist fullsync_level {} to db failed", fullsync_level_);
-            return false;
-        }
     }
 
     sql = "commit";
@@ -634,7 +629,7 @@ bool AddNodeMission::PostAddNode(int shard_id) {
     ret = g_prometheus_manager->AddStorageConf(storage_hosts);
     if(ret) {
         KLOG_ERROR("add prometheus mysqld_exporter config failed");
-        return false;
+        //return false;
     }
 
     System::get_instance()->add_node_shard_memory(cluster_id_, shard_id_, node_params);
@@ -794,9 +789,53 @@ bool AddNodeMission::TearDownMission() {
                 error_info_ += (*it)->get_response()->get_error_info() + "|";
                 shard_map_states_[shard_id] = N_FAILED;
             } else {
-                shard_map_states_[shard_id] = N_SREBUILD;
-                if(!NodeRebuildRelation(shard_id)) {
-                    shard_map_states_[shard_id] = N_FAILED;
+                if(ha_mode_ == "rbr") {
+                    shard_map_states_[shard_id] = N_SREBUILD;
+                    if(!NodeRebuildRelation(shard_id)) {
+                        shard_map_states_[shard_id] = N_FAILED;
+                    }
+                } else {
+                    if(!PostAddNode(shard_id)) {
+                        err_code_ = ADD_NODE_POST_DEAL_ERROR;
+                        RollbackStorageInstall(shard_id);
+                        shard_map_states_[shard_id] = N_ROLLBACK;
+                        return true;
+                    }
+                    shard_map_states_[shard_id] = N_DONE;
+
+                    std::map<std::string, std::vector<int> > done_ports;
+                    std::map<std::string, std::vector<int> > failed_ports;
+                    int done_state = 0, failed_state=0;
+                    for(auto &it : shard_map_states_) {
+                        if(it.second == N_DONE || it.second == N_FAILED) {
+                            done_state++;
+                            if(it.second == N_FAILED) {
+                                failed_state++;
+                                PackInstallPortsByShardId(it.first, failed_ports);
+                            } else {
+                                PackInstallPortsByShardId(it.first, done_ports);
+                            }
+                        }
+                    }
+                    UpdateUsedPort(K_APPEND, M_STORAGE, done_ports);
+                    UpdateInstallingPort(K_CLEAR, M_STORAGE, done_ports);
+                    UpdateInstallingPort(K_CLEAR, M_STORAGE, failed_ports);
+
+                    if(done_state >= (int)shard_map_states_.size()) {
+                        job_status_ = "done";
+                        storage_state_ = "done";
+                        if(failed_state >= (int)shard_map_states_.size()) {
+                            job_status_ = "failed";
+                            storage_state_ = "failed";
+                        }
+
+                        UpdateOperationRecord();
+                        if(storage_state_ == "done" || storage_state_ == "failed") {
+                            //std::unique_lock<std::mutex> lock{ cond_mux_ };
+                            //cond_.notify_all();
+                            cond_.SignalAll();
+                        }
+                    }
                 }
             }
         }

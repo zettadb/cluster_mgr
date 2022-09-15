@@ -395,7 +395,7 @@ bool DeleteComputerMission::PostDeleteComputer() {
     ret = g_prometheus_manager->DelComputerConf(comp_hosts);
     if(ret) {
         KLOG_ERROR("delete prometheus postgres_exporter config failed");
-        return false;
+        //return false;
     }
     return true;
 }

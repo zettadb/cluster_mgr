@@ -1473,6 +1473,9 @@ bool System::get_cluster_summary(Json::Value &attachment) {
 bool System::get_cluster_detail(Json::Value &paras, Json::Value &attachment) {
   KlWrapGuard<KlWrapMutex> guard(mtx);
 
+  attachment["work_mode"] = "community";
+  return true;
+
   std::string cluster_name;
   if (!paras.isMember("cluster_name")) {
     KLOG_ERROR("missing `cluster_name` key-value pair in the request body");

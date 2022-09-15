@@ -35,6 +35,7 @@ public:
   struct InstanceInfoSt getMasterInfo();
   bool setUpRBR();
   void rollBackShardInstall();
+  bool setUpMgr();
 
   virtual bool SetUpMisson();
   virtual bool ArrangeRemoteTask();
@@ -46,7 +47,6 @@ private:
   bool doChangeMasterOnSlave(struct InstanceInfoSt &master,struct InstanceInfoSt &slave);
   // set super_read_only = on;
   bool enableMaster(struct InstanceInfoSt &master);
-
 
 private:
   unordered_map<string,struct InstanceInfoSt> install_infos_;

@@ -179,19 +179,6 @@ bool CreateClusterMission::SetUpMisson() {
         dbcfg_ = 0;
     }
 
-    if(paras.isMember("fullsync_level")) {
-      if(CheckStringIsDigit(paras["fullsync_level"].asString()))
-        fullsync_level_ = atoi(paras["fullsync_level"].asCString());
-      else
-        fullsync_level_ = 1;
-    }
-
-    if(fullsync_level_ > nodes_ - 1) {
-      err_code_ = CREATE_CLUSTER_ASSIGN_NODES_FULLSYNC_ERROR;
-      KLOG_ERROR("fullsync_level {} is too big, nodes {}", fullsync_level_, nodes_);
-      goto end;
-    }
-
     if(paras.isMember("computer_user")) {
       std::string comp_user = paras["computer_user"].asString();
       if(!comp_user.empty())
@@ -409,7 +396,7 @@ end:
 
 bool CreateClusterMission::AddShardJobs() {
   ObjectPtr<AddShardMission> mission(new AddShardMission(ha_mode_, cluster_name_, cluster_id_, 
-              shards_, nodes_, storage_iplists_, fullsync_level_, innodb_size_, dbcfg_,
+              shards_, nodes_, storage_iplists_, innodb_size_, dbcfg_,
               computer_user_, computer_pwd_));
   mission->SetNickName(nick_name_);
   mission->set_cb(CreateClusterMission::AddShardCallCB);
@@ -775,7 +762,6 @@ bool CreateClusterMission::PostCreateCluster() {
   paras["computer_passwd"] = computer_pwd_;
   paras["innodb_size"] = std::to_string(innodb_size_);
   paras["dbcfg"] = std::to_string(dbcfg_);
-  paras["fullsync_level"] = std::to_string(fullsync_level_);
 
   Json::FastWriter writer;
   writer.omitEndingLineFeed();

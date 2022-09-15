@@ -99,7 +99,7 @@ bool AddShardMission::ArrangeRemoteTask() {
                         CNode_Type ct{node_id, std::get<0>(iparams[i]), std::get<1>(iparams[i]), 1};
                         node_params.emplace_back(ct);
                     }
-                    Shard_Type st{shard_id, shard_name, "pgx", "pgx_pwd", fullsync_level_, node_params};
+                    Shard_Type st{shard_id, shard_name, "pgx", "pgx_pwd", 1, node_params};
                     shard_params.emplace_back(st);
                 }
                 System::get_instance()->add_shard_cluster_memory(cluster_id_, cluster_name_, 
@@ -195,11 +195,6 @@ bool AddShardMission::SetUpMisson() {
       goto end;
     }
 
-    if(paras.isMember("fullsync_level")) {
-      if(CheckStringIsDigit(paras["fullsync_level"].asString()))
-        fullsync_level_ = atoi(paras["fullsync_level"].asCString());
-    }
-
     if(paras.isMember("storage_iplists")) {
       storage_iplists = paras["storage_iplists"];
       for(i=0; i<storage_iplists.size();i++) {
@@ -236,7 +231,6 @@ bool AddShardMission::GetInstallShardParamsByClusterId() {
     key_name.push_back("memo.computer_passwd");
     key_name.push_back("memo.innodb_size");
     key_name.push_back("memo.dbcfg");
-    key_name.push_back("memo.fullsync_level");
     CMemo_Params memo_paras = GetClusterMemoParams(cluster_id_, key_name);
     if(!std::get<0>(memo_paras)) {
         err_code_ = std::get<1>(memo_paras);
@@ -250,15 +244,7 @@ bool AddShardMission::GetInstallShardParamsByClusterId() {
     computer_pwd_ = key_vals["computer_passwd"];
     innodb_size_ = atoi(key_vals["innodb_size"].c_str());
     dbcfg_ = atoi(key_vals["dbcfg"].c_str());
-    if(fullsync_level_ == -1)
-      fullsync_level_ = atoi(key_vals["fullsync_level"].c_str());
-
-    if(fullsync_level_ > nodes_ - 1) {
-      err_code_ = ADD_SHARDS_ASSIGN_NODES_FULLSYNC_ERROR;
-      KLOG_ERROR("add shard nodes {} too small, umatch fullsync level {}", nodes_, fullsync_level_);
-      return false;
-    }
-
+    
     return true;
 }
 
@@ -273,7 +259,6 @@ bool AddShardMission::InitFromInternal() {
     para["cluster_name"] = cluster_name_;
     para["shards"] = std::to_string(shards_);
     para["nodes"] = std::to_string(nodes_);
-    para["fullsync_level"] = std::to_string(fullsync_level_);
     para["innodb_size"] = std::to_string(innodb_size_);
     para["dbcfg"] = std::to_string(dbcfg_);
     for(size_t i=0; i<storage_iplists_.size(); i++) {
@@ -426,6 +411,26 @@ bool AddShardMission::FetchStorageIplists() {
   return true;
 }
 
+std::string AddShardMission::GetProcUuid() {
+  std::string uuid;
+  FILE *fp = fopen("/proc/sys/kernel/random/uuid", "rb");
+	if (fp == NULL)	{
+		KLOG_ERROR("open proc random uuid error");
+		return uuid;
+	}
+
+	char buf[60];
+	memset(buf, 0, 60);
+	size_t n = fread(buf, 1, 36, fp);
+	fclose(fp);
+	
+	if(n != 36)
+		return uuid;
+	
+	uuid.assign(buf, n);
+  return uuid;
+}
+
 bool AddShardMission::AddShardJobs() {
   for(auto it : storage_iparams_) {
     ObjectPtr<KAddShardMission>mission(new KAddShardMission());
@@ -433,12 +438,23 @@ bool AddShardMission::AddShardJobs() {
     ShardJobParam *jparam = new ShardJobParam(this, it.first);
     mission->set_cb_context(jparam);
 
+    std::string uuid = GetProcUuid();
     std::vector<IComm_Param> s_iparams = it.second;
+    std::string mgr_seed;
+    for(size_t i=0; i<s_iparams.size(); i++)
+      mgr_seed += std::get<0>(s_iparams[i]) + ":" + std::to_string(std::get<1>(s_iparams_[i])+2) + ",";
+
+    mgr_seed = mgr_seed.substr(0, mgr_seed.length()-1);
+
     for(size_t i=0; i<s_iparams.size(); i++) {
       struct InstanceInfoSt st1 ;
       st1.ip = std::get<0>(s_iparams[i]);
       st1.port = std::get<1>(s_iparams[i]);
       st1.exporter_port = std::get<1>(s_iparams[i])+1;
+      st1.mgr_port = std::get<1>(s_iparams_[i])+2;
+      st1.xport = std::get<1>(s_iparams_[i])+3;
+      st1.mgr_seed = mgr_seed;
+      st1.mgr_uuid = uuid;
       st1.innodb_buffer_size_M = innodb_size_;
       st1.db_cfg = dbcfg_;
       if(i == 0)
@@ -511,7 +527,7 @@ void AddShardMission::UpdateMetaAndOperationStat(JobType jtype) {
     
     if(!UpdateInstallingPort(K_CLEAR, M_STORAGE, install_storage_ports))
       return;
-    
+    RollbackStorageJob();
   } else if(jtype == S_DONE) {
     storage_state_ = "done";
     std::map<std::string, std::vector<int> > install_storage_ports;
@@ -580,7 +596,7 @@ void AddShardMission::UpdateMetaAndOperationStat(JobType jtype) {
                 CNode_Type ct{node_id, std::get<0>(iparams[i]), std::get<1>(iparams[i]), 1};
                 node_params.emplace_back(ct);
             }
-            Shard_Type st{shard_id, shard_name, "pgx", "pgx_pwd", fullsync_level_, node_params};
+            Shard_Type st{shard_id, shard_name, "pgx", "pgx_pwd", 1, node_params};
             shard_params.emplace_back(st);
         }
 
@@ -619,7 +635,7 @@ bool AddShardMission::PostAddShard() {
     for(auto shard : storage_iparams_) {
         std::vector<IComm_Param> iparams = shard.second;
         sql = string_sprintf("insert into %s.shards(name, num_nodes, db_cluster_id, sync_num) values('%s', %d, %d, %d)",
-            KUNLUN_METADATA_DB_NAME, shard.first.c_str(), iparams.size(), cluster_id_, fullsync_level_);
+            KUNLUN_METADATA_DB_NAME, shard.first.c_str(), iparams.size(), cluster_id_, 1);
         ret = g_node_channel_manager->send_stmt(sql, &result, stmt_retries);
         if(ret) {
             KLOG_ERROR("insert shard failed {}", g_node_channel_manager->getErr());
@@ -698,11 +714,8 @@ bool AddShardMission::PostAddShard() {
                 KLOG_ERROR("insert node_map_master failed {}", g_node_channel_manager->getErr());
                 return false;
             }
-
-          if(!PersistFullsyncLevel(hosts, fullsync_level_)) {
-            KLOG_ERROR("persist fullsync_level {} to db failed", fullsync_level_);
-            return false;
-          }
+        } else {
+          GetMysqlUuidByHost(shard.first, cluster_name_, master_host);
         }
     }
 
@@ -725,7 +738,7 @@ bool AddShardMission::PostAddShard() {
     ret = g_prometheus_manager->AddStorageConf(storage_hosts);
     if(ret) {
         KLOG_ERROR("add prometheus mysqld_exporter config failed");
-        return false;
+        //return false;
     }
 
     UpdateShardTopologyAndBackup();
@@ -791,6 +804,8 @@ void AddShardMission::RollbackStorageJob() {
         st1.ip = std::get<0>(s_iparams[i]);
         st1.port = std::get<1>(s_iparams[i]);
         st1.exporter_port = std::get<1>(s_iparams[i]) + 1;
+        st1.mgr_port = std::get<1>(s_iparams[i]) + 2;
+        st1.xport = std::get<1>(s_iparams[i]) + 3;
         st1.innodb_buffer_size_M = innodb_size_;
         if(i == 0)
             st1.role = "master";

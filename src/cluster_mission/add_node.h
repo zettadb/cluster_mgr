@@ -77,7 +77,7 @@ private:
     int nodes_;
     int innodb_size_;
     int dbcfg_;
-    int fullsync_level_;
+
     std::string computer_user_;
     std::string computer_pwd_;
     std::string ha_mode_;

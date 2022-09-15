@@ -675,7 +675,7 @@ bool AddComputerMission::PostAddComputer() {
     ret = g_prometheus_manager->AddComputerConf(comp_hosts);
     if(ret) {
         KLOG_ERROR("add prometheus postgres_exporter config failed");
-        return false;
+        //return false;
     }
     
     //check computer_node replay all ddl_log
@@ -736,7 +736,7 @@ int AddComputerMission::PgReplayDdlLogStat(const std::string& hostaddr, int port
 
     PgResult presult;
     int ret = pg_conn.ExecuteQuery("select max(ddl_op_id) from pg_ddl_log_progress", &presult);
-    if(ret != -1 || presult.GetNumRows() != 1) {
+    if(ret == -1 || presult.GetNumRows() != 1) {
         KLOG_ERROR("select pg_ddl_log_progress failed {}", pg_conn.getErr());
         return 1;
     }
@@ -781,7 +781,8 @@ void AddComputerMission::ComputerReplayDdlLogAndUpdateMeta() {
                     if(num > 10) {
                         retry_nums.erase(host);
                         UpdateMetaCompNodeStat(hostaddr, port, false);
-                    }
+                    } else
+                        retry_nums[host] = num+1;
                 }
             } else if(replay_ret == 0) {
                 std::string host = hostaddr+"_"+std::to_string(port);

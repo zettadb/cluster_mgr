@@ -290,7 +290,7 @@ bool GetBestInstallHosts(std::vector<Host_Param>& avail_hosts, int node_num, std
     hparam = avail_hosts[0];
     avail_hosts.erase(avail_hosts.begin());
 
-    int port_delta = 2;
+    int port_delta = 4;
     if(std::get<5>(hparam) == 1)
       port_delta = 3;
 
