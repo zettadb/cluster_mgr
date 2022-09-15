@@ -311,11 +311,11 @@ public:
 				return false;
 
 			cur_master->set_master(false);
-			
-			if (node.Invalid())
-				node->set_master(true);
-		} else
-			cur_master = node;
+		}
+		
+		if (node.Invalid())
+			node->set_master(true);
+		cur_master = node;
 		return true;
 	}
 
@@ -335,8 +335,6 @@ public:
 		Txn_ts start_ts;
 		uint32_t local_txnid;
 		uint32_t comp_nodeid;
-		uint64_t trxid;
-		std::string written_shards;
 		bool operator==(const Txn_key&tk) const {
 			return (start_ts == tk.start_ts &&
 					local_txnid == tk.local_txnid &&
@@ -629,6 +627,8 @@ public:
 		ObjectPtr<Shard_node> sn;
 
 		for (auto&n:nodes) {
+			if(!n.Invalid())
+				continue;
 			n->get_ip_port(ip1, port1);
 			if (ip == ip1 && port == port1) {
 				sn = n;

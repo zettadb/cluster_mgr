@@ -851,7 +851,7 @@ void CAsyncMysqlManager::MysqlSocketResult(StatMysql* cmysql, uint32_t event) {
 
         case 1: // execute sql wait result 
         {
-            if(GetPendListLen(cmysql) == 0)
+            if(UT_LIST_GET_LEN(cmysql->pending_sql_) == 0)
                 return;
             
             int err_;
