@@ -64,23 +64,6 @@ raft_group_member_init_config = 192.168.0.128:8110:0,
 brpc_raft_port = 8110
 
 ##################################################################
-# program_binaries_path
-program_binaries_path = ../../../../../program_binaries
-
-# instance_binaries_path
-instance_binaries_path = ../../../../../instance_binaries
-
-# storage_prog_package_name
-storage_prog_package_name = kunlun-storage-0.9.1
-
-# computer_prog_package_name
-computer_prog_package_name = kunlun-server-0.9.1
-
-# storage instance port start
-storage_instance_port_start = 57330
-
-# computer instance port start
-computer_instance_port_start = 57030
 
 # prometheus path
 prometheus_path = ../../../../../program_binaries/prometheus
