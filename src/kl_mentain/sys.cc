@@ -411,7 +411,7 @@ int System::create_instance(const std::string &cfg_path) {
       if(m_global_instance->get_cluster_mgr_working()) {
         m_global_instance->refresh_storages_info_to_computers();
         m_global_instance->refresh_storages_info_to_computers_metashard();
-        m_global_instance->scan_cn_ddl_undoing_jobs();
+        //m_global_instance->scan_cn_ddl_undoing_jobs();
 
         if(commit_log_count++ >= commit_log_count_max) {
           commit_log_count = 0;
