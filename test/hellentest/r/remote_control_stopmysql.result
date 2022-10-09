@@ -1,0 +1,38 @@
+2022-08-08 16:51:01
+2
+===STDOUT===
+: 0
+===STDOUT===
+: 0
+select step from rbr_consfailover where shard_id = 1 and step ="Fail" order by id desc limit 15;
+step
+show slave hosts;
+Server_id	Host	Port	Master_id	Slave_UUID
+8710155	192.168.0.132	59403	9234443	6691bb43-16ce-11ed-91bc-7c10c93f0c7e
+8513547	192.168.0.129	59403	9234443	64acfd8a-16ce-11ed-93f8-f02f7422ae6a
+Warnings:
+Warning	1287	'SHOW SLAVE HOSTS' is deprecated and will be removed in a future release. Please use SHOW REPLICAS instead
+show slave hosts;
+Server_id	Host	Port	Master_id	Slave_UUID
+Warnings:
+Warning	1287	'SHOW SLAVE HOSTS' is deprecated and will be removed in a future release. Please use SHOW REPLICAS instead
+show slave hosts;
+Server_id	Host	Port	Master_id	Slave_UUID
+Warnings:
+Warning	1287	'SHOW SLAVE HOSTS' is deprecated and will be removed in a future release. Please use SHOW REPLICAS instead
+select step from rbr_consfailover where shard_id = 2 and step ="Fail" order by id desc limit 15;
+step
+show slave hosts;
+Server_id	Host	Port	Master_id	Slave_UUID
+Warnings:
+Warning	1287	'SHOW SLAVE HOSTS' is deprecated and will be removed in a future release. Please use SHOW REPLICAS instead
+show slave hosts;
+Server_id	Host	Port	Master_id	Slave_UUID
+Warnings:
+Warning	1287	'SHOW SLAVE HOSTS' is deprecated and will be removed in a future release. Please use SHOW REPLICAS instead
+show slave hosts;
+Server_id	Host	Port	Master_id	Slave_UUID
+8710153	192.168.0.132	59401	8513545	6691b416-16ce-11ed-928e-7c10c93f0c7e
+9234441	192.168.0.140	59401	8513545	64b2c626-16ce-11ed-929e-04421aec4c44
+Warnings:
+Warning	1287	'SHOW SLAVE HOSTS' is deprecated and will be removed in a future release. Please use SHOW REPLICAS instead

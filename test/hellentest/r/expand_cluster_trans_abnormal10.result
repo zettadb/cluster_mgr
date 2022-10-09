@@ -1,0 +1,40 @@
+shard.2
+shard.1
+drop table if exists student;
+
+create table student(id int primary key, info text, wt int) with (shard = 39);
+
+insert into student(id,info,wt) values(1, 'record1', 1);
+
+insert into student(id,info,wt) values(2, 'record2', 2);
+
+insert into student(id,info,wt) values(3, 'record3', 3);
+
+drop table if exists transfer_account;
+
+create table transfer_account(id int primary key,tradedate varchar(255), money int default 1000)partition by range(id) with (shard = 39);
+
+create table transfer_account_01 partition of  transfer_account for values from (MINVALUE) to(250) with (shard = 39);
+
+create table transfer_account_02 partition of  transfer_account for values from (250) to(500) with (shard = 39);
+
+create table transfer_account_03 partition of  transfer_account for values from (500) to(750) with (shard = 40);
+
+create table transfer_account_04 partition of  transfer_account for values from (750) to(1001) with (shard = 40);
+
+insert into transfer_account select generate_series(1,200),('2022-01-05');
+
+insert into transfer_account select generate_series(201,300),('2022-04-06');
+
+insert into transfer_account select generate_series(301,400),('2022-05-09');
+
+insert into transfer_account select generate_series(401,450),('2022-07-02');
+
+insert into transfer_account select generate_series(451,500),('2022-08-01');
+
+insert into transfer_account select generate_series(501,700),('2022-09-25');
+
+insert into transfer_account select generate_series(701,900),('2022-11-02');
+
+insert into transfer_account select generate_series(901,1000),('2022-12-30');
+

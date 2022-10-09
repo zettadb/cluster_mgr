@@ -1,0 +1,65 @@
+192.168.0.140,192.168.0.132,192.168.0.129
+shard.2
+shard.1
+drop table if exists ss;
+
+create table ss(id int primary key, info text, wt int) with (shard = 11);
+
+drop table if exists student;
+
+create table student(id int primary key, info text, wt int) with (shard = 11);
+
+insert into student(id,info,wt) values(1, 'record1', 1);
+
+insert into student(id,info,wt) values(2, 'record2', 2);
+
+insert into student(id,info,wt) values(3, 'record3', 3);
+
+drop table if exists test1 ;
+
+create table test1(id int primary key, name text, age int) with (shard = 11);
+
+drop table if exists test2 ;
+
+create table test2(id int primary key, address char(50), number int) with (shard = 12);
+
+insert into test2(id,address,number) values(1, 'abc', 001);
+
+insert into test2(id,address,number) values(2, '2de', 002);
+
+drop table if exists test3;
+
+create table test3(id int primary key, name char(50), empid int) with (shard = 12);
+
+insert into test3(id,name,empid) values(1, 'john', 20220001);
+
+insert into test3(id,name,empid) values(2, 'henry', 20220002);
+
+drop table if exists transfer_account;
+
+create table transfer_account(id int primary key,tradedate varchar(255), money int default 1000)partition by range(id) with (shard = 11);
+
+create table transfer_account_01 partition of  transfer_account for values from (MINVALUE) to(250);
+
+create table transfer_account_02 partition of  transfer_account for values from (250) to(500);
+
+create table transfer_account_03 partition of  transfer_account for values from (500) to(750);
+
+create table transfer_account_04 partition of  transfer_account for values from (750) to(1001);
+
+insert into transfer_account select generate_series(1,200),('2022-01-05');
+
+insert into transfer_account select generate_series(201,300),('2022-04-06');
+
+insert into transfer_account select generate_series(301,400),('2022-05-09');
+
+insert into transfer_account select generate_series(401,450),('2022-07-02');
+
+insert into transfer_account select generate_series(451,500),('2022-08-01');
+
+insert into transfer_account select generate_series(501,700),('2022-09-25');
+
+insert into transfer_account select generate_series(701,900),('2022-11-02');
+
+insert into transfer_account select generate_series(901,1000),('2022-12-30');
+
