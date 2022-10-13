@@ -1,0 +1,16 @@
+#Use case description:
+#1.表对象测试 
+--set_cluster_id(46)
+--kl_cluster_id(1)
+
+--pg_connect(testrbr2,computer.1, abc, abc)
+drop database if exists testdb;
+create database testdb;
+create table t1 (id int not null primary key auto_increment, col1 int);
+insert into t1 (col1) values (1),(2),(3),(4),(5);
+alter table t1 alter column col1 type bigint;
+alter table t1 add name varchar(20);
+alter table t1 drop column name;
+alter table t1 add sale_time date;
+alter table t1 alter column sale_time set default current_timestamp;
+drop table if exists t1;

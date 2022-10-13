@@ -1,0 +1,26 @@
+#Use case description:
+#1.索引测试 
+--set_cluster_id(50)
+--kl_cluster_id(1)
+
+--pg_connect(testrbr12,computer.1, abc, abc)
+create table t_ora_datatype_varchar2(c0 varchar(100));
+create table t_ora_datatype_char(c0 char(100)); 
+create table t_ora_datatype_nvarchar2(c0 varchar(100));
+create table t_ora_datatype_raw(c0 bytea);
+create table t_ora_datatype_clob(c0 text);
+create table t_ora_datatype_blob(c0 bytea); 
+create table t_ora_datatype_long(c0 text);
+create table t_ora_datatype_date(c0 timestamp);
+create table t_ora_datatype_timestamp(c0 timestamp(6));
+create table t_ora_datatype_timestamptz(c0 timestamp with time zone);
+create table t_ora_datatype_number(c0 decimal(10,2)); 
+create table t_ora_datatype_float(c0 double precision);
+create table t (rowid serial8 not null, c int);
+insert into t (c) values (1);
+insert into t (c) values (2);
+insert into t (c) values (3);
+insert into t (c) values (4);
+insert into t (c) values (5);
+select rowid,c from t order by c;
+

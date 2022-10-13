@@ -1,0 +1,13 @@
+#Use case description:
+#1.PL/SQL 测试
+--set_cluster_id(50)
+--kl_cluster_id(1)
+
+--pg_connect(testrbr16,computer.1, abc, abc)
+drop table if exists t1;
+create table test1(id varchar(100)primary key, score decimal(10,2),gender character varying(50),name character varying(100),age character varying(10));
+COMMENT ON TABLE test1 IS '测试用户表';
+ drop index if exists user_name;
+CREATE INDEX user_name ON test1 (name);
+GRANT ALL ON TABLE test1 TO abc;
+

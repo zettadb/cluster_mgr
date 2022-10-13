@@ -1,0 +1,11 @@
+#Use case description:
+#1.索引测试 
+--set_cluster_id(50)
+--kl_cluster_id(1)
+
+--pg_connect(testrbr12,computer.1, abc, abc)
+create table t_ora_fun_analyze(id varchar(100)primary key, score decimal(10,2));
+insert into t_ora_fun_analyze(id,score) values(1,100);
+insert into t_ora_fun_analyze(id,score) values (2,200);
+insert into t_ora_fun_analyze(id,score) values (3,300);
+select id,rank() over(partition by 1 order by id) as rk,sum(score) over(partition by 1 order by id) as sum,lag(id) over(partition by 1 order by id) as la from t_ora_fun_analyze;

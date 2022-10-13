@@ -1,0 +1,11 @@
+#Use case description:
+#1.视图对象测试 
+--set_cluster_id(46)
+--kl_cluster_id(1)
+
+--pg_connect(testrbr3,computer.1, abc, abc)
+create table t_test (id int not null primary key auto_increment, col1 int);
+create view v_test as select * from t_test;
+create or replace view v_test as select * from t_test where 1=0;
+drop view v_test;
+drop table t_test;

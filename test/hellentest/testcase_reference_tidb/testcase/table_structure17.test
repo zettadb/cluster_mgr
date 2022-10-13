@@ -1,0 +1,9 @@
+#Use case description:
+#1.PL/SQL 测试
+--set_cluster_id(50)
+--kl_cluster_id(1)
+
+--pg_connect(testrbr17,computer.1, abc, abc)
+select partitioning_type,subpartitioning_type,count(*) from dba_part_tables where owner='mine' group by partitioning_type,subpartitioning_type order by partitioning_type,subpartitioning_type;
+select p.table_owner, p.table_name, p.high_value, max(p.partition_position) over (partition by p.table_owner, p.table_name) as p, partition_position from dba_tab_partitions p, dba_part_key_columns c, dba_tab_columns cc where table_owner = 'mine' and c.owner = p.table_owner and c.name = p.table_name and cc.owner = c.owner and cc.table_name = c.name and cc.column_name = c.column_name and p.partitioning_type='HASH' and cc.data_type like  '%VARCHAR%';
+select p.table_owner, p.table_name, p.high_value, max(p.partition_position) over (partition by p.table_owner, p.table_name) as p, partition_position from dba_tab_partitions p, dba_part_key_columns c, dba_tab_columns cc where table_owner = 'mine' and c.owner = p.table_owner and c.name = p.table_name and cc.owner = c.owner and cc.table_name = c.name and cc.column_name = c.column_name and p.partitioning_type='RANGE' and cc.data_type like  '%DATE%';

@@ -1,0 +1,11 @@
+#Use case description:
+#1.索引测试 
+--set_cluster_id(50)
+--kl_cluster_id(1)
+
+--pg_connect(testrbr10,computer.1, abc, abc)
+INSERT INTO inttable (id, value) VALUES ( 1, 43 );
+begin;
+update inttable set value=10 where id=1;
+
+

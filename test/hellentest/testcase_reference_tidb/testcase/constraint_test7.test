@@ -1,0 +1,9 @@
+#Use case description:
+#1.约束测试 
+--set_cluster_id(46)
+--kl_cluster_id(1)
+
+--pg_connect(testrbr7,computer.1, abc, abc)
+DROP TABLE IF EXISTS users;
+CREATE TABLE users (id INT NOT NULL PRIMARY KEY AUTO_INCREMENT,username VARCHAR(60) NOT NULL,UNIQUE (username),CONSTRAINT min_username_length CHECK (CHARACTER_LENGTH(username) >=4));
+INSERT INTO users (username) VALUES ('a');

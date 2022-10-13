@@ -1,0 +1,11 @@
+#Use case description:
+#1.索引测试 
+--set_cluster_id(50)
+--kl_cluster_id(1)
+
+--pg_connect(testrbr8,computer.1, abc, abc)
+create table inttable( id int primary key, value varchar(30),dept varchar(30) );
+create index testindex1 on inttable(value);
+create unique index uniqueindex2 on inttable(dept);
+create table tbtest(id int, name varchar(20));
+#alter table tbtest add ( constraint id_pk  primary key (id) );

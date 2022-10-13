@@ -1,0 +1,22 @@
+#Use case description:
+#1.索引测试 
+--set_cluster_id(50)
+--kl_cluster_id(1)
+
+--pg_connect(testrbr11,computer.1, abc, abc)
+drop table if exists inttable;
+drop table if exists t1;
+create table inttable( id int, value int );
+alter table inttable add primary key(id);
+INSERT INTO inttable (id, value) VALUES ( 1, 43 );
+SELECT * FROM inttable;
+SELECT value FROM inttable WHERE id =1 FOR UPDATE;
+DELETE FROM inttable WHERE id=1;
+SELECT * from (SELECT id , value FROM inttable WHERE id = 2) as t;
+SELECT * FROM inttable ORDER BY value;
+INSERT INTO inttable (id, value) VALUES ( 1, 43 );
+#Create table t1 like inttable;
+#Create table t2 as (SELECT * FROM inttable);
+Create table t1 (like inttable including all);
+insert into t1  select * from inttable;
+Create table t2 (like inttable including all);

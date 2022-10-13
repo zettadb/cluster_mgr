@@ -1,0 +1,21 @@
+#Use case description:
+#1.索引测试 
+--set_cluster_id(50)
+--kl_cluster_id(1)
+
+--pg_connect(testrbr14,computer.1, abc, abc)
+create table t_ora_par_hash(id  INT ,name varchar(100)) partition by hash(id);
+CREATE TABLE employees (id INT NOT NULL,hired DATE NOT NULL DEFAULT '1970-01-01',store_id INT) PARTITION BY LIST (store_id);
+CREATE TABLE employees_pNorth PARTITION OF employees FOR VALUES in (1, 2, 3, 4, 5);
+CREATE TABLE employees_pEast PARTITION OF employees FOR VALUES in (6,7,8,9,10);
+CREATE TABLE employees_pWest PARTITION OF employees FOR VALUES in (11, 12, 13, 14, 15);
+CREATE TABLE employees_Central PARTITION OF employees FOR VALUES in (16, 17, 18, 19, 20);
+CREATE TABLE employees_1 (id INT NOT NULL,fname VARCHAR(30),lname VARCHAR(30),hired DATE NOT NULL DEFAULT '1970-01-01',separated DATE DEFAULT '9999-12-31',job_code INT,store_id INT,city VARCHAR(15))PARTITION BY LIST (city);
+CREATE TABLE pRegion_1 PARTITION OF employees_1 FOR VALUES IN ('LosAngeles', 'Seattle', 'Houston');
+CREATE TABLE pRegion_2 PARTITION OF employees_1 FOR VALUES IN ('Chicago', 'Columbus', 'Boston');
+CREATE TABLE pRegion_3 PARTITION OF employees_1 FOR VALUES IN ('NewYork', 'LongIsland', 'Baltimore');
+CREATE TABLE pRegion_4 PARTITION OF employees_1 FOR VALUES IN ('Atlanta', 'Raleigh', 'Cincinnati');
+drop table if exists employees;
+CREATE TABLE employees (id INT NOT NULL,fname VARCHAR(30),lname VARCHAR(30),hired DATE NOT NULL DEFAULT '1970-01-01',separated DATE DEFAULT '9999-12-31',job_code INT,store_id INT NOT NULL)PARTITION BY RANGE (store_id);
+#CREATE TABLE `t1` ( `a` char(10) NOT NULL, `b` int) PARTITION BY RANGE COLUMNS(`a`)(PARTITION p0 VALUES LESS THAN ('a'),PARTITION p1 VALUES LESS THAN ('b'), partition p2 values less than maxvalue);
+#

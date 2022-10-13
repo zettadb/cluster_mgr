@@ -1,0 +1,9 @@
+#Use case description:
+#1.约束测试 
+--set_cluster_id(46)
+--kl_cluster_id(1)
+
+--pg_connect(testrbr6,computer.1, abc, abc)
+CREATE UNIQUE INDEX IDX_CODE_TABLE_7 ON TABLE_7(CODE);
+DROP INDEX IDX_CODE_TABLE_7;
+CREATE UNIQUE INDEX IDX_CODE_TABLE_7 ON TABLE_7(CODE,TITLE);

@@ -1,0 +1,27 @@
+#Use case description:
+#1.PL/SQL 测试
+--set_cluster_id(50)
+--kl_cluster_id(1)
+
+--pg_connect(testrbr15,computer.1, abc, abc)
+drop table if exists t;
+CREATE TABLE t(id int PRIMARY KEY AUTO_INCREMENT, c int);
+INSERT INTO t(c) VALUES (1);
+INSERT INTO t(c) VALUES (2);
+INSERT INTO t(c) VALUES (3), (4), (5);
+SELECT * FROM t;
+#CREATE TABLE t(a int AUTO_INCREMENT key) AUTO_ID_CACHE 100;
+set session auto_increment_increment=65536;
+INSERT INTO t(c) VALUES (1);
+INSERT INTO t(c) VALUES (2);
+INSERT INTO t(c) VALUES (3), (4), (5);
+SELECT * FROM t;
+set session auto_increment_increment=1;
+create sequence seq_test increment 1 minvalue 1 maxvalue 10 start 1 cache  1 cycle;
+select nextval('seq_test');
+select nextval('seq_test');
+select nextval('seq_test');
+select nextval('seq_test');
+select nextval('seq_test');
+with recursive cte(a) as (select 1 union select a+1 from cte where a < 5) select * from cte;
+

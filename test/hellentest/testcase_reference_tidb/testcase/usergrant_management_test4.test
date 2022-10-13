@@ -1,0 +1,14 @@
+#Use case description:
+#1.用户权限测试 
+--set_cluster_id(46)
+--kl_cluster_id(1)
+
+--pg_connect(testrbr4,computer.1, abc, abc)
+create table t1 (id int not null primary key auto_increment, col1 int);
+insert into t1 (col1) values (1),(2),(3),(4),(5);
+create user test1 with password '123456';
+alter user test1 with password 'abc123';
+grant all ON t1 to test1;
+revoke  all ON t1 from test1;
+drop user test1;
+drop table t1;
