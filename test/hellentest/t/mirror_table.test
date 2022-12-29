@@ -1,0 +1,156 @@
+#Use case description:
+#1.create cluster
+#2.cycle query status
+#3.check computer node write and read
+#4.check shard master and slave 
+#5.backup the src cluster
+#6.create the des cluster
+#7.restore cluster
+
+--connection default
+--let $node_mgr_1 = query_get_value(select hostaddr from server_nodes where machine_type = "computer",hostaddr,1)
+--let $node_mgr_2 = query_get_value(select hostaddr from server_nodes where machine_type = "computer",hostaddr,2)
+--let $node_mgr_3 = query_get_value(select hostaddr from server_nodes where machine_type = "computer",hostaddr,3)
+--let $storage_iplists="$node_mgr_1","$node_mgr_2","$node_mgr_3"
+#--let $storage_iplists="$node_mgr_1","$node_mgr_2"
+
+--http_connect(cluster_mgr_http1, cluster_mgr,50000)
+--http
+request_type: POST
+header:Content-Type:application/json
+body:{
+        "version":"1.0",
+        "job_id":"",
+        "job_type":"create_cluster",
+        "user_name":"kunlun_test",
+        "timestamp":"202205131532",
+        "paras":{
+              "nick_name":"rbrcluster001",
+              "ha_mode":"rbr",
+              "shards":"2",
+              "nodes":"3",
+              "comps":"1",
+              "max_storage_size":"20",
+              "max_connections":"6",
+              "cpu_cores":"8",
+              "innodb_size":"100",
+              "dbcfg":"1",
+              "fullsync_level": "1",
+              "storage_iplists": [
+                   ${storage_iplists}
+                          ],
+              "computer_iplists": [
+                   ${storage_iplists}
+                           ]
+  }           
+}
+EOF
+
+--let $job_id = `http_reap(job_id)`
+--sleep 30
+--source kunlun-test/include/wait_http_request_finish.inc
+
+--kl_cluster_id(1)
+#check shard master and slave
+--source kunlun-test/include/check_shard_state.inc
+
+--connection default
+--let $cluster_id = `select id from db_clusters  where status = "inuse" limit 0,1;`
+--let $src_shard_id = `select distinct shard_id from shard_nodes where db_cluster_id =  $cluster_id and status = "active" limit 0,1;`
+--let $dst_shard_id = `select distinct shard_id from shard_nodes where db_cluster_id =  $cluster_id and status = "active" limit 1,1;`
+--sleep 80
+
+#check cn
+--pg_connect(testrbr1,computer.1, abc, abc)
+drop table if exists ss;
+send_eval create table ss(id int primary key, info text, wt int) with (shard = all);
+reap;
+drop table if exists test1 ;
+send_eval create table test1(id int primary key, name text, age int) with (shard = all);
+reap;
+drop table if exists test2 ;
+send_eval create table test2(id int primary key, address char(50), number int) with (shard = all);
+reap;
+insert into test2(id,address,number) values(1, 'abc', 001);
+insert into test2(id,address,number) values(2, '2de', 002);
+#insert into test2(id,address,number) values(generate_series(3,1000000),('record'),generate_series(3,1000000));
+drop table if exists transfer_account;
+send_eval create table transfer_account(id int primary key,tradedate varchar(255), money int default 1000)partition by range(id) with (shard = all);
+reap;
+send_eval create table transfer_account_01 partition of  transfer_account for values from (MINVALUE) to(501) with (shard = all);
+reap;
+send_eval create table transfer_account_02 partition of  transfer_account for values from (501) to(1001) with (shard = all);
+reap;
+send_eval create table transfer_account_03 partition of  transfer_account for values from (1001) to(1501) with (shard = all);
+reap;
+send_eval create table transfer_account_04 partition of  transfer_account for values from (1501) to(2001) with (shard = all);
+reap;
+insert into transfer_account select generate_series(1,200),('2022-01-05');
+insert into transfer_account select generate_series(201,300),('2022-04-06');
+insert into transfer_account select generate_series(301,400),('2022-05-09');
+insert into transfer_account select generate_series(401,450),('2022-07-02');
+insert into transfer_account select generate_series(451,500),('2022-08-01');
+insert into transfer_account select generate_series(501,700),('2022-09-25');
+insert into transfer_account select generate_series(701,900),('2022-11-02');
+insert into transfer_account select generate_series(901,1000),('2022-12-30');
+show tables;
+--sleep 40
+
+
+#--exec_in_background python2 /home/hellen/kunlun_test_framework_status1.1.1/mysql-test/kunlun-test/t/loop_process_transfer.py --meta_host 192.168.0.140:59301 --thread_num 1 --clusterid $cluster_id --timeout 50 --total_money 1000000
+
+#--sleep 10
+#add shard 
+--connection cluster_mgr_http1
+--http
+request_type: POST
+header:Content-Type:application/json
+body:{
+        "version":"1.0",
+        "job_id":"",
+        "job_type":"add_shards",
+        "user_name":"kunlun_test",
+        "timestamp":"202205131532",
+        "paras":{
+              "cluster_id":"${cluster_id}",
+              "shards":"1",
+              "nodes":"3",
+              "storage_iplists":[
+                      ${storage_iplists}
+                ]
+              }
+}
+EOF
+
+--let $job_id = `http_reap(job_id)`
+--sleep 20
+--source kunlun-test/include/wait_http_request_finish.inc
+
+--sleep 10
+--source kunlun-test/include/check_shard_state.inc
+--echo "done"
+
+#--connection default
+#--connect(rbrshard11,storage.1.1,clustmgr,clustmgr_pwd)
+#use postgres_$$_public
+#show tables;
+#--connect(rbrshard21,storage.2.1,clustmgr,clustmgr_pwd)
+#use postgres_$$_public
+#show tables;
+#--connect(rbrshard23,storage.3.1,clustmgr,clustmgr_pwd)
+#use postgres_$$_public
+#show tables;
+
+--sleep 40
+--pg_connect(testrbr2,computer.1, abc, abc)
+drop table if exists student;
+create table student(id int primary key, info text, wt int) with (shard = all);
+insert into student(id,info,wt) values(1, 'record1', 1);
+insert into student(id,info,wt) values(2, 'record2', 2);
+show tables;
+--sleep 10
+
+
+
+
+

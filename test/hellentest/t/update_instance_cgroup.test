@@ -1,0 +1,42 @@
+#Use case description:
+#1.create cluster
+#2.cycle query status
+#3.check computer node write and read
+#4.check shard active and standby (to be add)
+#5.delete cluster
+
+--connection default
+--let $node_mgr_1 = query_get_value(select hostaddr from server_nodes where machine_type = "computer",hostaddr,1)
+--let $node_mgr_2 = query_get_value(select hostaddr from server_nodes where machine_type = "computer",hostaddr,2)
+--let $node_mgr_3 = query_get_value(select hostaddr from server_nodes where machine_type = "computer",hostaddr,3)
+--echo $node_mgr_1,$node_mgr_2,$node_mgr_3
+--let $storage_iplists="$node_mgr_1","$node_mgr_2","$node_mgr_3"
+
+
+--http_connect(cluster_mgr_http1, cluster_mgr,50000)
+
+--http
+request_type: POST
+header:Content-Type:application/json
+body:{
+        "version":"1.0",
+        "job_id":"",
+        "job_type":"update_instance_cgroup",
+        "user_name":"kunlun_test",
+        "timestamp":"202205131532",
+        "paras":{
+             "ip":"192.168.0.140",
+             "port":"59401",
+             "type":"mysql",
+             "cpu_cores":"1",
+             "cgroup_mode":"share"
+  }           
+}
+EOF
+
+--let $job_id = `http_reap(job_id)`
+--sleep 60
+#--source kunlun-test/include/wait_http_request_finish.inc
+--echo "update_instance_cgroup"
+
+

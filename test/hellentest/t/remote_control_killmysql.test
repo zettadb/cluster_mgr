@@ -2,9 +2,9 @@
 --let $node_mgr_1 = query_get_value(select hostaddr from server_nodes where machine_type = "computer",hostaddr,1)
 --let $sourceport_num =`select count(port) from shard_nodes where member_state = "source";`
 --let $i = 0
---let $j = 10
+--let $j = 20
 --echo $sourceport_num
---set_cluster_id(1)
+--set_cluster_id(19)
 --kl_cluster_id(1)
 while($j > 0)
 {
@@ -18,7 +18,7 @@ while($j > 0)
 
 --sleep 100
 --connection default
---let $shardid = `select distinct shard_id from shard_nodes limit 0,1;`
+--let $shardid = `select distinct shard_id from shard_nodes  where status = "active" limit 0,1;`
 eval select step from rbr_consfailover where shard_id = $shardid and step ="Fail" order by id desc limit 15;
 --connect(rbrshard12,storage.1.1,clustmgr,clustmgr_pwd)
 show slave hosts;

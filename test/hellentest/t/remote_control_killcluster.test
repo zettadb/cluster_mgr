@@ -1,0 +1,5 @@
+--set_cluster_id(8)
+--kl_cluster_id(1)
+#--let $port = `select port from cluster_mgr_nodes  where member_state ="source" limit 0,1;`
+--connection default
+--exec ./kunlun-test/util/test_client cluster_mgr "ps -aux |grep cluster_mgr|grep -v grep |awk '{print $2}' | xargs kill -9" 

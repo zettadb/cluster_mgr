@@ -1,0 +1,32 @@
+#--set_cluster_id(3)
+#--kl_cluster_id(1)
+--connection default
+--let $cluster_id = `select id from db_clusters where status = "inuse" limit 0,1;`
+
+--http_connect(cluster_mgr_http1, cluster_mgr)  
+--http
+request_type: POST
+header:Content-Type:application/json
+body:{
+        "version":"1.0",
+        "job_id":"",
+        "job_type":"logical_backup",
+        "timestamp" : "1435749309",
+        "user_name":"kunlun_test",
+        "paras":{ 
+               "cluster_id":"${cluster_id}",
+                "backup":[
+                         {
+                         "db_table":"postgres_$$_public.transfer_account",
+                         "backup_time":"11:20:00-12:00:00"
+                         }
+                         ]
+                       }
+}
+EOF
+
+--let $job_id = `http_reap(job_id)`
+--echo $job_id
+#--sleep 20
+#--source kunlun-test/include/wait_http_request_finish.inc
+

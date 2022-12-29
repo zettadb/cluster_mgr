@@ -1,0 +1,31 @@
+--connection default
+--let $src_cluster_id = `select id from db_clusters where status = "inuse" limit 0,1;`
+--let $dst_cluster_id = `select id from db_clusters where status = "inuse" limit 1,1;`
+
+#--exec_in_background python2 /home/hellen/kunlun_test_framework_nostatus/mysql-test/kunlun-test/t/loop_process_transfer.py --meta_host 192.168.0.140:59301 --thread_num 1 --clusterid $src_cluster_id --timeout 50 --total_money 1000000
+
+#--sleep 50
+
+
+
+--http_connect(cluster_mgr_http1, cluster_mgr,50000)
+--http
+request_type: POST
+header:Content-Type:application/json
+body:{
+        "version":"1.0",
+        "job_id":"",
+        "job_type":"table_repartition",
+        "timestamp" : "1435749309",
+        "user_name":"kunlun_test",
+        "paras":{
+               "src_cluster_id":"${src_cluster_id}",
+               "dst_cluster_id":"${dst_cluster_id}",
+               "repartition_tables":"postgres_$$_public.transfer_account=>postgres_$$_public.t1"
+                 }
+}
+EOF
+
+--let $job_id = `http_reap(job_id)`
+--sleep 20
+--source kunlun-test/include/wait_http_request_finish.inc

@@ -1,0 +1,42 @@
+#Use case description:
+#1.create cluster
+#2.cycle query status
+#3.check computer node write and read
+#4.check shard active and standby (to be add)
+#5.add  nodes(copies) 
+#6.check all computer node write and read
+#7.check shard active and standby (to be add)
+#8.delete nodes(copies)
+#9.check all computer node write and read
+#10.check shard active and standby (to be add)
+#11.delete cluster
+
+--connection default
+--let $hostaddr = `select hostaddr from shard_nodes limit 0,1;`
+--let $cluster_id = `select id from db_clusters where status = "inuse" limit 0,1;`
+--let $shard_id = `select shard_id from shard_nodes where status = "active" limit 0,1;`
+--let $port_id = `select port from shard_nodes where status = "active" limit 1,1;`
+
+--http_connect(cluster_mgr_http1, cluster_mgr)
+--http
+request_type: POST
+header:Content-Type:application/json
+body:{
+        "version":"1.0",
+        "job_id":"",
+        "job_type":"manual_switch",
+        "timestamp":"1435749309",
+        "user_name":"zhangsan",
+   "paras":{
+        "cluster_id":"${cluster_id}",
+        "shard_id":"${shard_id}", 
+        "master_hostaddr":"192.168.0.140_59403",
+        "assign_hostaddr":"192.168.0.129_59403"
+             }
+       }
+EOF
+
+--let $job_id = `http_reap(job_id)`
+--sleep 20
+--source kunlun-test/include/wait_http_request_finish.inc
+--echo "done"

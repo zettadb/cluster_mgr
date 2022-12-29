@@ -1,0 +1,52 @@
+--let $current_time=`select now()`
+--echo $current_time
+
+#--let $shardidnum =` select count(distinct shard_id) from shard_nodes;`
+--set_cluster_id(1)
+--kl_cluster_id(1)
+#witch the first shard
+--connect(rbrshard11,shard.1,clustmgr,clustmgr_pwd)
+set global super_read_only=true;
+--sleep 100
+--connection default
+--let $shardid = `select distinct shard_id from shard_nodes limit 0,1;`
+eval select step from rbr_consfailover where shard_id = $shardid and step ="Fail" order by id desc limit 15;
+--connect(rbrshard12,storage.1.1,clustmgr,clustmgr_pwd)
+show slave hosts;
+--connect(rbrshard13,storage.1.2,clustmgr,clustmgr_pwd)
+show slave hosts;
+--connect(rbrshard14,storage.1.3,clustmgr,clustmgr_pwd)
+show slave hosts;
+
+#switch the second shard
+#--echo "connect the second shard"
+--connect(rbrshard21,shard.2,clustmgr,clustmgr_pwd)
+set global super_read_only=true;
+--sleep 100
+--connection default
+--let $shardid = `select distinct shard_id from shard_nodes limit 1,1;`
+eval select step from rbr_consfailover where shard_id = $shardid and step ="Fail" order by id desc limit 15;
+--connect(rbrshard22,storage.2.1,clustmgr,clustmgr_pwd)
+show slave hosts;
+--connect(rbrshard23,storage.2.2,clustmgr,clustmgr_pwd)
+show slave hosts;
+--connect(rbrshard24,storage.2.3,clustmgr,clustmgr_pwd)
+show slave hosts;
+
+#switch the third shard
+#--echo "connect the third shard"
+#--connect(rbrshard31,storage.3.2,clustmgr,clustmgr_pwd)
+#set global super_read_only=true;
+#--sleep 30
+#--connection default
+#--let $shardid = `select distinct shard_id from shard_nodes limit 2,1;`
+#eval select step from rbr_consfailover where shard_id = $shardid and step ="Fail" order by id desc limit 15;
+#--connect(rbrshard32,storage.3.1,clustmgr,clustmgr_pwd)
+#show slave hosts;
+#--connect(rbrshard33,storage.3.2,clustmgr,clustmgr_pwd)
+#show slave hosts;
+#--connect(rbrshard34,storage.3.3,clustmgr,clustmgr_pwd)
+#show slave hosts;
+
+
+

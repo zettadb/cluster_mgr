@@ -1,0 +1,12 @@
+--let $compport_num =`select count(port) from comp_nodes;`
+--let $i = 0
+--echo $compport_num
+--set_cluster_id(8)
+--kl_cluster_id(1)
+while($compport_num > 0)
+{
+  --let $port = `select port from comp_nodes limit $i,1;`
+  --exec ./kunlun-test/util/test_client shard.1 " ps -aux |grep $port|grep -v grep |awk '{print $2}' | xargs kill" 
+  --inc $i
+  --dec $compport_num
+}
