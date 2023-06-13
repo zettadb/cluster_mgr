@@ -1,0 +1,44 @@
+#Use case description:
+#1.add  nodes 
+#2.check msyld master and slave
+
+--connection default
+--let $node_mgr_1 = query_get_value(select hostaddr from server_nodes where machine_type = "computer",hostaddr,1)
+--let $node_mgr_2 = query_get_value(select hostaddr from server_nodes where machine_type = "computer",hostaddr,2)
+--let $node_mgr_3 = query_get_value(select hostaddr from server_nodes where machine_type = "computer",hostaddr,3)
+--let $storage_iplists="$node_mgr_1","$node_mgr_2","$node_mgr_3"
+--let $cluster_id = `select id from db_clusters where status = "inuse" limit 0,1;`
+--let $shard_id = `select shard_id from shard_nodes where db_cluster_id= $cluster_id and status = "active" limit 0,1;`
+#--let $cluster_id = `select id from db_clusters limit 0,1;`
+#--let $shard_id = `select shard_id from shard_nodes limit 0,1;`
+
+--http_connect(cluster_mgr_http1, cluster_mgr,500000)
+#add nodes
+--http
+request_type: POST
+header:Content-Type:application/json
+body:{
+        "version":"1.0",
+        "job_id":"",
+        "job_type":"add_nodes",
+        "user_name":"kunlun_test",
+        "timestamp":"202205131532",
+        "paras":{
+              "cluster_id":"${cluster_id}",
+              "shard_id":"${shard_id}",
+              "nodes":"1",
+              "storage_iplists":[
+                         ${storage_iplists}
+                ]
+              }
+}
+EOF
+
+--let $job_id = `http_reap(job_id)`
+--sleep 20
+--source kunlun-test/include/wait_http_request_finish.inc
+--echo "end"
+#--kl_cluster_id(1)
+#--source kunlun-test/include/check_shard_state.inc
+
+

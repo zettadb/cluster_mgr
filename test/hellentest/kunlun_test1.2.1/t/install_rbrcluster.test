@@ -1,0 +1,71 @@
+#Use case description:
+#1.create cluster
+#2.cycle query status
+#3.check computer node write and read
+#4.check shard active and standby (to be add)
+#5.delete cluster
+
+--connection default
+--let $node_mgr_1 = query_get_value(select hostaddr from server_nodes where machine_type = "computer",hostaddr,1)
+--let $node_mgr_2 = query_get_value(select hostaddr from server_nodes where machine_type = "computer",hostaddr,2)
+--let $node_mgr_3 = query_get_value(select hostaddr from server_nodes where machine_type = "computer",hostaddr,3)
+--echo $node_mgr_1,$node_mgr_2,$node_mgr_3
+--let $storage_iplists="$node_mgr_1","$node_mgr_2","$node_mgr_3"
+
+
+--http_connect(cluster_mgr_http1, cluster_mgr,500000)
+
+--http
+request_type: POST
+header:Content-Type:application/json
+body:{
+        "version":"1.0",
+        "job_id":"",
+        "job_type":"create_cluster",
+        "user_name":"kunlun_test",
+        "timestamp":"202205131532",
+        "paras":{
+              "nick_name":"rbrcluster002",
+              "ha_mode":"rbr",
+              "shards":"1",
+              "nodes":"3",
+              "comps":"1",
+              "max_storage_size":"20",
+              "max_connections":"6",
+              "cpu_cores":"8",
+              "cpu_limit_mode":"quota",
+              "innodb_size":"4096",
+              "dbcfg":"0",
+              "fullsync_level": "1",
+              "install_proxysql":"0",
+              "data_storage_MB":"4096",
+              "log_storage_MB":"2048",
+              "enable_backup_encrypt":"1",
+              "backup_encrypt_key":"123",
+              "storage_iplists": [
+                   ${storage_iplists}
+                          ],
+              "computer_iplists": [
+                   ${storage_iplists}
+                           ]
+  }           
+}
+EOF
+
+--let $job_id = `http_reap(job_id)`
+--sleep 60
+--source kunlun-test/include/wait_http_request_finish.inc
+--sleep 10
+#--source kunlun-test/include/get_shard_coldbackup_status.inc
+#--echo "create cluster"
+#check shard active and standby
+--kl_cluster_id(1)
+--source kunlun-test/include/check_shard_state.inc
+--sleep 10
+--connection default
+--connect(rbrshard11,storage.1.1,clustmgr,clustmgr_pwd)
+show variables like '%read_only%';
+--connect(rbrshard12,storage.1.2,clustmgr,clustmgr_pwd)
+show variables like '%read_only%';
+--connect(rbrshard13,storage.1.3,clustmgr,clustmgr_pwd)
+show variables like '%read_only%';

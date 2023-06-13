@@ -1,0 +1,38 @@
+#--set_cluster_id(7)
+#--kl_cluster_id(1)
+
+--connection default
+--let $cluster_id = `select id from db_clusters where status = "inuse" limit 0,1;`
+--let $shard_id = `select shard_id from shard_nodes where status = "active" and db_cluster_id = $cluster_id limit 0,1;`
+--echo $shard_id
+--let $sn_num=`select count(distinct shard_id) from shard_nodes;`
+--echo $sn_num
+
+#delete shard
+--http_connect(cluster_mgr_http1, cluster_mgr,500000)
+--http
+request_type: POST
+header:Content-Type:application/json
+body:{
+        "ver":"1.0",
+        "job_id":"",
+        "job_type":"delete_shard",
+        "user_name":"kunlun_test",
+        "timestamp":"202205131532",
+        "paras":{
+              "cluster_id":"${cluster_id}",
+              "shard_id":"${shard_id}"
+              }
+}
+EOF
+
+
+#--sleep 20
+#--source kunlun-test/include/wait_http_request_finish.inc
+--echo "done"
+
+
+--connection default
+--let $sn_num=`select count(distinct shard_id) from shard_nodes;`
+--echo $sn_num
+

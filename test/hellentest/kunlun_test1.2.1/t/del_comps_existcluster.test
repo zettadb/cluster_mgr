@@ -1,0 +1,36 @@
+#--set_cluster_id(7)
+#--kl_cluster_id(1)
+
+--connection default
+--let $cluster_id = `select id from db_clusters  where status = "inuse" limit 0,1;`
+--let $comp_id = `select id from comp_nodes where status = "active" limit 1,1;`
+--echo $comp_id
+--let $cn_num=`SELECT COUNT(*) FROM comp_nodes;`
+--echo $cn_num
+
+#delete comp
+--http_connect(cluster_mgr_http1, cluster_mgr,500000)
+--http
+request_type: POST
+header:Content-Type:application/json
+body:{
+        "ver":"1.0",
+        "job_id":"",
+        "job_type":"delete_comp",
+        "user_name":"kunlun_test",
+        "timestamp":"202205131532",
+        "paras":{
+              "cluster_id":"${cluster_id}",
+              "comp_id":"${comp_id}"
+              }
+}
+EOF
+
+
+#--sleep 40
+#--source kunlun-test/include/wait_http_request_finish.inc
+--echo "done"
+--connection default
+--let $cn_num=`SELECT COUNT(*) FROM comp_nodes;`
+--echo $cn_num
+

@@ -1,0 +1,38 @@
+#Use case description:
+#1.create cluster
+#2.cycle query status
+#3.check computer node write and read
+#4.check shard active and standby (to be add)
+#5.delete cluster
+--connection default
+--let $src_cluster_id = `select id from db_clusters  where status = "inuse" limit 0,1;`
+--let $dst_cluster_id = `select id from db_clusters  where status = "inuse" limit 1,1;`
+
+--http_connect(cluster_mgr_http1, cluster_mgr,500000)
+
+--http
+request_type: POST
+header:Content-Type:application/json
+body:{
+        "version":"1.0",
+        "job_id":"",
+        "job_type":"modify_rcr",
+        "user_name":"kunlun_test",
+        "timestamp":"202205131532",
+        "paras":{
+              "master_info":{
+                 "meta_db":"192.168.0.134:59301",
+                  "cluster_id":"${src_cluster_id}"
+            },
+              "cluster_id":"${dst_cluster_id}",
+              "work_mode":"stop_rcr"
+          }           
+}
+EOF
+
+--let $job_id = `http_reap(job_id)`
+--sleep 10
+--source kunlun-test/include/wait_http_request_finish.inc
+--sleep 10
+--echo "done"
+

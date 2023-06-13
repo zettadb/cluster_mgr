@@ -1,0 +1,248 @@
+#Use case description:
+#1.create cluster
+#2.cycle query status
+#3.check computer node write and read
+#4.check shard master and slave 
+#5.backup the src cluster
+#6.create the des cluster
+#7.restore cluster
+
+--connection default
+--let $node_mgr_1 = query_get_value(select hostaddr from server_nodes where machine_type = "computer",hostaddr,1)
+--let $node_mgr_2 = query_get_value(select hostaddr from server_nodes where machine_type = "computer",hostaddr,2)
+--let $node_mgr_3 = query_get_value(select hostaddr from server_nodes where machine_type = "computer",hostaddr,3)
+--let $storage_iplists="$node_mgr_1","$node_mgr_2","$node_mgr_3"
+
+--http_connect(cluster_mgr_http1, cluster_mgr,500000)
+--http
+request_type: POST
+header:Content-Type:application/json
+body:{
+        "version":"1.0",
+        "job_id":"",
+        "job_type":"create_cluster",
+        "user_name":"kunlun_test",
+        "timestamp":"202205131532",
+        "paras":{
+              "nick_name":"rbrcluster001",
+              "ha_mode":"rbr",
+              "shards":"2",
+              "nodes":"3",
+              "comps":"1",
+              "max_storage_size":"20",
+              "max_connections":"6",
+              "cpu_cores":"8",
+              "innodb_size":"100",
+              "dbcfg":"1",
+              "fullsync_level": "1",
+              "data_storage_MB":"4096",
+              "log_storage_MB":"2048",
+              "storage_iplists": [
+                   ${storage_iplists}
+                          ],
+              "computer_iplists": [
+                   ${storage_iplists}
+                           ]
+  }           
+}
+EOF
+
+--let $job_id = `http_reap(job_id)`
+--sleep 30
+--source kunlun-test/include/wait_http_request_finish.inc
+--sleep 10
+--source kunlun-test/include/get_shard_coldbackup_status.inc
+
+--kl_cluster_id(1)
+#check shard master and slave
+--source kunlun-test/include/check_shard_state.inc
+
+--connection default
+--let $cluster_id = `select id from db_clusters  where status = "inuse" limit 0,1;`
+--let $src_shard_id = `select distinct shard_id from shard_nodes where db_cluster_id =  $cluster_id and status = "active" limit 0,1;`
+--let $dst_shard_id = `select distinct shard_id from shard_nodes where db_cluster_id =  $cluster_id and status = "active" limit 1,1;`
+--sleep 85
+
+#check cn
+--pg_connect(testrbr1,computer.1, abc, abc)
+drop table if exists test1 ;
+send_eval create table test1(id int primary key, name text, age int) with (shard = $src_shard_id);
+reap;
+drop table if exists test2 ;
+send_eval create table test2(id int primary key, address char(50), number int) with (shard = $dst_shard_id);
+reap;
+sleep 5;
+insert into test2(id,address,number) values(1, 'abc', 001);
+insert into test2(id,address,number) values(2, '2de', 002);
+drop table if exists transfer_account;
+create table transfer_account(id int primary key,tradedate varchar(255), money int default 1000)partition by range(id);
+sleep 5;
+send_eval create table transfer_account_01 partition of  transfer_account for values from (MINVALUE) to(251) with (shard = $src_shard_id);
+reap;
+send_eval create table transfer_account_02 partition of  transfer_account for values from (251) to(501) with (shard = $src_shard_id);
+reap;
+send_eval create table transfer_account_03 partition of  transfer_account for values from (501) to(751) with (shard = $dst_shard_id);
+reap;
+send_eval create table transfer_account_04 partition of  transfer_account for values from (751) to(1001) with (shard = $dst_shard_id);
+reap;
+insert into transfer_account select generate_series(1,200),('2022-01-05');
+insert into transfer_account select generate_series(201,300),('2022-04-06');
+insert into transfer_account select generate_series(301,400),('2022-05-09');
+insert into transfer_account select generate_series(401,450),('2022-07-02');
+insert into transfer_account select generate_series(451,500),('2022-08-01');
+insert into transfer_account select generate_series(501,700),('2022-09-25');
+insert into transfer_account select generate_series(701,900),('2022-11-02');
+insert into transfer_account select generate_series(901,1000),('2022-12-30');
+--sleep 600
+
+#backup the src cluster
+--connection cluster_mgr_http1
+--http
+request_type: POST
+header:Content-Type:application/json
+body:{
+        "version":"1.0",
+        "job_id":"",
+        "job_type":"logical_backup",
+        "timestamp" : "1435749309",
+        "user_name":"kunlun_test",
+        "paras":{
+               "cluster_id":"${cluster_id}",
+               "backup_type":"table",
+               "backup":[
+                         {
+                         "db_table":"postgres_$$_public.transfer_account",
+                         "backup_time":"03:30:00-08:30:00"
+                         },
+                         {
+                         "db_table":"postgres_$$_public.test1",
+                         "backup_time":"12:30:00-14:00:00"
+                         },
+                         {
+                         "db_table":"postgres_$$_public.test2",
+                         "backup_time":"19:30:00-20:30:00"
+                         }
+                         ]
+                 }
+}
+EOF
+
+--let $job_id = `http_reap(job_id)`
+--sleep 20
+--source kunlun-test/include/get_backup_status.inc
+
+--sleep 30
+
+--connection default
+#--let $current_time=`select now();`
+--let $current_time = `select ADDDATE(now(),interval 100 second);`
+--echo $current_time
+
+#create the des cluster 
+--connection cluster_mgr_http1
+--http
+request_type: POST
+header:Content-Type:application/json
+body:{
+        "version":"1.0",
+        "job_id":"",
+        "job_type":"create_cluster",
+        "user_name":"kunlun_test",
+        "timestamp":"202205131532",
+        "paras":{
+              "nick_name":"rbrcluster001",
+              "ha_mode":"rbr",
+              "shards":"1",
+              "nodes":"3",
+              "comps":"1",
+              "max_storage_size":"20",
+              "max_connections":"6",
+              "cpu_cores":"8",
+              "innodb_size":"100",
+              "dbcfg":"1",
+              "fullsync_level": "1",
+              "data_storage_MB":"4096",
+              "log_storage_MB":"2048",
+              "storage_iplists": [
+                   ${storage_iplists}
+                          ],
+              "computer_iplists": [
+                   ${storage_iplists}
+                           ]
+  }           
+}
+EOF
+
+--let $job_id = `http_reap(job_id)`
+--sleep 30
+--source kunlun-test/include/wait_http_request_finish.inc
+--sleep 20
+--source kunlun-test/include/get_shard_coldbackup_status.inc
+#restore cluster
+--connection default
+--let $src_cluster_id = `select id from db_clusters  where status = "inuse"  limit 0,1 ;`
+--let $dst_cluster_id = `select id from db_clusters  where status = "inuse"  limit 1,1;`
+#--let $current_time=`select now();`
+--sleep 560
+--exec_in_background python2 /home/hellen/kunlun_test_framework_status1.1.1/mysql-test/kunlun-test/t/loop_process_transfer.py --meta_host 192.168.0.134:59301 --thread_num 1 --clusterid $src_cluster_id --timeout 50 --total_money 1000000
+
+--sleep 100
+
+
+
+--connection cluster_mgr_http1
+--http
+request_type: POST
+header:Content-Type:application/json
+body:{
+        "version":"1.0",
+        "job_id":"",
+        "job_type":"logical_restore",
+        "timestamp" : "1435749309",
+        "user_name":"kunlun_test",
+        "paras":{ 
+               "src_cluster_id":"${src_cluster_id}",
+               "dst_cluster_id":"${dst_cluster_id}",
+               "restore_type":"table",
+               "restore":
+                       [
+                          {
+                           "db_table":"postgres_$$_public.transfer_account",
+                           "new_db_table":"postgres_$$_public1.transfer_account",
+                            "restore_time":"${current_time}"
+                          },
+                         {
+                           "db_table":"postgres_$$_public.test1",
+                           "new_db_table":"postgres_$$_public1.test1",
+                            "restore_time":"${current_time}"
+                          },
+                          {
+                           "db_table":"postgres_$$_public.test2",
+                           "new_db_table":"postgres_$$_public1.test2",
+                            "restore_time":"${current_time}"
+                          }
+                       ]
+                 }
+}
+EOF
+
+--let $job_id = `http_reap(job_id)`
+--sleep 20
+--source kunlun-test/include/get_restore_status.inc
+
+--sleep 100
+#--set_cluster_id(47)
+#--kl_cluster_id(1)
+--connection default
+--pg_connect(testrbr2,computer.1, abc, abc)
+#--source kunlun-test/include/check_cn_write_read.inc
+#select sum(money) as moneytotal from transfer_account;
+drop table if exists student;
+create table student(id int primary key, info text, wt int);
+insert into student(id,info,wt) values(1, 'record1', 1);
+insert into student(id,info,wt) values(2, 'record2', 2);
+--sleep 10
+
+
+
+

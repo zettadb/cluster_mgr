@@ -1,0 +1,52 @@
+#Use case description:
+#1.create cluster
+#2.cycle query status
+#3.check computer node write and read
+#4.check shard active and standby (to be add)
+#5.add  nodes(copies) 
+#6.check all computer node write and read
+#7.check shard active and standby (to be add)
+#8.delete nodes(copies)
+#9.check all computer node write and read
+#10.check shard active and standby (to be add)
+#11.delete cluster
+
+--connection default
+--let $hostaddr = `select hostaddr from shard_nodes where status = "active" limit 2,1;`
+--let $cluster_id = `select id from db_clusters where status = "inuse" limit 0,1;`
+--let $shard_id = `select shard_id from shard_nodes where status = "active" limit 0,1;`
+--let $port_id = `select port from shard_nodes where status = "active" limit 1,1;`
+--let $sn_num=`select count(distinct shard_id) from shard_nodes where status = "active";`
+
+--http_connect(cluster_mgr_http1, cluster_mgr,500000)
+--http
+request_type: POST
+header:Content-Type:application/json
+body:{
+        "version":"1.0",
+        "job_id":"",
+        "job_type":"rebuild_node",
+        "user_name":"kunlun_test",
+        "timestamp":"202205131532",
+        "paras":{
+              "cluster_id":"${cluster_id}",
+              "shard_id":"${shard_id}",
+                   "rb_nodes": [
+                            {
+                            "hostaddr": "${hostaddr}",
+                            "port": "${port_id}",
+                            "need_backup": "0",
+                            "hdfs_host": "192.168.0.129:57040",
+                            "pv_limit": "10"
+                             }
+                                ],
+                 "allow_pull_from_master": "1",
+                 "allow_replica_delay": "0"
+              }
+}
+EOF
+
+--let $job_id = `http_reap(job_id)`
+--sleep 30
+--source kunlun-test/include/wait_http_request_finish.inc
+--echo "done"
